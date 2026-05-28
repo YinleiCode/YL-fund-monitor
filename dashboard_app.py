@@ -1,11 +1,11 @@
 """
-朱哥短线雷达｜本地复盘看板 (Streamlit) - V1.4 UI 优化版
+朱哥短线雷达 V1.6｜本地复盘看板 (Streamlit)
 =====================================
 
 本地手动查看的复盘 UI，主要**只读** output/ 下的数据文件。
-看板自身不接券商、不自动交易、不进 launchd。
+看板自身不接券商交易、不进 launchd。
 
-V1.4 新增：🛠 手动补跑 页面
+V1.6 看板包含：🛠 手动补跑 页面
   - 当电脑关机/睡眠导致 launchd 自动任务错过时，可手动触发以下命令：
       .venv/bin/python3 run.py --update-review     (T+1 复盘补全)
       .venv/bin/python3 run.py --weekly-review     (生成本周复盘)
@@ -55,7 +55,7 @@ MANUAL_LOCK_DIR = BASE_DIR / "output"     # 手动补跑文件锁存放目录（
 MONEY_FLOW_HEALTH_LOG = LOGS_DIR / "money_flow_health.log"
 MONEY_FLOW_PROBE_KEY  = "money_flow_health"     # 锁 + session_state 用的 key
 
-# ─── 颜色（V1.4 奶油色主题：避免大面积纯白，统一温和质感）────────────────
+# ─── 颜色（V1.6 奶油色主题：避免大面积纯白，统一温和质感）────────────────
 # 页面级 → .streamlit/config.toml 控制 backgroundColor=#F5EFE3
 # 组件级 → 下面这些常量统一替换原 #FFFFFF / #F3F4F6 / #F8FAFC / #F0F7FF 等
 
@@ -121,7 +121,7 @@ def _plotly_cream_layout(**extra) -> dict:
     return base
 
 
-# ─── 状态文案（V1.4 用户要求）────────────────────────────────────────────
+# ─── 状态文案（V1.6 展示口径）────────────────────────────────────────────
 STATUS_BOUGHT_DONE  = "已买入｜已完成T+1复盘"
 STATUS_BOUGHT_WAIT  = "已买入｜等待T+1复盘"
 STATUS_BOUGHT_LIMIT = "已买入｜涨停未成交"
@@ -456,7 +456,7 @@ def enrich_df(df: pd.DataFrame) -> pd.DataFrame:
     df["reason_hard_cn"] = df["notes"].apply(_hard)
     df["reason_soft_cn"] = df["notes"].apply(_soft)
 
-    # —— V1.4 展示层主因推导 ——
+    # —— V1.6 展示层主因推导 ——
     # 单次扫描每行得到 (code, label, others)；不修改 notes/reason_hard_cn/reason_soft_cn
     def _derive(row):
         return derive_main_reason(row)
@@ -590,7 +590,7 @@ def stock_card(row: pd.Series, variant: str = "default") -> str:
             f"</div>"
         )
     else:
-        # V1.4 展示层主因 + 其他原因（不再直接读 reason_hard_cn 兼容老逻辑）
+        # V1.6 展示层主因 + 其他原因（不再直接读 reason_hard_cn 兼容老逻辑）
         main_cn = row.get("main_reason_cn", "")
         sec_cn  = row.get("secondary_reasons_cn", "")
         parts = []
@@ -1032,7 +1032,7 @@ def page_buy_check(df_all: pd.DataFrame) -> None:
 
 def _resolve_settlement(row) -> Tuple[str, str]:
     """
-    展示层推导：根据当前 V1.4 _calc_row 已写入 CSV 的字段，反推 T+1 结算方式。
+    展示层推导：根据当前 _calc_row 已写入 CSV 的字段，反推 T+1 结算方式。
     完全只读，不改任何 CSV 字段、不改策略规则。
 
     优先尝试中文字段名，再降级到英文 CSV 字段：
@@ -1191,7 +1191,7 @@ def page_t1_review(df_all: pd.DataFrame) -> None:
     # —— 已完成 T+1 明细 ——
     st.markdown(f"### ✅ 已完成 T+1 复盘明细（{n_done}）")
 
-    # —— V1.4 止盈规则说明（**展示层警示**：止盈未启用，避免用户误解为"系统漏了止盈"）——
+    # —— V1.6 止盈规则说明（**展示层警示**：止盈未启用，避免用户误解为"系统漏了止盈"）——
     st.markdown(
         f"""
         <div style="
@@ -1217,7 +1217,7 @@ def page_t1_review(df_all: pd.DataFrame) -> None:
         unsafe_allow_html=True,
     )
 
-    # —— V1.4 止损规则说明（展示层，不改任何规则）——
+    # —— V1.6 止损规则说明（展示层，不改任何规则）——
     st.markdown(
         f"""
         <div style="
@@ -1764,7 +1764,7 @@ def page_period_review(df_all: pd.DataFrame) -> None:
 
     st.divider()
 
-    # —— V1.4 不买原因 TOP（基于展示层推导的统一短标签）——
+    # —— V1.6 不买原因 TOP（基于展示层推导的统一短标签）——
     st.markdown(f"### 📊 本{period_cn}不买原因 TOP（基于推导主因）")
     st.caption(
         f"按展示层统一短标签聚合，例如 `承接不足` / `短线走弱` / `低开观察`，"
@@ -2126,7 +2126,7 @@ def _render_rerun_button(key: str, spec: dict) -> None:
             st.rerun()
 
 
-# ─── V1.5-alpha3: 资金源健康自检（嵌入 🛠 手动补跑 页）────────────────
+# ─── V1.6 资金条件层：资金源健康自检（嵌入 🛠 手动补跑 页）────────────────
 
 def _run_money_flow_health_probe(timeout: int = 60) -> dict:
     """
@@ -3231,12 +3231,12 @@ def _lifecycle_health_label(v) -> str:
 
 
 # —— 不买原因 / notes / reason_code 中文化（前台展示用）——
-# 覆盖 V1.4 预闸、9:36 买入 5 大条件、V1.5-alpha 资金。新 code 加这里即可。
+# 覆盖复盘计划层预筛、9:36 技术确认层、资金条件层观察字段。新 code 加这里即可。
 LIFECYCLE_REASON_LABEL = {
-    # —— V1.4 预闸 / 模式预筛 ——
+    # —— 复盘计划层预筛 / 模式预筛 ——
     "theme_strength_too_low":         "主题强度不足",
     "full_score_not_strong_enough":   "全A分数/人气/技术不够强",
-    # —— V1.4 9:36 买入 5 大条件 ——
+    # —— 9:36 技术确认层 ——
     "open_change_too_low":            "开盘跌幅过大",
     "open_change_too_low_hard":       "开盘跌幅过大",
     "open_change_weak_watch":         "低开观察（弱开偏弱）",
@@ -4347,7 +4347,7 @@ def _tp_render_simple_md(plan: dict) -> str:
 
 {focus_md}
 
-> ⚠️ **观察 ≠ 买入**。第二天 9:36 仍由 V1.4 五条 + 资金条件层 资金条件 + V1.6 计划前置门决定是否模拟买入。
+> ⚠️ **观察 ≠ 买入**。第二天 9:36 仍由 V1.6 三层（复盘计划层 + 资金条件层（观察模式）+ 9:36 技术确认层）共同决定是否模拟买入。
 
 ---
 
@@ -4385,8 +4385,8 @@ def _tp_render_simple_md(plan: dict) -> str:
 >
 > **核心原则**：
 > - 计划看好 ≠ 直接买入
-> - 第二天 9:36 仍由 V1.4 五条 + 资金条件层 资金条件 + V1.6 计划前置门决定是否模拟买入
-> - 本系统永远是模拟盘验证，不自动下单、不自动调仓位
+> - 第二天 9:36 仍由 V1.6 三层（复盘计划层 + 资金条件层（观察模式）+ 9:36 技术确认层）共同决定是否模拟买入
+> - 本系统永远是模拟盘验证，不接券商下单接口，不自动调仓位
 """
 
 
@@ -4691,7 +4691,7 @@ def page_tomorrow_plan() -> None:
             st.success(f"✅ {msg}")
             st.info(
                 "💡 计划已保存。**计划看好 ≠ 直接买入**，"
-                "9:36 仍由 V1.4 五条 + 资金条件层 资金条件 + V1.6 计划前置门决定是否模拟买入。"
+                "9:36 仍由 V1.6 三层（复盘计划层 + 资金条件层（观察模式）+ 9:36 技术确认层）共同决定是否模拟买入。"
             )
             time.sleep(0.6)
             st.rerun()
@@ -4724,12 +4724,12 @@ def page_tomorrow_plan() -> None:
 
 def main() -> None:
     st.set_page_config(
-        page_title="朱哥短线雷达｜本地复盘看板",
+        page_title="朱哥短线雷达 V1.6｜本地复盘看板",
         page_icon="📊",
         layout="wide",
         initial_sidebar_state="expanded",
     )
-    # —— 全局 CSS：V1.4 奶油色主题（覆盖 Streamlit 自身白色背景）——
+    # —— 全局 CSS：V1.6 奶油色主题（覆盖 Streamlit 自身白色背景）——
     st.markdown(f"""
     <style>
       /* 整页主底 — 与 .streamlit/config.toml 的 backgroundColor 对齐 */
@@ -4860,7 +4860,7 @@ def main() -> None:
 
     df_all = load_trade_review()
     if df_all.empty:
-        st.title("📊 朱哥短线雷达｜本地复盘看板")
+        st.title("📊 朱哥短线雷达 V1.6｜本地复盘看板")
         status_banner(
             f"找不到 `{CSV_PATH.name}` 或文件为空。请先运行 `python run.py` 生成推荐数据。",
             "error",

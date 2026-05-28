@@ -27,10 +27,10 @@ def format_message(
         return f"{d[:4]}-{d[4:6]}-{d[6:8]}"
 
     ms = market["score"]
-    title = f"【朱哥A股三票雷达｜{_fmt(report_date)}盘前】情绪{ms}/10"
+    title = f"【朱哥短线雷达 V1.6｜{_fmt(report_date)}盘前】情绪{ms}/10"
 
     lines = []
-    lines.append(f"**【朱哥A股短线三票雷达｜{_fmt(report_date)}盘前】**")
+    lines.append(f"**【朱哥短线雷达 V1.6｜{_fmt(report_date)}盘前】**")
     lines.append("")
     lines.append(f"数据口径：基于 {_fmt(data_date)} 收盘数据")
     lines.append(f"市场情绪：**{ms}/10**")
@@ -106,16 +106,16 @@ def format_message(
 def format_check_buy_message(results: list, report_date: str) -> tuple:
     """
     生成 --check-buy 的微信推送内容。
-    V1.4：
+    V1.6 9:36 技术确认层：
       - 区分「主因」和「辅助原因」
       - 满足时输出「逻辑 / 资金 / 买点 / 风险」四因
-      - V1.3 行为兼容保留
+      - 历史行为兼容保留
     """
     def _fmt(d: str) -> str:
         return f"{d[:4]}-{d[4:6]}-{d[6:8]}"
 
     # —— 整体版本标记（同一批次共享同一个 effective_version）——
-    # 内部 effective_version 由 trade_review.check_buy 写入（V1.3/V1.4/V1.6+V1.4 等），
+    # 内部 effective_version 由 trade_review.check_buy 写入（历史版本号可能保留），
     # 用于下方逻辑判定；对外展示统一归一为 V1.6（版本归并，不改写入侧）。
     eff_version = "V1.3"
     for r in results:
@@ -127,20 +127,20 @@ def format_check_buy_message(results: list, report_date: str) -> tuple:
     ver_tag = "·V1.6"   # 对外统一显示 V1.6
     title = f"【朱哥短线雷达 V1.6｜{_fmt(report_date)} 9:35模拟买入确认】"
 
-    # —— 中文映射 —— 涵盖 V1.3 + V1.4 全部代码
+    # —— 中文映射 —— 涵盖历史原因码
     _reason_map = {
-        # V1.3
+        # 基础原因
         "market_sentiment_below_5":        "大盘情绪不足5分",
         "open_change_too_low":             "低开超过-1%",
         "open_change_too_high":            "开盘涨幅超过4%，高开过多",
         "price_below_open":                "9:36低于开盘价，承接不足",
         "price_below_ma5":                 "9:36低于5日均线，短线走弱",
         "unable_to_buy_limit_up":          "一字涨停无法买入",
-        # V1.4 新增（主因）
+        # 复盘计划层 / 9:36 技术确认层主因
         "theme_strength_too_low":          "主题强度不足，暂不买入",
         "full_score_not_strong_enough":    "全A模式分数或人气技术不够强，只观察不买入",
         "open_change_too_low_hard":        "开盘跌幅超过3%，明显弱开，直接放弃",
-        # V1.4 新增（辅助）
+        # 9:36 技术确认层辅助提示
         "open_change_weak_watch":          "低开超过1%，开盘偏弱，但不单独否决",
     }
 
@@ -163,7 +163,7 @@ def format_check_buy_message(results: list, report_date: str) -> tuple:
             lines.append("")
             continue
 
-        # —— V1.4 预闸未通过（无实时行情）
+        # —— 复盘计划层预筛未通过（无实时行情）
         if r.get("pregate_failed"):
             reasons = r.get("hard_fail_reasons") or r.get("fail_reasons", [])
             main_zh = "；".join(_reason_map.get(x, x) for x in reasons)
@@ -232,9 +232,9 @@ def format_theme_auto_message(
         return f"{d[:4]}-{d[4:6]}-{d[6:8]}"
 
     ms    = market["score"]
-    title = f"【朱哥短线雷达｜主题龙头模式｜{_fmt(report_date)}盘前】情绪{ms}/10"
+    title = f"【朱哥短线雷达 V1.6｜主题龙头模式｜{_fmt(report_date)}盘前】情绪{ms}/10"
 
-    lines = [f"**【朱哥短线雷达｜主题龙头模式｜{_fmt(report_date)}盘前】**", ""]
+    lines = [f"**【朱哥短线雷达 V1.6｜主题龙头模式｜{_fmt(report_date)}盘前】**", ""]
     lines.append(f"数据口径：基于 {_fmt(data_date)} 收盘数据")
     lines.append(f"市场情绪：**{ms}/10**")
     lines.append("")
@@ -300,7 +300,7 @@ def format_theme_auto_message(
     lines.append("---")
     lines.append(
         "> theme_auto 是并行实验组，不替代 full 全A模式。"
-        "买入确认仍以9:36规则为准，不构成买卖建议。"
+        "买入确认仍以 V1.6 三层（复盘计划层 + 资金条件层（观察模式）+ 9:36 技术确认层）为准，不构成买卖建议。"
     )
 
     body = "\n".join(lines)
@@ -315,7 +315,7 @@ def format_second_check_message(results: list, report_date: str) -> tuple:
     def _fmt(d: str) -> str:
         return f"{d[:4]}-{d[4:6]}-{d[6:8]}"
 
-    title = f"【朱哥短线雷达｜{_fmt(report_date)} 10:00二次确认观察】"
+    title = f"【朱哥短线雷达 V1.6｜{_fmt(report_date)} 10:00二次确认观察】"
 
     # 失败原因中文映射（仅二次观察命名空间，避免和 9:36 失败码混淆）
     _sec_reason_zh = {
@@ -339,7 +339,7 @@ def format_second_check_message(results: list, report_date: str) -> tuple:
         "unable_to_buy_limit_up":       "一字涨停买不进",
     }
 
-    lines = [f"**【朱哥短线雷达｜{_fmt(report_date)} 10:00二次确认观察】**", ""]
+    lines = [f"**【朱哥短线雷达 V1.6｜{_fmt(report_date)} 10:00二次确认观察】**", ""]
     lines.append("> 此为「观察通过」标记，**非正式模拟买入**，不计入收益/止损/T+1复盘。")
     lines.append("")
 
@@ -422,14 +422,14 @@ def format_update_review_message(stats: dict, report_date: str) -> tuple:
     """
     today_str = datetime.now().strftime("%Y-%m-%d")
 
-    title = f"【朱哥短线雷达｜{today_str} T+1复盘扫描完成】"
+    title = f"【朱哥短线雷达 V1.6｜{today_str} T+1复盘扫描完成】"
     updated  = stats.get("updated", 0)
     skipped  = stats.get("skipped", 0)
     failed   = stats.get("failed",  0)
     rows     = stats.get("rows", [])
     bought   = [r for r in rows if not r.get("not_bought_tracking", False)]
 
-    lines = [f"**【朱哥短线雷达｜{today_str} T+1复盘扫描完成】**", ""]
+    lines = [f"**【朱哥短线雷达 V1.6｜{today_str} T+1复盘扫描完成】**", ""]
 
     if updated == 0 and skipped == 0 and failed == 0:
         lines += ["本次没有已买入且到达 T+1 的记录。"]
@@ -471,7 +471,7 @@ def format_update_review_message(stats: dict, report_date: str) -> tuple:
 
 
 def _format_period_review_message(summary: dict, period_cn: str) -> tuple:
-    """周/月复盘统一格式化（V1.4：用 period_title + 不显示裸 N/A + 大白话结论）。"""
+    """周/月复盘统一格式化（V1.6：用 period_title + 不显示裸 N/A + 大白话结论）。"""
     period_label = summary.get("period_label", f"本{period_cn}")
     period_title = summary.get("period_title", f"本{period_cn}复盘 {period_label}")
     overall      = summary.get("overall", {})
@@ -491,9 +491,9 @@ def _format_period_review_message(summary: dict, period_cn: str) -> tuple:
     def _r(v): return f"{v:.2f}"      if v is not None else (na_traded if not has_traded else "—")
     def _bsr(v): return f"{v*100:.1f}%" if v is not None else "（无9:36样本）"
 
-    title = f"【朱哥短线雷达｜{period_title}】"
+    title = f"【朱哥短线雷达 V1.6｜{period_title}】"
 
-    lines = [f"**【朱哥短线雷达｜{period_title}】**", ""]
+    lines = [f"**【朱哥短线雷达 V1.6｜{period_title}】**", ""]
     lines += [
         f"**本{period_cn}总体：**",
         f"推荐 {overall.get('total', 0)} 只　"
@@ -565,12 +565,12 @@ def _format_period_review_message(summary: dict, period_cn: str) -> tuple:
 
 
 def format_weekly_review_message(summary: dict) -> tuple:
-    """生成周复盘微信推送内容（V1.4：含个股明细 + 主要不买原因）。"""
+    """生成周复盘微信推送内容（V1.6：含个股明细 + 主要不买原因）。"""
     return _format_period_review_message(summary, "周")
 
 
 def format_monthly_review_message(summary: dict) -> tuple:
-    """生成月复盘微信推送内容（V1.4：含个股明细 + 主要不买原因）。"""
+    """生成月复盘微信推送内容（V1.6：含个股明细 + 主要不买原因）。"""
     return _format_period_review_message(summary, "月")
 
 
