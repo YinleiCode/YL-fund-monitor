@@ -1,0 +1,4 @@
+#!/bin/bash
+# .claude/scheduled_tasks.lock — marker file for scheduled_tasks.json
+# Created by CronCreate durable mode.
+exit 0

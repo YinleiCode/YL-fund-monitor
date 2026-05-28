@@ -1,0 +1,104 @@
+{
+  "tasks": [
+    {
+      "id": "6c24c2a1",
+      "cron": "25 9 * * 1-5",
+      "prompt": "A股早盘研判 /Users/yinlei/Desktop/量化/stock_screener 现在是9:25，集合竞价刚结束。阅读 /Users/yinlei/Desktop/量化/stock_screener/CLAUDE.md 中的股市判读指令，结合今天的行情数据，进行早盘分析和决策支持。",
+      "createdAt": 1780012584483,
+      "recurring": true,
+      "createdBySessionId": "e6649984-08ff-4ad4-82c4-303b00e5b617",
+      "createdByPid": 85720,
+      "createdByProcStart": "Thu May 28 23:54:58 2026"
+    },
+    {
+      "id": "2d2ef45e",
+      "cron": "30 9 * * 1-5",
+      "prompt": "A股开盘观察 /Users/yinlei/Desktop/量化/stock_screener 现在是9:30，A股正式开盘。阅读 /Users/yinlei/Desktop/量化/stock_screener/CLAUDE.md 中的股市判读指令，结合今天的行情数据，进行开盘观察和分析。",
+      "createdAt": 1780012588350,
+      "recurring": true,
+      "createdBySessionId": "e6649984-08ff-4ad4-82c4-303b00e5b617",
+      "createdByPid": 85720,
+      "createdByProcStart": "Thu May 28 23:54:58 2026"
+    },
+    {
+      "id": "7b35e57b",
+      "cron": "36 9 * * 1-5",
+      "prompt": "A股买入确认 /Users/yinlei/Desktop/量化/stock_screener 现在9:36，执行买入确认：python3 /Users/yinlei/Desktop/量化/stock_screener/run.py --check-buy",
+      "createdAt": 1780012591052,
+      "recurring": true,
+      "createdBySessionId": "e6649984-08ff-4ad4-82c4-303b00e5b617",
+      "createdByPid": 85720,
+      "createdByProcStart": "Thu May 28 23:54:58 2026"
+    },
+    {
+      "id": "089cdf7a",
+      "cron": "0 10 * * 1-5",
+      "prompt": "A股盘中观察 /Users/yinlei/Desktop/量化/stock_screener 现在10:00，盘中观察。阅读 /Users/yinlei/Desktop/量化/stock_screener/CLAUDE.md 中的股市判读指令，结合今日行情数据，分析盘中走势。",
+      "createdAt": 1780012593730,
+      "recurring": true,
+      "createdBySessionId": "e6649984-08ff-4ad4-82c4-303b00e5b617",
+      "createdByPid": 85720,
+      "createdByProcStart": "Thu May 28 23:54:58 2026"
+    },
+    {
+      "id": "fb7ef9cc",
+      "cron": "0 11 * * 1-5",
+      "prompt": "A股上午收盘前观察 /Users/yinlei/Desktop/量化/stock_screener 现在11:00，上午收盘前。阅读 /Users/yinlei/Desktop/量化/stock_screener/CLAUDE.md 中的股市判读指令，进行半日总结和下午预判。",
+      "createdAt": 1780012596427,
+      "recurring": true,
+      "createdBySessionId": "e6649984-08ff-4ad4-82c4-303b00e5b617",
+      "createdByPid": 85720,
+      "createdByProcStart": "Thu May 28 23:54:58 2026"
+    },
+    {
+      "id": "183cef4b",
+      "cron": "0 13 * * 1-5",
+      "prompt": "A股下午开盘观察 /Users/yinlei/Desktop/量化/stock_screener 现在13:00，下午开盘。阅读 /Users/yinlei/Desktop/量化/stock_screener/CLAUDE.md 中的股市判读指令，观察下午盘走势。",
+      "createdAt": 1780012599072,
+      "recurring": true,
+      "createdBySessionId": "e6649984-08ff-4ad4-82c4-303b00e5b617",
+      "createdByPid": 85720,
+      "createdByProcStart": "Thu May 28 23:54:58 2026"
+    },
+    {
+      "id": "bdb66368",
+      "cron": "0 14 * * 1-5",
+      "prompt": "A股尾盘观察 /Users/yinlei/Desktop/量化/stock_screener 现在14:00，尾盘观察。阅读 /Users/yinlei/Desktop/量化/stock_screener/CLAUDE.md 中的股市判读指令，判断尾盘走势和收盘策略。",
+      "createdAt": 1780012601994,
+      "recurring": true,
+      "createdBySessionId": "e6649984-08ff-4ad4-82c4-303b00e5b617",
+      "createdByPid": 85720,
+      "createdByProcStart": "Thu May 28 23:54:58 2026"
+    },
+    {
+      "id": "2f9b69d3",
+      "cron": "15 15 * * 1-5",
+      "prompt": "A股收盘总结 /Users/yinlei/Desktop/量化/stock_screener 现在15:15，收盘后数据已稳定。执行收盘总结：python3 /Users/yinlei/Desktop/量化/stock_screener/run.py",
+      "createdAt": 1780012604422,
+      "recurring": true,
+      "createdBySessionId": "e6649984-08ff-4ad4-82c4-303b00e5b617",
+      "createdByPid": 85720,
+      "createdByProcStart": "Thu May 28 23:54:58 2026"
+    },
+    {
+      "id": "94c87c60",
+      "cron": "0 21 * * 1-5",
+      "prompt": "A股晚间复盘 /Users/yinlei/Desktop/量化/stock_screener 现在21:00，晚间复盘时间。阅读 /Users/yinlei/Desktop/量化/stock_screener/CLAUDE.md 中的股市判读指令，执行深度复盘：python3 /Users/yinlei/Desktop/量化/stock_screener/run.py --review-summary",
+      "createdAt": 1780012607114,
+      "recurring": true,
+      "createdBySessionId": "e6649984-08ff-4ad4-82c4-303b00e5b617",
+      "createdByPid": 85720,
+      "createdByProcStart": "Thu May 28 23:54:58 2026"
+    },
+    {
+      "id": "2ef8748a",
+      "cron": "40 15 * * 5",
+      "prompt": "A股周报 /Users/yinlei/Desktop/量化/stock_screener 现在周五15:40，生成周报：python3 /Users/yinlei/Desktop/量化/stock_screener/run.py --weekly-review",
+      "createdAt": 1780012609628,
+      "recurring": true,
+      "createdBySessionId": "e6649984-08ff-4ad4-82c4-303b00e5b617",
+      "createdByPid": 85720,
+      "createdByProcStart": "Thu May 28 23:54:58 2026"
+    }
+  ]
+}
