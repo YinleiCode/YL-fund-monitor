@@ -1,0 +1,11 @@
+akshare>=1.10.0
+pandas>=2.0.0
+numpy>=1.24.0
+pyyaml>=6.0
+requests>=2.31.0
+python-dotenv>=1.0.0
+openpyxl>=3.1.0
+
+# —— 本地复盘看板 dashboard_app.py 需要（不影响主流程，不会被 launchd 调用）——
+streamlit>=1.30.0
+plotly>=5.18.0

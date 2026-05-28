@@ -1,0 +1,99 @@
+# 朱哥A股短线三票雷达 V1 配置文件
+# 修改此文件调整阈值和权重，无需改动代码
+
+screening:
+  min_amount: 300000000       # 最小成交额（元），3亿
+  min_turnover_rate: 2.0      # 最小换手率（%）
+  min_price: 3.0              # 最小收盘价（元）
+  min_change_pct: 1.0         # 昨日涨幅下限（%）
+  max_change_pct: 9.5         # 昨日涨幅上限（%）
+  min_20d_return: 3.0         # 近20日涨幅最低要求（%）
+  max_below_ma20: 2.0         # 跌破20日线最大幅度（%），超过则剔除
+  min_listed_days: 60         # 上市最少交易日数
+  top_n_for_history: 100      # 拉历史数据时取前N只（给前50留缓冲）
+  top_n_final: 50             # 拉完历史后取前N只进入打分
+
+scoring:
+  output_top_n: 3             # 最终输出前3只
+
+  # 人气热度（30分）子项
+  popularity:
+    volume_percentile: 10     # 成交额分位
+    turnover_health: 10       # 换手率健康度
+    volume_vs_20d: 10         # 量能相对20日均量
+
+  # 技术动能（30分）子项
+  technical:
+    ma_structure: 10          # 均线结构
+    macd: 8                   # MACD状态
+    volume_price: 7           # 量价配合
+    platform_breakout: 5      # 平台突破
+
+  # 上涨空间（25分）子项
+  space:
+    dist_60d_high: 10         # 距离60日高点
+    return_5d_overdraft: 6    # 近5日涨幅透支度
+    dist_ma20: 5              # 距离20日线
+    limit_overheat: 4         # 连板/涨停过热
+
+  # 风险控制（15分，扣分制）
+  risk:
+    burst_deduct: 8           # 近1日炸板扣分
+    below_ma20_deduct: 5      # 跌破20日线0-2%扣分
+    return_5d_threshold: 20.0 # 近5日涨幅阈值（%）
+    return_5d_deduct: 3       # 超过则扣分
+    return_10d_threshold: 35.0 # 近10日涨幅阈值（%）
+    return_10d_deduct: 5      # 超过则扣分
+    long_shadow_threshold: 5.0 # 上影线阈值（%）
+    long_shadow_deduct: 3     # 超过则扣分
+    high_turnover_threshold: 25.0  # 换手率阈值（%）
+    high_turnover_deduct: 5   # 超过则扣分
+
+market:
+  # V1 简化情绪公式：上证涨跌幅（0-4分）+ 全市场成交额（0-6分）= 最高10分
+  index_high: 1.0              # 上证涨幅高阈值（%），超过得4分
+  index_low: -1.0              # 上证涨幅低阈值（%），低于得0分
+  volume_tier1: 1200000000000  # 1.2万亿，得6分
+  volume_tier2: 1000000000000  # 1.0万亿，得4分
+  volume_tier3:  800000000000  # 0.8万亿，得2分，低于得0分
+  sentiment_high: 8            # 积极行情最低分
+  sentiment_medium: 5          # 中性行情最低分
+
+review:
+  slippage_rate: 0.001         # 买入滑点（千一）
+  apply_sell_slippage: false   # V1 暂不扣卖出滑点
+
+indicators:
+  macd_fast: 12
+  macd_slow: 26
+  macd_signal: 9
+  platform_breakout_vol_ratio: 1.2  # 平台突破量比要求
+  platform_lookback: 5              # 平台突破看前N日
+
+output:
+  directory: "output"
+  logs_directory: "logs"
+
+data_source:
+  prefer_source: sina              # auto=东方财富优先+新浪兜底 / eastmoney=只用东方财富 / sina=直接用新浪
+  allow_sina_fallback: true        # false=禁止新浪备用（仅东方财富）
+  log_data_source: true            # true=在日志/MD/CSV记录数据源溯源信息
+  min_spot_count: 4000             # 低于此数视为数据不完整，auto模式自动切换新浪
+
+# ──────────────────────────────────────────────────────────────────────────
+# V1.4 买入标准 = 逻辑 + 资金 + 买点 + 风险
+#   - report_date >= version_effective_from 才启用 V1.4；之前的记录沿用 V1.3
+#   - 修改 version_effective_from 可推迟/提前切换；今天已确认的记录不会重算
+# ──────────────────────────────────────────────────────────────────────────
+buy_rules:
+  version_effective_from: "20260527"   # V1.4 启用日期（含），盘前 report_date
+  v1_4:
+    # 「有效推荐」预闸：不满足直接观察，不进入9:36买入确认
+    theme_strength_min:   50           # theme_auto：主题强度门槛
+    full_total_score_min: 78           # full：总分门槛
+    full_popularity_min:  22           # full：人气分门槛
+    full_technical_min:   20           # full：技术分门槛
+    # 开盘涨幅分级
+    open_change_hard_low:  -3.0        # < 此值视为明显弱开，主因否决
+    open_change_soft_low:  -1.0        # [hard_low, soft_low) 视为辅助原因，不否决
+    open_change_hard_high:  4.0        # > 此值视为高开过多，主因否决

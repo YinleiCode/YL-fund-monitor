@@ -1,0 +1,70 @@
+# ════════════════════════════════════════════════════════════════════
+# V1.5-beta 资金条件配置（严格收窄版）
+# ════════════════════════════════════════════════════════════════════
+# 作用域：仅作用于 trade_review.check_buy() 内部的 9:36 买入判定
+#
+# V1.5 不影响：
+#   - 推荐池生成（run.py / theme_auto.py）
+#   - scoring 模型（scorer.py）
+#   - filters / market_guard / theme_auto 权重
+#   - update_review / simulated_trade_return / T+1 收益规则
+#   - stop_price 计算（仍是 adjusted_buy_price * 0.97）
+#   - V1.4 五条买入规则
+#
+# V1.5 新增的唯一内容：
+#   在 V1.4 五条之后，加一条「近 3 日主力资金健康」第六条规则
+# ════════════════════════════════════════════════════════════════════
+
+formal_version: V1.4         # 推荐池 + 收益计算仍是 V1.4
+
+v15:
+  enabled: true               # 总开关（默认开 — 即使开了，observe_only 模式也不影响买入）
+  check_buy_mode: observe_only
+  # 三态语义（用户原话）：
+  #   observe_only  — 只记录 v15_* 字段；不影响 buy_signal_0935；不影响 simulated_trade_return
+  #   mark_only     — 标记资金通过/不通过，可在看板/推送提示；仍不影响 buy_signal_0935
+  #   block_buy     — 资金不通过时 buy_signal_0935=False + v15_blocks_buy=True（拦截买入）
+
+  # 资金源不可用时的回退策略
+  fallback_to_v14_when_money_unavailable: true
+
+  # 第一阶段守卫：禁用 block_buy
+  # 即使有人误把 check_buy_mode 配成 block_buy，代码也会守卫降级为 mark_only
+  allow_block_buy: false
+
+  # 资金条件阈值（与 money_flow.py 默认值对齐）
+  rule:
+    primary_inflow_days_min: 2     # 主源：近 3 日主力净流入天数下限
+    primary_inflow_total_min: 0    # 主源：近 3 日累计净流入下限（元）
+    fallback_net_total_min: 0      # 备源：近 3 日资金净额下限（元）
+
+  # 灰度发布元数据（人工填，仅供审计）
+  gray_release:
+    start_date: ""             # 第一次切到非 observe_only 时填的 report_date
+    notes: ""
+
+
+# ════════════════════════════════════════════════════════════════════
+# V1.6 复盘计划驱动第二天选股
+# ════════════════════════════════════════════════════════════════════
+# 作用域：
+#   - append_rows: 写候选股时打 V1.6 标签（不修改推荐池生成方式；只在 CSV 上多 10 列）
+#   - check_buy:   前置门读 v16_only_observe；True 时直接跳过 V1.4 五条+V1.5 第六条
+#
+# V1.6 不动：
+#   - scorer / filters / market_guard / indicators 评分模型
+#   - V1.4 五条买入规则公式本身（候选资格层控制，不修改公式）
+#   - V1.5 资金条件公式
+#   - stop_price 计算
+#   - T+1 收益规则 / simulated_trade_return 公式
+#   - update_review 流程
+
+v16:
+  enabled: true                              # 总开关
+  plan_filter_enabled: true                  # 是否给候选股打 V1.6 标签
+  plan_source: latest                        # latest | by_date
+  fallback_to_v14_when_plan_missing: true    # 计划缺失/日期不匹配 → 完全回退 V1.4/V1.5
+  affect_check_buy: true                     # 已恢复（2026-05-28 盘后）：V1.6 前置门生效，v16_only_observe=True 的候选 9:36 不买入
+  # 灰度路径建议：
+  #   1) plan_filter_enabled=true + affect_check_buy=false  → 仅打标签，9:36 不拦截
+  #   2) plan_filter_enabled=true + affect_check_buy=true   → 标签生效，9:36 实拦截
