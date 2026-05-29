@@ -94,6 +94,12 @@ COLUMNS = [
     "v16_plan_action",             # 5 档中文动作描述
     "v16_plan_reason",             # 中文原因
     "v16_only_observe",            # True / False — check_buy 前置门读这个字段
+    # ── 自选股票池字段（仅标记，不影响买入/止损/T+1）──
+    "is_custom_pool",              # True / False
+    "custom_pool_priority",        # 1/2/3
+    "custom_pool_theme",           # 调研主题
+    "custom_pool_reason",          # 入池理由
+    "custom_pool_status",          # active / watch / paused
 ]
 
 
@@ -736,6 +742,13 @@ def append_rows(
             flags=_v16_flags,
         )
         row.update(v16_audit)
+
+        # ── ⭐ 自选股票池标记 ──
+        row["is_custom_pool"] = str(item.get("is_custom_pool", False))
+        row["custom_pool_priority"] = str(item.get("custom_pool_priority", ""))
+        row["custom_pool_theme"] = item.get("custom_pool_theme", "")
+        row["custom_pool_reason"] = item.get("custom_pool_reason", "")
+        row["custom_pool_status"] = item.get("custom_pool_status", "")
 
         new_rows.append(row)
 

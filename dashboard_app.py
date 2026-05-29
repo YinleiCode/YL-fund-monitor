@@ -700,6 +700,18 @@ def stock_card(row: pd.Series, variant: str = "default") -> str:
         price_html += f"<span>10:00：<b style='color:{COLOR_SECOND};'>{p1000}</b></span>"
     price_html += "</div>"
 
+    # ⭐ 自选池标记
+    is_pool = str(row.get("is_custom_pool", "")).strip().lower() in ("true", "1")
+    if is_pool:
+        pool_pri = str(row.get("custom_pool_priority", "")).strip()
+        pool_reason = str(row.get("custom_pool_reason", "")).strip()
+        pool_badge = f"⭐ 自选池(优先级{pool_pri})"
+        if pool_reason:
+            pool_badge += f"：{pool_reason}"
+        price_html += (
+            f"<div style='font-size:11px;color:#9A6700;margin-top:6px;'>{pool_badge}</div>"
+        )
+
     # 主因/辅助 或 买入四因
     if bs is True and variant == "bought":
         tot = _gf(row.get("total_score"))
@@ -5537,6 +5549,467 @@ def page_t_signal() -> None:
         )
 
 
+# ─── V1.6 ⭐ 自选股票池 ────────────────────────────────────────────────
+
+WATCHLIST_PATH = BASE_DIR / "data" / "watchlist" / "custom_stock_pool.csv"
+
+def _wl_load() -> list[dict]:
+    """Load watchlist CSV; return empty list if missing/invalid."""
+    if not WATCHLIST_PATH.exists():
+        return []
+    try:
+        import csv
+        with open(WATCHLIST_PATH, encoding="utf-8-sig", newline="") as f:
+            return list(csv.DictReader(f))
+    except Exception:
+        return []
+
+
+def _wl_build_name_cache() -> tuple:
+    """
+    构建双向名称缓存。
+    返回 (code_to_name: dict, name_to_code: dict)
+
+    来源优先级（高→低）：
+      1. output/trade_review.csv（历史确认记录）
+      2. data/cache/stock_name_universe.csv（5524 只全市场索引）
+      3. data/watchlist/stock_name_cache.csv（手工修正兜底）
+    """
+    code_to_name: dict[str, str] = {}
+    name_to_code: dict[str, str] = {}
+
+    # 1) trade_review.csv（最高优先级：历史已确认记录）
+    for csv_path in [OUTPUT_DIR / "trade_review.csv", OUTPUT_DIR / "trade_review_cn.csv"]:
+        if csv_path.exists():
+            try:
+                import csv
+                with open(csv_path, encoding="utf-8-sig", newline="") as f:
+                    for r in csv.DictReader(f):
+                        code = str(r.get("stock_code", "")).strip().zfill(6)
+                        name = str(r.get("stock_name", "")).strip()
+                        if code and name and len(code) == 6:
+                            code_to_name[code] = name
+                            if name not in name_to_code:
+                                name_to_code[name] = code
+            except Exception:
+                pass
+
+    # 2) 全市场索引 stock_name_universe.csv（5524 只）
+    universe_path = BASE_DIR / "data" / "cache" / "stock_name_universe.csv"
+    if universe_path.exists():
+        try:
+            import csv
+            with open(universe_path, encoding="utf-8-sig", newline="") as f:
+                for r in csv.DictReader(f):
+                    code = str(r.get("代码", "") or r.get("stock_code", "")).strip().zfill(6)
+                    name = str(r.get("名称", "") or r.get("stock_name", "")).strip()
+                    if code and name and len(code) == 6:
+                        if code not in code_to_name:
+                            code_to_name[code] = name
+                        if name not in name_to_code:
+                            name_to_code[name] = code
+        except Exception:
+            pass
+
+    # 3) stock_name_cache.csv（手工修正兜底）
+    name_cache_path = BASE_DIR / "data" / "watchlist" / "stock_name_cache.csv"
+    if name_cache_path.exists():
+        try:
+            import csv
+            with open(name_cache_path, encoding="utf-8-sig", newline="") as f:
+                for r in csv.DictReader(f):
+                    code = str(r.get("stock_code", "")).strip().zfill(6)
+                    name = str(r.get("stock_name", "")).strip()
+                    if code and name and len(code) == 6:
+                        # 不覆盖已经存在的映射（以 trade_review 和 universe 为准）
+                        if code not in code_to_name:
+                            code_to_name[code] = name
+                        if name not in name_to_code:
+                            name_to_code[name] = code
+        except Exception:
+            pass
+
+    return code_to_name, name_to_code
+    """
+    构建双向名称缓存。
+    返回 (code_to_name: dict, name_to_code: dict)
+    来源：本地缓存文件 + trade_review 历史记录
+    """
+    code_to_name: dict[str, str] = {}
+    name_to_code: dict[str, str] = {}
+
+    # 1) 本地缓存文件 data/watchlist/stock_name_cache.csv（最高优先级）
+    name_cache_path = BASE_DIR / "data" / "watchlist" / "stock_name_cache.csv"
+    if name_cache_path.exists():
+        try:
+            import csv
+            with open(name_cache_path, encoding="utf-8-sig", newline="") as f:
+                for r in csv.DictReader(f):
+                    code = str(r.get("stock_code", "")).strip().zfill(6)
+                    name = str(r.get("stock_name", "")).strip()
+                    if code and name and len(code) == 6:
+                        code_to_name[code] = name
+                        name_to_code[name] = code
+        except Exception:
+            pass
+
+    # 2) trade_review.csv / trade_review_cn.csv（本地已确认记录）
+    for csv_path in [OUTPUT_DIR / "trade_review.csv", OUTPUT_DIR / "trade_review_cn.csv"]:
+        if csv_path.exists():
+            try:
+                import csv
+                with open(csv_path, encoding="utf-8-sig", newline="") as f:
+                    for r in csv.DictReader(f):
+                        code = str(r.get("stock_code", "")).strip().zfill(6)
+                        name = str(r.get("stock_name", "")).strip()
+                        if code and name and len(code) == 6 and code not in code_to_name:
+                            code_to_name[code] = name
+                            if name not in name_to_code:
+                                name_to_code[name] = code
+            except Exception:
+                pass
+
+    return code_to_name, name_to_code
+
+
+def _wl_lookup_from_akshare(codes: list[str], names: list[str]) -> tuple:
+    """
+    通过 akshare 东方财富实时行情拉取股票信息。
+    返回 (code_to_name, name_to_code) 两个 dict。
+    """
+    code_to_name: dict[str, str] = {}
+    name_to_code: dict[str, str] = {}
+    if not codes and not names:
+        return code_to_name, name_to_code
+    try:
+        import akshare as ak
+        df = ak.stock_zh_a_spot_em()
+        if df is not None and not df.empty:
+            code_set = set(codes)
+            name_set = set(names)
+            for _, row in df.iterrows():
+                code = str(row.get("代码", "")).strip().zfill(6)
+                name = str(row.get("名称", "")).strip()
+                if not code or not name or len(code) != 6:
+                    continue
+                if code in code_set:
+                    code_to_name[code] = name
+                if name in name_set:
+                    name_to_code[name] = code
+    except Exception:
+        pass
+    return code_to_name, name_to_code
+
+
+def _wl_resolve_stock_names(rows: list[dict]) -> tuple:
+    """
+    双向补全：code → name / name → code。
+    返回 (updated_rows, unfilled_count, mismatch_count)
+    """
+    # 第一步：收集需要查找的 codes 和 names
+    need_codes = set()
+    need_names = set()
+    for r in rows:
+        code = str(r.get("stock_code", "")).strip().zfill(6)
+        name = str(r.get("stock_name", "")).strip()
+        has_code = bool(code and len(code) == 6 and code != "000000")
+        has_name = bool(name and name not in ("", "nan", "None", "名称未匹配"))
+        if has_code and not has_name:
+            need_codes.add(code)
+        if has_name and not has_code:
+            need_names.add(name)
+
+    # 第二步：查双向缓存
+    code_to_name, name_to_code = _wl_build_name_cache()
+
+    # 第三步：未命中的走 akshare 实时行情
+    still_need_codes = [c for c in need_codes if c not in code_to_name]
+    still_need_names = [n for n in need_names if n not in name_to_code]
+    if still_need_codes or still_need_names:
+        try:
+            live_c2n, live_n2c = _wl_lookup_from_akshare(still_need_codes, still_need_names)
+            code_to_name.update(live_c2n)
+            name_to_code.update(live_n2c)
+        except Exception:
+            pass
+
+    # 第四步：更新 rows + 检测不匹配
+    import copy
+    updated = copy.deepcopy(rows)
+    unfilled = 0
+    mismatches = []
+
+    for r in updated:
+        code = str(r.get("stock_code", "")).strip().zfill(6)
+        name = str(r.get("stock_name", "")).strip()
+        has_code = bool(code and len(code) == 6 and code != "000000")
+        has_name = bool(name and name not in ("", "nan", "None", "名称未匹配"))
+
+        if has_code and not has_name:
+            # code → name
+            if code in code_to_name:
+                r["stock_name"] = code_to_name[code]
+            else:
+                r["stock_name"] = "名称未匹配"
+                unfilled += 1
+
+        elif has_name and not has_code:
+            # name → code
+            if name in name_to_code:
+                r["stock_code"] = name_to_code[name]
+            else:
+                unfilled += 1
+
+        elif has_code and has_name:
+            # 双向校验
+            expected_name = code_to_name.get(code)
+            expected_code = name_to_code.get(name)
+            if expected_name and name != expected_name:
+                mismatches.append(f"{code} 代码对应 {expected_name}，但名称填了 {name}")
+            elif expected_code and code != expected_code:
+                mismatches.append(f"{name} 名称对应 {expected_code}，但代码填了 {code}")
+
+    return updated, unfilled, mismatches
+
+
+def _wl_save(rows: list[dict]) -> bool:
+    """Save watchlist CSV; return True on success."""
+    try:
+        WATCHLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
+        import csv
+        with open(WATCHLIST_PATH, "w", encoding="utf-8-sig", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=[
+                "stock_code", "stock_name", "priority", "theme",
+                "reason", "research_date", "status", "max_position_pct", "note",
+            ])
+            w.writeheader()
+            for r in rows:
+                w.writerow(r)
+        return True
+    except Exception:
+        return False
+
+
+def _wl_build_toast(resolved: list, unfilled: int, mismatches: list) -> str:
+    """根据补全结果构建准确的消息文本。"""
+    n_total = len(resolved)
+    n_ok = n_total - unfilled
+    if unfilled == 0 and not mismatches:
+        return f"全部 {n_total} 条已自动补全。"
+    parts = []
+    if unfilled > 0:
+        parts.append(f"{n_ok}/{n_total} 条已补全，仍有 {unfilled} 条未匹配")
+    if mismatches:
+        parts.append(f"发现 {len(mismatches)} 处代码/名称不一致")
+    return "；".join(parts) + "，请手工确认。"
+
+
+def _wl_clean_rows(rows: list[dict]) -> list[dict]:
+    """
+    清洗 data_editor 输出的行：
+    - 删除 stock_code 为空的整行
+    - stock_code 转 6 位
+    - priority 默认 "1"
+    - status 默认 "active"
+    - 文本字段去 None/nan → ""
+    - 去重（同 stock_code 保留最后一条）
+    """
+    cleaned = []
+    seen = set()
+    for r in rows:
+        code = str(r.get("stock_code", "")).strip().zfill(6)
+        if not code or code in ("000000", "nan", "none", ""):
+            continue
+        # 从后往前去重（保留最后一条）
+        # 先收集所有有效行，再去重
+        entry = {
+            "stock_code": code,
+            "stock_name": str(r.get("stock_name", "")).strip() or "",
+            "priority":   str(r.get("priority", "")).strip() or "1",
+            "theme":      str(r.get("theme", "")).strip() or "",
+            "reason":     str(r.get("reason", "")).strip() or "",
+            "research_date": str(r.get("research_date", "")).strip() or "",
+            "status":     str(r.get("status", "")).strip() or "active",
+            "max_position_pct": str(r.get("max_position_pct", "")).strip() or "",
+            "note":       str(r.get("note", "")).strip() or "",
+        }
+        # 标准化 priority/status
+        if entry["priority"] not in ("1", "2", "3"):
+            entry["priority"] = "1"
+        if entry["status"] not in ("active", "watch", "paused"):
+            entry["status"] = "active"
+        cleaned.append(entry)
+
+    # 去重：同 stock_code 只保留最后一条
+    deduped = {}
+    for entry in cleaned:
+        deduped[entry["stock_code"]] = entry
+    return list(deduped.values())
+
+
+def _wl_identify(query: str) -> dict:
+    """
+    快速识别：输入代码或名称，返回 {code, name, matched, error}。
+    """
+    q = query.strip()
+    if not q:
+        return {"code": "", "name": "", "matched": False, "error": "输入为空"}
+    code_to_name, name_to_code = _wl_build_name_cache()
+
+    if q.isdigit() and len(q) == 6:
+        code = q.zfill(6)
+        name = code_to_name.get(code, "")
+        if name:
+            return {"code": code, "name": name, "matched": True, "error": ""}
+        return {"code": code, "name": "", "matched": False, "error": f"未匹配到代码 {code}"}
+
+    code = name_to_code.get(q, "")
+    if code:
+        name = code_to_name.get(code, q)
+        return {"code": code, "name": name, "matched": True, "error": ""}
+
+    for name, c in name_to_code.items():
+        if q in name:
+            return {"code": c, "name": name, "matched": True, "error": ""}
+
+    return {"code": "", "name": "", "matched": False, "error": f"未匹配到名称 {q}"}
+
+
+def page_watchlist() -> None:
+    """⭐ 自选股票池 — 快速添加 + 表格管理。"""
+    st.markdown("## ⭐ 自选股票池")
+    st.caption(
+        "自选股票池只提高候选优先级，不代表自动买入。"
+        "最终仍需通过 V1.6 复盘计划层、资金条件层和 9:36 技术确认。"
+    )
+
+    # ── 0. 初始化 session_state ──
+    if "wl_table" not in st.session_state:
+        st.session_state["wl_table"] = _wl_load()
+    if "wl_identify_result" not in st.session_state:
+        st.session_state["wl_identify_result"] = None
+
+    # ── 1. 快速添加区域 ──
+    st.markdown("### ➕ 快速添加股票")
+    c1, c2, c3 = st.columns([3, 1, 1])
+    query = c1.text_input("输入股票代码或名称", key="wl_query",
+                          placeholder="例：300476 或 胜宏科技 或 同花顺")
+    if c2.button("🔍 识别", use_container_width=True):
+        st.session_state["wl_identify_result"] = _wl_identify(query)
+        st.rerun()
+
+    # 显示识别结果
+    result = st.session_state.get("wl_identify_result")
+    if result:
+        if result["matched"]:
+            st.success(f"✅ 识别成功：{result['code']} {result['name']}")
+            if c3.button("➕ 加入自选池", use_container_width=True,
+                         type="primary"):
+                table = list(st.session_state["wl_table"])
+                found = False
+                for r in table:
+                    if r.get("stock_code") == result["code"]:
+                        r["stock_name"] = result["name"]
+                        found = True
+                        break
+                if not found:
+                    table.append({
+                        "stock_code": result["code"],
+                        "stock_name": result["name"],
+                        "priority": "1",
+                        "theme": "",
+                        "reason": "",
+                        "research_date": "",
+                        "status": "active",
+                        "max_position_pct": "",
+                        "note": "",
+                    })
+                st.session_state["wl_table"] = table
+                st.session_state["wl_identify_result"] = None
+                st.rerun()
+        else:
+            st.warning(f"⚠️ {result['error']}")
+
+    st.divider()
+
+    # ── 2. 表格管理区 ──
+    st.markdown("### 📋 已添加股票")
+    table_rows = st.session_state["wl_table"]
+    if not table_rows:
+        st.info("暂无自选股票，请使用上方「快速添加」功能。")
+
+    df = pd.DataFrame(table_rows) if table_rows else pd.DataFrame(
+        columns=["stock_code", "stock_name", "priority", "theme",
+                 "reason", "research_date", "status", "max_position_pct", "note"])
+
+    edited = st.data_editor(
+        df,
+        column_config={
+            "stock_code":       st.column_config.TextColumn("股票代码", width=90, required=True),
+            "stock_name":       st.column_config.TextColumn("股票名称", width=120),
+            "priority":         st.column_config.SelectboxColumn("优先级", options=["1", "2", "3"], width=70),
+            "theme":            st.column_config.TextColumn("调研主题", width=120),
+            "reason":           st.column_config.TextColumn("入池理由", width=200),
+            "research_date":    st.column_config.TextColumn("调研日期", width=100),
+            "status":           st.column_config.SelectboxColumn("状态", options=["active", "watch", "paused"], width=90),
+            "max_position_pct": st.column_config.TextColumn("最大仓位%", width=80),
+            "note":             st.column_config.TextColumn("备注", width=150),
+        },
+        num_rows="dynamic",
+        hide_index=True,
+        width="stretch",
+    )
+
+    # ── 3. 校验 + 保存 ──
+    raw_rows = edited.fillna("").to_dict("records")
+    cleaned = _wl_clean_rows(raw_rows)
+
+    errors = []
+    seen_codes = set()
+    for idx, r in enumerate(cleaned):
+        code = r.get("stock_code", "")
+        name = r.get("stock_name", "")
+        priority = r.get("priority", "")
+        status = r.get("status", "")
+        if not code.isdigit() or len(code) != 6:
+            errors.append(f"第 {idx+1} 行：股票代码无效")
+            continue
+        if not name:
+            errors.append(f"第 {idx+1} 行 ({code})：股票名称为空")
+        if priority not in ("1", "2", "3"):
+            errors.append(f"第 {idx+1} 行 ({code})：优先级无效")
+        if status not in ("active", "watch", "paused"):
+            errors.append(f"第 {idx+1} 行 ({code})：状态无效")
+        if code in seen_codes:
+            errors.append(f"重复股票代码 {code}")
+        seen_codes.add(code)
+
+    if errors:
+        for e in errors:
+            st.error(e)
+
+    c1, c2 = st.columns([1, 3])
+    if c1.button("💾 保存自选股票池", type="primary", disabled=bool(errors)):
+        save_ok = True
+        for r in cleaned:
+            code, name = r["stock_code"], r["stock_name"]
+            code_to_name, name_to_code = _wl_build_name_cache()
+            expected = code_to_name.get(code)
+            if expected and name and name != expected:
+                st.error(f"代码/名称不一致：{code} → {expected}，但填了 {name}")
+                save_ok = False
+        if save_ok and _wl_save(cleaned):
+            st.session_state["wl_table"] = cleaned
+            status_banner("自选股票池已保存。", "success")
+            st.rerun()
+        elif save_ok:
+            status_banner("保存失败，请检查文件权限。", "error")
+
+    # 统计
+    active_cnt = sum(1 for r in st.session_state["wl_table"] if r.get("status") in ("active", "watch"))
+    st.caption(f"当前 {len(st.session_state['wl_table'])} 只，其中 active/watch {active_cnt} 只")
+
+
 # ─── main ───────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -5648,6 +6121,7 @@ def main() -> None:
              "👁 未买入跟踪", "📅 周/月复盘",
              "📒 每日候选复盘", "📌 明日交易计划",
              "📈 做 T 观察",
+             "⭐ 自选股票池",
              "🛠 手动补跑"],
             label_visibility="collapsed",
         )
@@ -5668,6 +6142,11 @@ def main() -> None:
     # —— 📈 做 T 观察 也不依赖 trade_review.csv（独立读 t_signal_latest.csv）——
     if "做 T" in page:
         page_t_signal()
+        return
+
+    # —— ⭐ 自选股票池 不依赖 trade_review.csv ——
+    if "自选" in page:
+        page_watchlist()
         return
 
     # —— 🛠 手动补跑 不依赖 CSV，且即使 CSV 为空时也应该可用（用来手动跑 run.py 生成 CSV）——

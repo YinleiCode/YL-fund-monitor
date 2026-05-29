@@ -47,6 +47,27 @@ def load_config() -> dict:
         return yaml.safe_load(f)
 
 
+def load_watchlist() -> tuple:
+    """
+    加载自选股票池 data/watchlist/custom_stock_pool.csv。
+    返回 (active: list[dict], all: list[dict])。
+    文件不存在或格式错误时返回空列表，不报错。
+    """
+    wl_path = BASE_DIR / "data" / "watchlist" / "custom_stock_pool.csv"
+    if not wl_path.exists():
+        return [], []
+    try:
+        import csv
+        with open(wl_path, encoding="utf-8-sig", newline="") as f:
+            rows = list(csv.DictReader(f))
+        active = [r for r in rows if str(r.get("status", "")).strip() in ("active", "watch")]
+        return active, rows
+    except Exception as e:
+        logger = logging.getLogger("run")
+        logger.warning(f"自选池加载失败: {e}")
+        return [], []
+
+
 def _clear_simulate_env() -> None:
     """Production default: never inherit a stale simulate environment."""
     for k in ("SIMULATE_MODE", "SIMULATE_MODE_SOURCE", "ZHUGE_EXPLICIT_SIMULATE", "ZHUGE_SIMULATE_DATA"):
@@ -473,15 +494,39 @@ def main() -> None:
         logger.info("[trade_review] 未写入 trade_review.csv（无候选）")
         sys.exit(0)
 
-    # 按总分排序
+    # ── 自选股票池加分 ──────────────────────────────────────────────
+    active_wl, _ = load_watchlist()
+    wl_by_code = {r["stock_code"]: r for r in active_wl}
+    for item in results:
+        code = item["code"]
+        wl = wl_by_code.get(code)
+        if wl:
+            priority = int(str(wl.get("priority", "3")).strip())
+            boost = {1: 15.0, 2: 5.0, 3: 0.0}.get(priority, 0.0)
+            item["scores"]["total"] = round(item["scores"]["total"] + boost, 1)
+            item["is_custom_pool"] = True
+            item["custom_pool_priority"] = priority
+            item["custom_pool_theme"] = wl.get("theme", "")
+            item["custom_pool_reason"] = wl.get("reason", "")
+            item["custom_pool_status"] = wl.get("status", "")
+            logger.info(f"  ⭐ {code} {item['name']} 自选池 priority={priority} 加分+{boost}")
+        else:
+            item["is_custom_pool"] = False
+            item["custom_pool_priority"] = 0
+            item["custom_pool_theme"] = ""
+            item["custom_pool_reason"] = ""
+            item["custom_pool_status"] = ""
+
+    # 按总分排序（自选池加分后自然排在前面）
     results.sort(key=lambda x: x["scores"]["total"], reverse=True)
     top3 = results[:cfg["scoring"]["output_top_n"]]
 
     logger.info("【前3名】")
     for item in top3:
         sc = item["scores"]
+        pool = "⭐" if item.get("is_custom_pool") else " "
         logger.info(
-            f"  {item['code']} {item['name']}  总分{sc['total']}  "
+            f"  {pool} {item['code']} {item['name']}  总分{sc['total']}  "
             f"人气{sc['popularity']} 技术{sc['technical']} "
             f"空间{sc['space']} 风险{sc['risk']}"
         )
