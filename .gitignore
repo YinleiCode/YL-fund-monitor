@@ -13,3 +13,4 @@ api_keys*
 secrets*
 *.sqlite
 *.db
+backups/
