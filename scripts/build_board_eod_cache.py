@@ -159,6 +159,64 @@ def _validate_run_time(report_date: str) -> tuple:
 # akshare 数据拉取（与 theme_auto._fetch_concept_boards 同口径）
 # ════════════════════════════════════════════════════════════════════
 
+def _fetch_ths_industry_summary() -> Optional[list]:
+    """
+    调同花顺行业板块汇总（无成分股 API 依赖），作为 EM 失败时的备源。
+    返回值 schema 与 EM 概念/行业板块兼容：
+      name, pct_chg, amount, up_count, down_count, source, data_quality
+
+    THS 行业汇总返回 90 个行业板块，含涨跌幅、成交额、上涨/下跌家数。
+    不含成分股明细，不含概念分类。
+    """
+    try:
+        import akshare as ak
+    except ImportError as e:
+        _LAST_ATTEMPTS.append({
+            "source_label": "THS 行业汇总",
+            "category": "akshare_missing",
+            "error_type": type(e).__name__,
+            "error": str(e),
+            "hints": ["当前 Python 环境未安装 akshare。"],
+        })
+        return None
+
+    try:
+        df = ak.stock_board_industry_summary_ths()
+    except Exception as e:
+        print(f"  [error] ak.stock_board_industry_summary_ths() 失败: {type(e).__name__}: {e}")
+        _LAST_ATTEMPTS.append(_print_retry_hint("THS 行业汇总", e))
+        return None
+
+    if df is None or len(df) == 0:
+        _LAST_ATTEMPTS.append({
+            "source_label": "THS 行业汇总",
+            "category": "empty_data",
+            "error_type": "EmptyDataFrame",
+            "error": "akshare 返回空数据",
+            "hints": ["THS 行业汇总接口返回空数据：稍后重跑。"],
+        })
+        return None
+
+    import pandas as pd
+    records = []
+    for _, row in df.iterrows():
+        amount_yi = pd.to_numeric(row.get("总成交额"), errors="coerce")
+        # THS 总成交额单位是 亿，需转为 元 以兼容 EM 格式
+        amount_yuan = amount_yi * 1e8 if pd.notna(amount_yi) else None
+        records.append({
+            "name":        str(row.get("板块", "")),
+            "pct_chg":     pd.to_numeric(row.get("涨跌幅"), errors="coerce"),
+            "amount":      amount_yuan,
+            "up_count":    int(row["上涨家数"]) if pd.notna(row.get("上涨家数")) else None,
+            "down_count":  int(row["下跌家数"]) if pd.notna(row.get("下跌家数")) else None,
+            "source":      "ths_industry_summary",
+            "data_quality": "partial",
+        })
+
+    print(f"  ✓ 同花顺行业汇总（备源）: {len(records)} 个板块")
+    return records
+
+
 def _fetch_concept_boards() -> Optional[list]:
     """
     调 akshare 概念板块行情；成功返回 list[dict]，失败返回 None。
@@ -278,9 +336,18 @@ def _fetch_industry_boards() -> Optional[list]:
 def _fetch_boards(source: str) -> tuple:
     """
     根据 source 调度：
-      'concept'   → 只拉概念
-      'industry'  → 只拉行业
-      'auto'      → 先概念，失败用行业
+      'concept'        → 只拉 EM 概念
+      'industry'       → 只拉 EM 行业
+      'ths_concept'    → 只拉 THS 概念（当前无独立可用接口，→ error）
+      'ths_industry'   → 只拉 THS 行业汇总
+      'auto'           → 完整 fallback 链
+
+    fallback 链（auto）：
+      ① EM 概念 (stock_board_concept_name_em → 计算涨跌幅/成交额/涨跌家数)
+      ② EM 行业 (stock_board_industry_name_em → 同上)
+      ③ THS 行业汇总 (stock_board_industry_summary_ths → 无成分股依赖)
+      ④ 全失败 → error
+
     返回 (records, data_source_label) 或 (None, None)
     """
     _LAST_ATTEMPTS.clear()
@@ -290,13 +357,30 @@ def _fetch_boards(source: str) -> tuple:
     if source == "industry":
         records = _fetch_industry_boards()
         return (records, "akshare.stock_board_industry_name_em") if records else (None, None)
-    # auto
+    if source == "ths_concept":
+        print("  [info] THS 概念接口（stock_board_concept_summary_ths）仅返回 20 行摘要，不足以生成 board cache，跳过")
+        _LAST_ATTEMPTS.append({
+            "source_label": "THS 概念接口",
+            "category": "not_suitable",
+            "error_type": "UnsupportedSource",
+            "error": "stock_board_concept_summary_ths 只返回事件摘要，非板块行情",
+            "hints": ["THS 概念摘要不适用；请改用 ths_industry。"],
+        })
+        return None, None
+    if source == "ths_industry":
+        records = _fetch_ths_industry_summary()
+        return (records, "ths_industry_summary") if records else (None, None)
+
+    # auto: 完整 fallback 链
     records = _fetch_concept_boards()
     if records:
         return records, "akshare.stock_board_concept_name_em"
     records = _fetch_industry_boards()
     if records:
-        return records, "akshare.stock_board_industry_name_em (fallback)"
+        return records, "akshare.stock_board_industry_name_em (fallback 1)"
+    records = _fetch_ths_industry_summary()
+    if records:
+        return records, "ths_industry_summary (fallback 2)"
     return None, None
 
 
@@ -316,17 +400,24 @@ def _write_cache(records: list, report_date: str,
     main_fp = OUTPUT_DIR / f"board_df_cache_{report_date}.json"
     meta_fp = OUTPUT_DIR / f"board_df_cache_{report_date}.meta.json"
 
+    # 判断数据质量
+    has_up_down = any(r.get("up_count") is not None for r in records)
+    data_quality = "ok" if has_up_down else "partial"
+
     built_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     meta = {
         "report_date":      report_date,
         "built_at":         built_at,
         "data_source":      data_source,
         "n_boards":         len(records),
+        "data_quality":     data_quality,
         "script_version":   SCRIPT_VERSION,
         "run_time_check":   run_time_detail,
         "no_fallback":      True,  # 数据源失败时不会 fallback 到旧文件
         "script_path":      "scripts/build_board_eod_cache.py",
     }
+    if "ths" in data_source:
+        meta["note"] = "数据来自同花顺行业汇总（无成分股明细），可供 Top5 主线板块筛选，但不含概念板块分类"
 
     try:
         main_fp.write_text(
@@ -398,8 +489,9 @@ def main() -> int:
                    help="目标日期 YYYYMMDD（默认今天；不允许过去/未来）")
     p.add_argument("--dry-run", action="store_true",
                    help="不写文件，仅打印数据预览（仍校验时间窗口）")
-    p.add_argument("--source", choices=["concept", "industry", "auto"],
-                   default="auto", help="数据源（默认 auto = 先概念后行业）")
+    p.add_argument("--source", choices=["concept", "industry", "auto",
+                                        "ths_concept", "ths_industry"],
+                   default="auto", help="数据源（默认 auto = EM概念→EM行业→THS行业汇总）")
     p.add_argument("--keep-existing", action="store_true",
                    help="若文件已存在且 mtime >= 15:00 则跳过")
     args = p.parse_args()
@@ -475,8 +567,11 @@ def main() -> int:
     if not ok:
         return EXIT_SELF_CHECK
 
+    has_up_down = any(r.get("up_count") is not None for r in records)
+    quality = "完整" if has_up_down else "部分（THS 源无 up_count/down_count，不影响 Top5 主线筛选）"
     print()
     print(f"✅ 完成。下游 build_market_daily.py 现可识别该 cache 为 fresh。")
+    print(f"   数据质量: {quality}")
     print(f"   主文件: output/board_df_cache_{report_date}.json")
     print(f"   元数据: output/board_df_cache_{report_date}.meta.json")
     return EXIT_OK

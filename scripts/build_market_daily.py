@@ -104,6 +104,12 @@ def _load_board_df_cache(data_date: str) -> Optional[list]:
     fp = OUTPUT_DIR / f"board_df_cache_{data_date}.json"
     if not fp.exists():
         return None
+    try:
+        d = json.loads(fp.read_text(encoding="utf-8"))
+        return d if isinstance(d, list) else None
+    except Exception as e:
+        print(f"  [warn] 读 {fp.name} 异常: {type(e).__name__}: {e}")
+        return None
 
 
 def _load_market_breadth_cache(report_date: str) -> Optional[dict]:
@@ -124,12 +130,6 @@ def _load_market_breadth_cache(report_date: str) -> Optional[dict]:
             )
             return None
         return row
-    except Exception as e:
-        print(f"  [warn] 读 {fp.name} 异常: {type(e).__name__}: {e}")
-        return None
-    try:
-        d = json.loads(fp.read_text(encoding="utf-8"))
-        return d if isinstance(d, list) else None
     except Exception as e:
         print(f"  [warn] 读 {fp.name} 异常: {type(e).__name__}: {e}")
         return None
