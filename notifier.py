@@ -53,6 +53,8 @@ def _money_decision_cn(decision: str) -> str:
         "filter": "资金条件层观察：资金不通过",
         "block": "资金条件层观察：资金不通过",
         "fail": "资金条件层观察：资金不通过",
+        "资金不通过": "资金条件层观察：资金不通过",
+        "资金通过": "资金条件层观察：资金通过",
         "missing": "资金条件层观察：暂无数据",
         "unavailable": "资金条件层观察：数据源不可用",
     }
@@ -68,6 +70,23 @@ def _money_source_cn(source: str) -> str:
         "unavailable": "数据源不可用",
     }
     return mapping.get(s, s or "暂无")
+
+
+def _reason_cn(reason: str) -> str:
+    r = _display_value(reason, "")
+    mapping = {
+        "market_sentiment_missing": "大盘情绪数据缺失",
+        "market_sentiment_below_5": "大盘情绪不足5分",
+        "v16_plan_only_observe": "V1.6 复盘计划要求只观察",
+        "v16_only_observe": "只观察，不进入 9:36 模拟买入",
+        "price_below_open": "9:36 低于开盘价",
+        "price_below_ma5": "9:36 低于5日均线",
+        "unable_to_buy_limit_up": "一字涨停买不进",
+    }
+    if not r:
+        return "暂无"
+    parts = [p.strip() for p in r.replace("|", ";").replace(",", ";").split(";") if p.strip()]
+    return "、".join(mapping.get(p, p) for p in parts) if parts else mapping.get(r, r)
 
 
 def _format_v16_money_lines(r: dict) -> list:
@@ -88,13 +107,22 @@ def _format_v16_money_lines(r: dict) -> list:
     else:
         observe_text = "暂无"
 
+    bs = str(r.get("buy_signal_0935", "")).strip().lower()
+    if bs == "true":
+        tech_status = "9:36 技术确认通过，进入模拟买入记录"
+    elif bs == "false":
+        tech_status = f"9:36 技术确认未通过：{_reason_cn(r.get('notes'))}"
+    else:
+        tech_status = "9:36 技术确认尚未运行"
+
     return [
         f"　├ V1.6复盘计划：{_v16_action_cn(r.get('v16_plan_action'))}",
         f"　├ 是否只观察：{observe_text}；交易权限：{_display_value(r.get('v16_trade_permission'))}",
         f"　├ 主线命中：{_bool_cn(r.get('v16_allowed_theme_match'))}；核心观察股：{_bool_cn(r.get('v16_focus_stock_match'))}",
-        f"　├ V1.6原因：{_display_value(r.get('v16_plan_reason'))}",
+        f"　├ V1.6原因：{_reason_cn(r.get('v16_plan_reason'))}",
         f"　├ 资金条件层（观察模式）：{_money_decision_cn(r.get('v15_money_decision'))}",
-        f"　└ 资金来源：{_money_source_cn(r.get('v15_money_source'))}；原因：{_display_value(r.get('v15_money_reason'))}",
+        f"　├ 资金来源：{_money_source_cn(r.get('v15_money_source'))}；原因：{_display_value(r.get('v15_money_reason'))}",
+        f"　└ {tech_status}",
     ]
 
 
@@ -217,6 +245,7 @@ def format_check_buy_message(results: list, report_date: str) -> tuple:
     _reason_map = {
         # 基础原因
         "market_sentiment_below_5":        "大盘情绪不足5分",
+        "market_sentiment_missing":        "大盘情绪数据缺失",
         "open_change_too_low":             "低开超过-1%",
         "open_change_too_high":            "开盘涨幅超过4%，高开过多",
         "price_below_open":                "9:36低于开盘价，承接不足",
@@ -421,6 +450,7 @@ def format_second_check_message(results: list, report_date: str) -> tuple:
     _orig_reason_zh = {
         "price_below_open":             "9:36 低于开盘价",
         "price_below_ma5":              "9:36 低于5日均线",
+        "market_sentiment_missing":     "大盘情绪数据缺失",
         "open_change_weak_watch":       "低开 1%~3%（辅助）",
         "market_sentiment_below_5":     "大盘情绪不足5分",
         "theme_strength_too_low":       "主题强度不足",

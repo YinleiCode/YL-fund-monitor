@@ -114,6 +114,7 @@ BOOL_COLS: set = {
 NOTES_CN: dict = {
     # V1.3
     "market_sentiment_below_5":        "大盘情绪不足5分",
+    "market_sentiment_missing":        "大盘情绪数据缺失",
     "open_change_too_high":            "开盘涨幅超过4%，高开过多",
     "open_change_too_low":             "开盘跌幅超过1%，开盘偏弱",
     "price_below_open":                "9:36价格低于开盘价，承接不足",
@@ -146,6 +147,8 @@ NOTES_CN: dict = {
     "v16_action_normal":               "正常观察（不在关注池/允许主题/规避列表）",
     "v16_action_disabled":             "复盘计划未生效（fallback）",
     "v16_action_plan_missing":         "无复盘计划数据",
+    "v16_plan_only_observe":           "V1.6 复盘计划要求只观察",
+    "v16_only_observe":                "只观察，不进入 9:36 模拟买入",
     "realtime_data_missing":           "实时行情获取失败",
     "realtime_price_invalid":          "价格数据无效",
 }

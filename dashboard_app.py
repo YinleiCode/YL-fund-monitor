@@ -568,6 +568,8 @@ def _money_decision_cn(decision: str) -> str:
         "filter": "资金条件层观察：资金不通过",
         "block": "资金条件层观察：资金不通过",
         "fail": "资金条件层观察：资金不通过",
+        "资金不通过": "资金条件层观察：资金不通过",
+        "资金通过": "资金条件层观察：资金通过",
         "missing": "资金条件层观察：暂无数据",
         "unavailable": "资金条件层观察：数据源不可用",
     }
@@ -605,13 +607,23 @@ def _v16_mf_layer_html(row) -> str:
         ("否" if only_observe is False else "暂无")
     )
     plan_action = _v16_action_cn(row.get("v16_plan_action"))
-    plan_reason = _display_value(row.get("v16_plan_reason"))
+    plan_reason = _lifecycle_translate_reason(row.get("v16_plan_reason"))
     trade_perm = _display_value(row.get("v16_trade_permission"))
     theme_match = _bool_cn(row.get("v16_allowed_theme_match"))
     focus_match = _bool_cn(row.get("v16_focus_stock_match"))
     money_decision = _money_decision_cn(row.get("v15_money_decision"))
     money_source = _money_source_cn(row.get("v15_money_source"))
     money_reason = _display_value(row.get("v15_money_reason"))
+    buy_signal = _gb(row.get("buy_signal_0935"))
+    if is_not_checked(row):
+        tech_status = "9:36 技术确认尚未运行"
+    elif buy_signal is True:
+        tech_status = "9:36 技术确认通过，进入模拟买入记录"
+    else:
+        reason = _display_value(row.get("main_reason_cn"), "")
+        if not reason:
+            reason = _lifecycle_translate_reason(row.get("notes"))
+        tech_status = f"9:36 技术确认未通过：{reason}"
 
     return (
         f"<div style='background:{COLOR_CARD_ALT};border-left:3px solid {COLOR_SECOND};"
@@ -624,6 +636,7 @@ def _v16_mf_layer_html(row) -> str:
         f"<div style='margin-top:4px;'><b>资金条件层（观察模式）</b>：{money_decision}"
         f" ｜ 来源：<b>{money_source}</b></div>"
         f"<div>资金原因：{money_reason}</div>"
+        f"<div style='margin-top:4px;'><b>9:36 技术确认层</b>：{tech_status}</div>"
         f"</div>"
     )
 
@@ -3348,7 +3361,10 @@ LIFECYCLE_REASON_LABEL = {
     "price_below_open":               "9:36 低于开盘价（承接不足）",
     "price_below_ma5":                "9:36 低于 5 日线（短线走弱）",
     "market_sentiment_below_5":       "大盘情绪不足",
+    "market_sentiment_missing":       "大盘情绪数据缺失",
     "unable_to_buy_limit_up":         "一字涨停，买不进",
+    "v16_plan_only_observe":          "V1.6 复盘计划要求只观察",
+    "v16_only_observe":               "只观察，不进入 9:36 模拟买入",
     # —— 资金条件层 资金 ——
     "money_flow_not_healthy":         "近 3 日资金不健康",
     "money_flow_fetch_failed":        "资金数据获取失败",
@@ -5130,7 +5146,7 @@ def main() -> None:
 
     with st.sidebar:
         st.markdown("## 📊 朱哥短线雷达 V1.6")
-        st.caption("本地复盘看板 · V1.6（复盘计划层 + 资金条件层 + 9:36 技术确认层）")
+        st.caption("本地复盘看板 · V1.6（复盘计划层 + 资金条件层（观察模式） + 9:36 技术确认层）")
         st.markdown(
             f"<div style='font-size:11px;color:{COLOR_MUTED};line-height:1.6;margin-top:4px;'>"
             "只读 output/ 下数据，不写交易记录，<br>不接券商，不自动交易。"
