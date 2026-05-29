@@ -494,31 +494,49 @@ def main() -> None:
         logger.info("[trade_review] 未写入 trade_review.csv（无候选）")
         sys.exit(0)
 
-    # ── 自选股票池加分 ──────────────────────────────────────────────
+    # ── 自选股票池标记 + 硬分层排序 ────────────────────────────────
+    #   Tier 1: priority=1 active/watch → 最前
+    #   Tier 2: priority=2             → 第二
+    #   Tier 3: 普通候选               → 第三
+    #   Tier 4: priority=3（仅标记，不强提权）
+    #   每层内部按 full_score 降序
     active_wl, _ = load_watchlist()
     wl_by_code = {r["stock_code"]: r for r in active_wl}
     for item in results:
         code = item["code"]
+        priority = 0  # 显式初始化，避免普通候选沿用上一轮
         wl = wl_by_code.get(code)
         if wl:
             priority = int(str(wl.get("priority", "3")).strip())
-            boost = {1: 15.0, 2: 5.0, 3: 0.0}.get(priority, 0.0)
-            item["scores"]["total"] = round(item["scores"]["total"] + boost, 1)
             item["is_custom_pool"] = True
             item["custom_pool_priority"] = priority
             item["custom_pool_theme"] = wl.get("theme", "")
             item["custom_pool_reason"] = wl.get("reason", "")
             item["custom_pool_status"] = wl.get("status", "")
-            logger.info(f"  ⭐ {code} {item['name']} 自选池 priority={priority} 加分+{boost}")
         else:
+            priority = 0
             item["is_custom_pool"] = False
             item["custom_pool_priority"] = 0
             item["custom_pool_theme"] = ""
             item["custom_pool_reason"] = ""
             item["custom_pool_status"] = ""
 
-    # 按总分排序（自选池加分后自然排在前面）
-    results.sort(key=lambda x: x["scores"]["total"], reverse=True)
+        # 计算分层权重（tier_index 越小越靠前）
+        if item.get("is_custom_pool") and priority == 1:
+            item["_wl_tier"] = 0  # Tier 1: priority=1 最前
+        elif item.get("is_custom_pool") and priority == 2:
+            item["_wl_tier"] = 1  # Tier 2: priority=2 第二
+        elif item.get("is_custom_pool") and priority == 3:
+            item["_wl_tier"] = 3  # Tier 4: priority=3 仅标记，不提权
+        else:
+            item["_wl_tier"] = 2  # Tier 3: 普通候选第三
+            item["is_custom_pool"] = False
+
+        if item.get("is_custom_pool"):
+            logger.info(f"  ⭐ {code} {item['name']} 自选池 tier={item['_wl_tier']} priority={priority}")
+
+    # 硬分层排序：(tier, -total_score)
+    results.sort(key=lambda x: (x["_wl_tier"], -x["scores"]["total"]))
     top3 = results[:cfg["scoring"]["output_top_n"]]
 
     logger.info("【前3名】")
