@@ -19,6 +19,34 @@ logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).parent
 CSV_PATH = BASE_DIR / "output" / "trade_review.csv"
 
+
+def _is_simulated_name(v) -> bool:
+    return "模拟股" in str(v or "")
+
+
+def _is_simulated_marker(v) -> bool:
+    return str(v or "").strip().lower() in ("simulate", "simulated", "simulation", "mock", "fake")
+
+
+def _assert_no_simulated_rows_for_formal_csv(rows: list, context: str = "") -> None:
+    """
+    P0 production guard: simulated candidates must never enter output/trade_review.csv.
+    """
+    bad = []
+    for r in rows or []:
+        name = r.get("name", r.get("stock_name", ""))
+        source = r.get("source", r.get("data_source", ""))
+        code = r.get("code", r.get("stock_code", ""))
+        if _is_simulated_name(name) or _is_simulated_marker(source):
+            bad.append(f"{str(code).zfill(6)} {name}".strip())
+    if bad:
+        msg = (
+            "P0 防线触发：检测到模拟数据准备写入正式 trade_review.csv，已拒绝。"
+            f"context={context or 'append_rows'} rows={bad}"
+        )
+        logger.error(msg)
+        raise RuntimeError(msg)
+
 COLUMNS = [
     # 自动生成
     "report_date", "data_date", "rank",
@@ -624,6 +652,7 @@ def append_rows(
     mode: str = "full",
 ) -> None:
     """将今日 top3 追加到 trade_review.csv（幂等：同一天已存在则跳过）。"""
+    _assert_no_simulated_rows_for_formal_csv(top3, context=f"append_rows mode={mode}")
     df = _read_csv()
     if df is None:
         df = pd.DataFrame(columns=COLUMNS)

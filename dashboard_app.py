@@ -435,6 +435,18 @@ def load_trade_review() -> pd.DataFrame:
     return pd.read_csv(CSV_PATH, dtype=str, keep_default_na=False, encoding="utf-8-sig")
 
 
+def _has_simulated_pollution(df: pd.DataFrame) -> bool:
+    return (not df.empty) and "stock_name" in df.columns and df["stock_name"].astype(str).str.contains("模拟股", na=False).any()
+
+
+def _render_simulated_pollution_warning(df: pd.DataFrame, scope: str = "当前记录") -> None:
+    if _has_simulated_pollution(df):
+        status_banner(
+            f"检测到模拟数据污染：{scope}包含模拟股，不可用于真实验证。",
+            "error",
+        )
+
+
 def last_modified(path: Path) -> str:
     if not path.exists():
         return "（文件不存在）"
@@ -924,6 +936,8 @@ def page_today(df_all: pd.DataFrame) -> None:
     if df.empty:
         status_banner(f"{_date_fmt(sel_date)} 无推荐数据。", "info")
         return
+
+    _render_simulated_pollution_warning(df, scope=f"{_date_fmt(sel_date)} 推荐记录")
 
     # 顶部状态横幅
     render_today_banner(df, sel_date)
@@ -5195,6 +5209,8 @@ def main() -> None:
             "error",
         )
         return
+
+    _render_simulated_pollution_warning(df_all, scope="trade_review.csv")
 
     # ⚠️ 用 "in" 精确匹配关键词，避免两个 📌 页面冲突（📌 今日总览 vs 📌 明日交易计划）
     # 📌 明日交易计划 / 🛠 手动补跑 已在上方提前 dispatch + return

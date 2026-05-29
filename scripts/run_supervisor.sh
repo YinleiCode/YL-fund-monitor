@@ -4,6 +4,11 @@ PROJECT="/Users/yinlei/Desktop/量化/stock_screener"
 LOG="$PROJECT/logs/auto_run.log"
 PYTHON="$PROJECT/.venv/bin/python3"
 
+unset SIMULATE_MODE
+unset SIMULATE_MODE_SOURCE
+unset ZHUGE_EXPLICIT_SIMULATE
+unset ZHUGE_SIMULATE_DATA
+
 mkdir -p "$PROJECT/logs" "$PROJECT/output"
 exec >> "$LOG" 2>&1
 

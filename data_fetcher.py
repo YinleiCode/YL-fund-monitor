@@ -286,6 +286,21 @@ def _fetch_simulated_spot() -> pd.DataFrame:
     return df
 
 
+def _explicit_cli_simulate_enabled() -> bool:
+    return (
+        os.environ.get("SIMULATE_MODE", "").lower() == "true"
+        and os.environ.get("SIMULATE_MODE_SOURCE") == "cli"
+        and os.environ.get("ZHUGE_EXPLICIT_SIMULATE") == "1"
+    )
+
+
+def _has_partial_simulate_env() -> bool:
+    return any(
+        os.environ.get(k)
+        for k in ("SIMULATE_MODE", "SIMULATE_MODE_SOURCE", "ZHUGE_EXPLICIT_SIMULATE", "ZHUGE_SIMULATE_DATA")
+    )
+
+
 def _spot_via_sina() -> pd.DataFrame:
     """
     新浪财经 ak.stock_zh_a_spot()，盘前/盘后均可用（约30秒）。
@@ -452,14 +467,24 @@ def fetch_market_spot(
     调用方应根据该标记决定是否写入 trade_review.csv 并在推送中给出"仅供观察"提示。
 
     支持模拟模式（Simulate Mode）：
-      环境变量 SIMULATE_MODE=true 或 config.yaml data_source.simulate_data=true 时，
-      返回模拟行情，不连真实数据源。用于调试/演示/测试。
+      只允许 run.py --simulate 显式设置三重标记后启用。
+      残留 SIMULATE_MODE 或 config.yaml simulate_data 不得自动进入模拟。
     """
     # ── 模拟模式检测：优先于一切真实数据源熔断 ──
-    sim_env  = os.environ.get("SIMULATE_MODE", "").lower() == "true"
-    sim_cfg  = (cfg or {}).get("data_source", {}).get("simulate_data", False)
-    if sim_env or sim_cfg:
+    if _explicit_cli_simulate_enabled():
         return _fetch_simulated_spot()
+    if _has_partial_simulate_env():
+        logger.error(
+            "P0 防线触发：检测到模拟环境变量残留，但缺少 "
+            "SIMULATE_MODE_SOURCE=cli / ZHUGE_EXPLICIT_SIMULATE=1，拒绝生成模拟行情"
+        )
+        raise RuntimeError("拒绝使用非显式 CLI 模拟环境")
+    if bool((cfg or {}).get("data_source", {}).get("simulate_data", False)):
+        logger.error(
+            "P0 防线触发：config.yaml data_source.simulate_data=true 不再允许自动进入模拟模式；"
+            "请手动使用 run.py --simulate"
+        )
+        raise RuntimeError("拒绝通过 config.yaml simulate_data 启用模拟行情")
 
     if trade_date is None:
         trade_date = _last_trading_date()

@@ -20,6 +20,7 @@ LOGS_DIR   = BASE_DIR / "logs"
 CONFIG     = BASE_DIR / "config.yaml"
 STATE_FILE = OUTPUT_DIR / "auto_state.json"
 PYTHON     = str(BASE_DIR / ".venv" / "bin" / "python3")
+SIM_ENV_KEYS = ("SIMULATE_MODE", "SIMULATE_MODE_SOURCE", "ZHUGE_EXPLICIT_SIMULATE", "ZHUGE_SIMULATE_DATA")
 
 LOGS_DIR.mkdir(exist_ok=True)
 _log_fmt = logging.Formatter("[%(asctime)s] [supervisor] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
@@ -92,17 +93,13 @@ def _acquire_task_lock(label: str, date_str: str) -> bool:
         return False
 
 
-def _simulate_env() -> list:
-    """检查 config.yaml simulate_data，是则返回额外环境变量供子进程继承"""
-    try:
-        with open(CONFIG, encoding="utf-8") as f:
-            cfg = yaml.safe_load(f)
-        if cfg.get("data_source", {}).get("simulate_data", False):
-            logger.info("[supervisor] config.yaml simulate_data=true，子进程继承 SIMULATE_MODE=true")
-            return ["SIMULATE_MODE=true"]
-    except Exception as e:
-        logger.warning(f"[supervisor] 读取 config.yaml 失败（不影响主流程）: {e}")
-    return []
+def _explicit_supervisor_simulate() -> bool:
+    """Only an explicitly marked supervisor may pass simulation to children."""
+    return (
+        os.environ.get("SIMULATE_MODE", "").lower() == "true"
+        and os.environ.get("SIMULATE_MODE_SOURCE") == "cli"
+        and os.environ.get("ZHUGE_EXPLICIT_SIMULATE") == "1"
+    )
 
 
 def _run(label: str, extra_args: list) -> bool:
@@ -122,11 +119,14 @@ def _run(label: str, extra_args: list) -> bool:
 
     cmd = [PYTHON, str(BASE_DIR / "run.py")] + extra_args
     env = os.environ.copy()
-    extra_env = _simulate_env()
-    for kv in extra_env:
-        k, v = kv.split("=", 1)
-        env[k] = v
-    logger.info(f"===== START {label} {'(simulate)' if extra_env else ''} =====")
+    simulate_child = _explicit_supervisor_simulate()
+    for k in SIM_ENV_KEYS:
+        env.pop(k, None)
+    if simulate_child:
+        env["SIMULATE_MODE"] = "true"
+        env["SIMULATE_MODE_SOURCE"] = "cli"
+        env["ZHUGE_EXPLICIT_SIMULATE"] = "1"
+    logger.info(f"===== START {label} {'(simulate)' if simulate_child else ''} =====")
     sys.stdout.flush()
     try:
         rc = subprocess.call(cmd, cwd=str(BASE_DIR), env=env)

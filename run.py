@@ -47,6 +47,28 @@ def load_config() -> dict:
         return yaml.safe_load(f)
 
 
+def _clear_simulate_env() -> None:
+    """Production default: never inherit a stale simulate environment."""
+    for k in ("SIMULATE_MODE", "SIMULATE_MODE_SOURCE", "ZHUGE_EXPLICIT_SIMULATE", "ZHUGE_SIMULATE_DATA"):
+        os.environ.pop(k, None)
+
+
+def _enable_cli_simulate(logger: logging.Logger) -> None:
+    """Only explicit CLI --simulate may enable simulated market data."""
+    os.environ["SIMULATE_MODE"] = "true"
+    os.environ["SIMULATE_MODE_SOURCE"] = "cli"
+    os.environ["ZHUGE_EXPLICIT_SIMULATE"] = "1"
+    logger.error("⚠️ [simulate] 模拟数据模式已由 --simulate 显式开启，不可用于真实验证")
+
+
+def _is_cli_simulate() -> bool:
+    return (
+        os.environ.get("SIMULATE_MODE", "").lower() == "true"
+        and os.environ.get("SIMULATE_MODE_SOURCE") == "cli"
+        and os.environ.get("ZHUGE_EXPLICIT_SIMULATE") == "1"
+    )
+
+
 def main() -> None:
     import argparse
     parser = argparse.ArgumentParser(description="朱哥A股短线三票雷达 V1")
@@ -65,10 +87,17 @@ def main() -> None:
     logger = logging.getLogger("run")
     cfg = load_config()
 
-    if args.simulate or load_config().get("data_source", {}).get("simulate_data", False):
-        os.environ["SIMULATE_MODE"] = "true"
-        logger = logging.getLogger("run")
-        logger.info("[simulate] SIMULATE_MODE=true 已设置，data_fetcher 将使用模拟数据")
+    cfg_simulate = bool(cfg.get("data_source", {}).get("simulate_data", False))
+    if args.simulate:
+        _enable_cli_simulate(logger)
+    else:
+        _clear_simulate_env()
+        if cfg_simulate:
+            logger.error(
+                "P0 防线触发：config.yaml data_source.simulate_data=true，"
+                "但未显式传入 --simulate。生产流程拒绝运行。"
+            )
+            raise SystemExit(3)
 
     sendkey = os.environ.get("SERVERCHAN_SENDKEY", "")
     debug   = os.environ.get("DEBUG_MODE", "false").lower() == "true"
@@ -256,7 +285,10 @@ def main() -> None:
         import data_fetcher as _fetcher
         spot_prov = _fetcher.get_run_provenance()
         spot_stale = bool(spot_prov.get("is_stale_cache"))
-        if spot_stale:
+        if _is_cli_simulate():
+            title = f"⚠️[模拟数据·不可用于真实验证] {title}"
+            body = "⚠️ **模拟数据，不可用于真实验证；不会写入正式 trade_review.csv。**\n\n---\n\n" + body
+        elif spot_stale:
             stale_date = spot_prov.get("stale_cache_date")
             title = f"⚠️[缓存数据·仅供观察] {title}"
             body  = (
@@ -274,7 +306,9 @@ def main() -> None:
             notifier.send_to_serverchan(title, body, sendkey)
 
         _save_theme_auto_results(top3, market_data, theme_summary, data_date, report_date, body, cfg)
-        if spot_stale:
+        if _is_cli_simulate():
+            logger.warning("[trade_review] 未写入 trade_review.csv（--simulate 显式模拟模式）")
+        elif spot_stale:
             logger.warning(
                 "[trade_review] 未写入 trade_review.csv（theme_auto spot=cache_stale）"
             )
@@ -488,7 +522,10 @@ def main() -> None:
     title, body = notifier.format_message(top3, market_data, data_date, report_date)
 
     # 使用过期缓存时，在标题/正文加上明显告警
-    if is_stale:
+    if _is_cli_simulate():
+        title = f"⚠️[模拟数据·不可用于真实验证] {title}"
+        body = "⚠️ **模拟数据，不可用于真实验证；不会写入正式 trade_review.csv。**\n\n---\n\n" + body
+    elif is_stale:
         title = f"⚠️[缓存数据·仅供观察] {title}"
         stale_banner = (
             f"⚠️ **今日行情接口失败，使用缓存（{stale_date}），"
@@ -525,7 +562,9 @@ def main() -> None:
     import trade_review
     import daily_report
     import excel_report
-    if is_stale:
+    if _is_cli_simulate():
+        logger.warning("[trade_review] 未写入 trade_review.csv（--simulate 显式模拟模式）")
+    elif is_stale:
         logger.warning(
             "[trade_review] 未写入 trade_review.csv（数据源 = cache_stale，仅供观察）"
         )

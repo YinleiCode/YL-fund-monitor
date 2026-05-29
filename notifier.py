@@ -21,6 +21,22 @@ def _display_value(v, default: str = "暂无") -> str:
     return s
 
 
+def _contains_simulated_stock(rows: list, name_key: str = "name") -> bool:
+    for r in rows or []:
+        if "模拟股" in str(r.get(name_key, "") or r.get("stock_name", "")):
+            return True
+    return False
+
+
+def _prepend_simulated_warning(title: str, body: str) -> tuple:
+    warn = "⚠️ 模拟数据，不可用于真实验证"
+    if warn not in title:
+        title = f"{warn}｜{title}"
+    if warn not in body:
+        body = f"{warn}\n\n---\n\n{body}"
+    return title, body
+
+
 def _bool_cn(v) -> str:
     s = str(v).strip().lower()
     if s in ("true", "1", "yes", "y"):
@@ -214,6 +230,8 @@ def format_message(
     )
 
     body = "\n".join(lines)
+    if _contains_simulated_stock(top3, name_key="name"):
+        title, body = _prepend_simulated_warning(title, body)
     return title, body
 
 
@@ -337,6 +355,8 @@ def format_check_buy_message(results: list, report_date: str) -> tuple:
 
     lines += ["> 本工具仅做模拟记录，不构成买卖建议。"]
     body = "\n".join(lines)
+    if _contains_simulated_stock(results, name_key="name"):
+        title, body = _prepend_simulated_warning(title, body)
     return title, body
 
 
@@ -424,6 +444,8 @@ def format_theme_auto_message(
     )
 
     body = "\n".join(lines)
+    if _contains_simulated_stock(top3, name_key="name"):
+        title, body = _prepend_simulated_warning(title, body)
     return title, body
 
 
