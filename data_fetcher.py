@@ -931,28 +931,31 @@ def fetch_burst_board_pool(trade_date: str) -> Optional[pd.DataFrame]:
 
 # =================== 上证指数 ===================
 
-def fetch_sh_index_change(trade_date: str) -> float:
+def fetch_sh_index_change(trade_date: str) -> Optional[float]:
     cached = cache.load("sh_index_chg", trade_date)
     if cached is not None:
         return cached
     if not _AKSHARE_OK:
-        return 0.0
+        logger.warning("上证指数获取失败: akshare 不可用")
+        return None
     try:
         end   = date.today().strftime("%Y%m%d")
         start = (date.today() - timedelta(days=10)).strftime("%Y%m%d")
         df    = _retry(ak.index_zh_a_hist, symbol="000001", period="daily",
                        start_date=start, end_date=end)
         if df is None or df.empty:
-            return 0.0
+            logger.warning("上证指数获取失败: akshare 返回空数据")
+            return None
         chg_col = next((c for c in df.columns if "涨跌幅" in c), None)
         if chg_col is None:
-            return 0.0
+            logger.warning(f"上证指数获取失败: 未找到涨跌幅列 columns={list(df.columns)}")
+            return None
         chg = float(df[chg_col].iloc[-1])
         cache.save("sh_index_chg", chg, trade_date)
         return chg
     except Exception as e:
         logger.warning(f"上证指数获取失败: {e}")
-        return 0.0
+        return None
 
 
 def last_trading_date() -> str:

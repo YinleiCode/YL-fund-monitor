@@ -76,6 +76,7 @@ SECOND_CHECK_ELIGIBLE_REASONS: set = {
     "open_change_weak_watch",
 }
 SECOND_CHECK_INELIGIBLE_REASONS: set = {
+    "market_sentiment_missing",
     "market_sentiment_below_5",
     "theme_strength_too_low",
     "full_score_not_strong_enough",
@@ -1041,7 +1042,9 @@ def check_buy(cfg: dict) -> list:
         soft_fail: list = []
 
         # 大盘情绪（共有，主因）
-        if ms is not None and ms < 5:
+        if ms is None:
+            hard_fail.append("market_sentiment_missing")
+        elif ms < 5:
             hard_fail.append("market_sentiment_below_5")
 
         # 开盘涨幅
