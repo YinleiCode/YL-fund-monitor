@@ -55,6 +55,10 @@ MANUAL_LOCK_DIR = BASE_DIR / "output"     # 手动补跑文件锁存放目录（
 MONEY_FLOW_HEALTH_LOG = LOGS_DIR / "money_flow_health.log"
 MONEY_FLOW_PROBE_KEY  = "money_flow_health"     # 锁 + session_state 用的 key
 
+# —— V1.6 · 做 T 信号观察模块（旁路，不插入 9:36 买入主链）——
+T_SIGNAL_DIR     = OUTPUT_DIR / "t_signal"
+T_SIGNAL_LATEST  = T_SIGNAL_DIR / "t_signal_latest.csv"
+
 # ─── 颜色（V1.6 奶油色主题：避免大面积纯白，统一温和质感）────────────────
 # 页面级 → .streamlit/config.toml 控制 backgroundColor=#F5EFE3
 # 组件级 → 下面这些常量统一替换原 #FFFFFF / #F3F4F6 / #F8FAFC / #F0F7FF 等
@@ -5063,6 +5067,230 @@ def page_tomorrow_plan() -> None:
     )
 
 
+# ─── V1.6 做 T 信号观察记录 ─────────────────────────────────────────
+
+def _ts_load_signals() -> Optional[pd.DataFrame]:
+    """Load the latest T-signal CSV; return None if missing/empty."""
+    if not T_SIGNAL_LATEST.exists():
+        return None
+    try:
+        df = pd.read_csv(T_SIGNAL_LATEST)
+        return df if not df.empty else None
+    except Exception:
+        return None
+
+
+_FAIL_REASON_CN = {
+    "ma10_missing":                      "10 日均线缺失",
+    "ma10_not_up":                       "10 日均线未向上",
+    "time_window_not_match":             "不在 9:33—10:15",
+    "move_not_enough":                   "急跌/急拉幅度不足",
+    "same_color_volume_history_missing":  "缺少前置同色分时量",
+    "volume_multiple_not_enough":        "放量倍数不足",
+    "shrink_not_confirmed":              "下一根未明显缩量",
+    "shrink_not_confirmed_volume_reduction_insufficient": "下一根缩量不足（>50%）",
+    "minute_data_missing":               "1 分钟数据缺失",
+    "insufficient_bars_in_window":       "时间窗口内分钟数据不足",
+    "no_next_bar_for_shrink_confirmation": "无下一根 K 线确认缩量",
+    "no_signal_triggered":               "未触发任何信号",
+}
+
+
+def _ts_cn(val, mapping: dict, default: str = "") -> str:
+    """Map a value through a Chinese translation dict."""
+    if val is None:
+        return default
+    s = str(val).strip()
+    return mapping.get(s, s if s else default)
+
+
+def _ts_bool_cn(val, t_val: str = "是", f_val: str = "否") -> str:
+    s = str(val).strip().lower()
+    if s in ("true", "1", "yes"):
+        return f"✅ {t_val}"
+    if s in ("false", "0", "no"):
+        return f"❌ {f_val}"
+    return str(val)
+
+
+def page_t_signal() -> None:
+    """📈 做 T 观察记录 — 只读 output/t_signal/ 展示 T 信号观察结果。"""
+    st.markdown("## 📈 做 T 观察记录")
+    st.caption(
+        "V1.6 旁路模块：只识别和记录 T 信号，不自动买卖，不插入 9:36 买入主链。"
+    )
+
+    df = _ts_load_signals()
+
+    if df is None:
+        status_banner(
+            "暂无做 T 信号记录。当前模块仅为模拟观察，不会自动买卖。",
+            "info",
+        )
+        return
+
+    # ── 1. 安全检测 ──────────────────────────────────────────────────
+    all_simulate = all(
+        str(v).strip().lower() == "simulate"
+        for v in df.get("execution_mode", pd.Series(dtype=str))
+    )
+    all_live_blocked = all(
+        str(v).strip().lower() == "false"
+        for v in df.get("can_execute_live", pd.Series(dtype=str))
+    )
+    all_not_submitted = all(
+        str(v).strip().lower() == "not_submitted"
+        for v in df.get("order_status", pd.Series(dtype=str))
+    )
+    all_broker_disconnected = all(
+        str(v).strip().lower() == "not_connected"
+        for v in df.get("broker_status", pd.Series(dtype=str))
+    )
+    safety_ok = all_simulate and all_live_blocked and all_not_submitted and all_broker_disconnected
+
+    # ── 2. 顶部状态卡 ────────────────────────────────────────────────
+    total = len(df)
+    n_low = int((df.get("signal_type", "") == "low_absorb").sum())
+    n_high = int((df.get("signal_type", "") == "high_throw").sum())
+    n_pass = int(df.get("rule_pass", pd.Series(dtype=str)).astype(str).str.lower().isin(("true", "1")).sum())
+    n_fail = total - n_pass
+
+    st.markdown("### 📊 今日 T 信号概览")
+
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.markdown(kpi_card("信号总数", total, COLOR_TEXT), unsafe_allow_html=True)
+    c2.markdown(kpi_card("低吸信号", n_low, "#1F883D"), unsafe_allow_html=True)
+    c3.markdown(kpi_card("高抛信号", n_high, "#B91C1C"), unsafe_allow_html=True)
+    c4.markdown(kpi_card("规则通过", n_pass, "#1F883D"), unsafe_allow_html=True)
+    c5.markdown(kpi_card("规则未通过", n_fail, "#9A6700"), unsafe_allow_html=True)
+
+    with st.expander("🔒 安全状态检查", expanded=True):
+        safe_color = "#1F883D" if safety_ok else "#B91C1C"
+        safe_icon = "✅" if safety_ok else "⚠️"
+        safe_text = "全部正常" if safety_ok else "检测到异常"
+        st.markdown(
+            f"<div style='font-size:16px;font-weight:600;color:{safe_color};'>"
+            f"{safe_icon}　{safe_text}</div>",
+            unsafe_allow_html=True,
+        )
+        sc1, sc2, sc3, sc4 = st.columns(4)
+        sc1.metric("execution_mode", "全部 simulate" if all_simulate else "❌ 异常",
+                    delta_color="off")
+        sc2.metric("can_execute_live", "全部禁止" if all_live_blocked else "❌ 异常",
+                    delta_color="off")
+        sc3.metric("order_status", "全部未提交" if all_not_submitted else "❌ 异常",
+                    delta_color="off")
+        sc4.metric("broker_status", "全部未连接" if all_broker_disconnected else "❌ 异常",
+                    delta_color="off")
+
+    # ── 3. 安全提示横幅 ──────────────────────────────────────────────
+    status_banner(
+        "当前仅为做 T 信号模拟记录，不构成自动买卖指令。",
+        "warning",
+    )
+    if not safety_ok:
+        status_banner(
+            "检测到异常：T 信号记录出现可实盘执行字段，请检查。",
+            "error",
+        )
+
+    # ── 4. 筛选器 ────────────────────────────────────────────────────
+    st.markdown("### 🔍 筛选")
+
+    # report_date filter
+    dates = sorted(df["report_date"].unique(), reverse=True) if "report_date" in df.columns else []
+    sel_date = st.selectbox("报告日期", ["全部"] + dates, key="ts_date")
+
+    # signal_type filter
+    type_options = ["全部", "低吸 T", "高抛 T"]
+    sel_type = st.selectbox("信号类型", type_options, key="ts_type")
+
+    # rule_pass filter
+    pass_options = ["全部", "规则通过", "规则未通过"]
+    sel_pass = st.selectbox("规则状态", pass_options, key="ts_pass")
+
+    # stock_code search
+    sel_code = st.text_input("股票代码搜索", key="ts_code").strip()
+
+    # ── 5. 表格 ──────────────────────────────────────────────────────
+    display = df.copy()
+
+    if sel_date != "全部":
+        display = display[display["report_date"] == sel_date]
+
+    if sel_type != "全部":
+        target = "low_absorb" if sel_type == "低吸 T" else "high_throw"
+        display = display[display.get("signal_type", "") == target]
+
+    if sel_pass != "全部":
+        is_pass = sel_pass == "规则通过"
+        display = display[
+            display.get("rule_pass", pd.Series(dtype=str)).astype(str).str.lower().isin(("true", "1"))
+        ] if is_pass else display[
+            ~display.get("rule_pass", pd.Series(dtype=str)).astype(str).str.lower().isin(("true", "1"))
+        ]
+
+    if sel_code:
+        display = display[display.get("stock_code", "").astype(str).str.contains(sel_code)]
+
+    if display.empty:
+        st.info("无匹配信号记录。")
+        return
+
+    # Build display columns with Chinese labels
+    show = pd.DataFrame()
+    show["报告日期"]    = display.get("report_date", "")
+    show["股票代码"]    = display.get("stock_code", "")
+    show["股票名称"]    = display.get("stock_name", "")
+    show["信号时间"]    = display.get("signal_time", "")
+    show["信号类型"]    = display.get("signal_type", "").map(
+        lambda v: {"low_absorb": "低吸 T", "high_throw": "高抛 T"}.get(str(v).strip(), str(v)))
+    show["操作方向"]    = display.get("signal_side", "").map(
+        lambda v: {"sim_buy": "模拟买入", "sim_sell": "模拟卖出"}.get(str(v).strip(), str(v)))
+    show["信号价格"]    = pd.to_numeric(display.get("signal_price", ""), errors="coerce")
+    show["规则通过"]    = display.get("rule_pass", "").map(
+        lambda v: "✅ 规则通过" if str(v).strip().lower() in ("true", "1") else "❌ 规则未通过")
+    show["失败原因"]    = display.get("fail_reason", "").map(
+        lambda v: _FAIL_REASON_CN.get(str(v).strip(), str(v)))
+    show["MA10"]        = pd.to_numeric(display.get("ma10", ""), errors="coerce")
+    show["MA10向上"]    = display.get("ma10_slope_up", "").map(
+        lambda v: _ts_bool_cn(v, "向上", "向下/未知"))
+    show["窗口(分钟)"]  = display.get("window_minutes", "")
+    show["涨跌%"]       = pd.to_numeric(display.get("move_pct", ""), errors="coerce")
+    show["放量倍数"]    = pd.to_numeric(display.get("volume_multiple", ""), errors="coerce")
+    show["缩量比"]      = pd.to_numeric(display.get("shrink_ratio", ""), errors="coerce")
+    show["缩量确认"]    = display.get("shrink_confirmed", "").map(
+        lambda v: "是" if str(v).strip().lower() in ("true", "1") else "否")
+    show["T仓位"]       = display.get("t_ratio", "")
+    show["持仓状态"]    = display.get("has_position", "")
+    show["可卖数量"]    = display.get("sellable_qty", "")
+    show["模拟T数量"]   = display.get("sim_t_qty", "")
+    show["执行模式"]    = display.get("execution_mode", "").map(
+        lambda v: "模拟观察" if str(v).strip().lower() == "simulate" else str(v))
+    show["允许实盘"]    = display.get("can_execute_live", "").map(
+        lambda v: "否" if str(v).strip().lower() in ("false", "0") else "⚠️ 是")
+    show["实盘拦截原因"] = display.get("live_block_reason", "")
+    show["订单状态"]    = display.get("order_status", "").map(
+        lambda v: "未提交" if str(v).strip().lower() == "not_submitted" else str(v))
+    show["券商状态"]    = display.get("broker_status", "").map(
+        lambda v: "未连接" if str(v).strip().lower() == "not_connected" else str(v))
+    show["备注"]        = display.get("observer_note", "")
+
+    st.markdown("### 📋 信号明细")
+    st.dataframe(show, width="stretch", hide_index=True)
+
+    # ── 6. 安全提示横幅（底部重复） ─────────────────────────────────
+    status_banner(
+        "当前仅为做 T 信号模拟记录，不构成自动买卖指令。",
+        "warning",
+    )
+    if not safety_ok:
+        status_banner(
+            "检测到异常：T 信号记录出现可实盘执行字段，请检查。",
+            "error",
+        )
+
+
 # ─── main ───────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -5173,6 +5401,7 @@ def main() -> None:
             ["📌 今日总览", "✅ 买入确认", "🔄 T+1 复盘",
              "👁 未买入跟踪", "📅 周/月复盘",
              "📒 每日候选复盘", "📌 明日交易计划",
+             "📈 做 T 观察",
              "🛠 手动补跑"],
             label_visibility="collapsed",
         )
@@ -5189,6 +5418,11 @@ def main() -> None:
         if st.button("🔄 重新加载数据", width="stretch"):
             load_trade_review.clear()
             st.rerun()
+
+    # —— 📈 做 T 观察 也不依赖 trade_review.csv（独立读 t_signal_latest.csv）——
+    if "做 T" in page:
+        page_t_signal()
+        return
 
     # —— 🛠 手动补跑 不依赖 CSV，且即使 CSV 为空时也应该可用（用来手动跑 run.py 生成 CSV）——
     if page.startswith("🛠"):
