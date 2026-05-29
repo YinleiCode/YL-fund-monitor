@@ -921,22 +921,119 @@ def generate_today_plain_conclusion(
     )
 
 
+# ─── 日期下拉：合并多个数据源 ─────────────────────────────────────────
+
+def _collect_available_dates() -> list[str]:
+    """
+    从多个输出文件收集可用日期，去重后倒序返回（YYYYMMDD）。
+    来源：
+      - output/trade_review.csv 的 report_date 列
+      - output/market_daily/market_daily_*.csv 文件名
+      - output/market_breadth/market_breadth_*.csv 文件名
+      - output/tomorrow_plan/tomorrow_plan_*.csv 文件名
+      - output/t_signal/t_signal_*.csv 文件名
+    """
+    dates: set[str] = set()
+
+    # 1) trade_review.csv
+    csv_path = OUTPUT_DIR / "trade_review.csv"
+    if csv_path.exists():
+        try:
+            df_tr = pd.read_csv(csv_path, usecols=["report_date"])
+            for d in df_tr["report_date"].dropna().unique():
+                dates.add(str(d).strip())
+        except Exception:
+            pass
+
+    # 2) 目录扫描：market_daily / market_breadth / tomorrow_plan / t_signal
+    for dir_path in (MARKET_DAILY_DIR, MARKET_BREADTH_DIR, TOMORROW_PLAN_DIR, T_SIGNAL_DIR):
+        if not dir_path.exists():
+            continue
+        try:
+            for f in dir_path.iterdir():
+                name = f.name
+                if not name.endswith(".csv"):
+                    continue
+                # 文件名格式：prefix_YYYYMMDD.csv 或 prefix_YYYY-MM-DD.csv
+                # 提取 8 位数字作为日期
+                parts = name.replace(".csv", "").split("_")
+                for p in parts:
+                    if p.isdigit() and len(p) == 8:
+                        dates.add(p)
+                        break
+                    # Also try YYYY-MM-DD → YYYYMMDD
+                    if len(p) == 10 and p[4] == "-" and p[7] == "-":
+                        cand = p.replace("-", "")
+                        if cand.isdigit() and len(cand) == 8:
+                            dates.add(cand)
+                            break
+        except Exception:
+            pass
+
+    return sorted(dates, reverse=True)
+
+
 # ─── PAGE 1: 今日总览 ────────────────────────────────────────────────────
+
+def _render_today_sidebar_data(report_date: str) -> None:
+    """展示某日期可用但非 trade_review 的数据摘要。"""
+    st.markdown("#### 📂 当日可用数据")
+    records = []
+
+    md_path = MARKET_DAILY_DIR / f"market_daily_{report_date}.csv"
+    if md_path.exists():
+        records.append(("📊 市场日线快照", md_path.name))
+
+    mb_path = MARKET_BREADTH_DIR / f"market_breadth_{report_date}.csv"
+    if mb_path.exists():
+        records.append(("📈 赚钱效应", mb_path.name))
+
+    tp_path = TOMORROW_PLAN_DIR / f"tomorrow_plan_{report_date}.csv"
+    if tp_path.exists():
+        records.append(("📌 明日计划", tp_path.name))
+
+    ts_dir = T_SIGNAL_DIR
+    if ts_dir.exists():
+        for f in ts_dir.iterdir():
+            if f.name.endswith(f"{report_date}.csv"):
+                records.append(("📉 做 T 信号", f.name))
+
+    if records:
+        for label, fname in records:
+            st.markdown(f"- {label}（{fname}）")
+    else:
+        st.markdown("_除 trade_review 外无其他数据。_")
+
 
 def page_today(df_all: pd.DataFrame) -> None:
     st.markdown("## 📌 今日总览")
 
-    if df_all.empty:
-        status_banner("当前 `trade_review.csv` 为空，等数据生成后再回来。", "info")
+    # 合并多个数据源的日期
+    all_dates = _collect_available_dates()
+    if not all_dates:
+        status_banner("当前无任何数据。请先运行全流程生成数据。", "info")
         return
 
-    dates = sorted(df_all["report_date"].unique().tolist(), reverse=True)
     sel_date = st.selectbox(
-        "选择推荐日期", options=dates, format_func=_date_fmt, key="today_date_sel",
+        "选择推荐日期", options=all_dates, format_func=_date_fmt, key="today_date_sel",
     )
-    df = df_all[df_all["report_date"] == sel_date].copy()
-    df = enrich_df(df)
 
+    # 筛选 trade_review 记录
+    df = df_all[df_all["report_date"] == sel_date].copy() if not df_all.empty else pd.DataFrame()
+
+    if df.empty:
+        # 有 V1.6 非推荐记录（如 market_daily / tomorrow_plan / t_signal），
+        # 但 trade_review.csv 无当日推荐/买入记录
+        status_banner(
+            f"{_date_fmt(sel_date)} 无候选 / 买入确认记录，"
+            f"但存在市场复盘 / 明日计划 / T 信号等记录。",
+            "info",
+        )
+        # 依然展示 V1.6 旁路数据摘要
+        _render_today_sidebar_data(sel_date)
+        return
+
+    df = enrich_df(df)
     if df.empty:
         status_banner(f"{_date_fmt(sel_date)} 无推荐数据。", "info")
         return
@@ -3136,6 +3233,7 @@ def page_manual_rerun() -> None:
 
 MONEY_FLOW_SIM_DIR        = OUTPUT_DIR / "money_flow_simulation"
 MARKET_DAILY_DIR          = OUTPUT_DIR / "market_daily"
+MARKET_BREADTH_DIR        = OUTPUT_DIR / "market_breadth"
 CANDIDATE_LIFECYCLE_DIR   = OUTPUT_DIR / "candidate_lifecycle"
 TOMORROW_PLAN_DIR         = OUTPUT_DIR / "tomorrow_plan"
 VERSION_FLAGS_YAML        = BASE_DIR / "config" / "version_flags.yaml"
