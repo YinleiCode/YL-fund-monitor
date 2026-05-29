@@ -32,6 +32,7 @@ BASE_DIR   = Path(__file__).resolve().parent.parent
 OUTPUT_DIR = BASE_DIR / "output"
 CSV_PATH   = OUTPUT_DIR / "trade_review.csv"
 OUT_DIR    = OUTPUT_DIR / "market_daily"
+BREADTH_DIR = OUTPUT_DIR / "market_breadth"
 
 
 # —— 主线板块过滤白名单 ——
@@ -102,6 +103,29 @@ def _load_board_df_cache(data_date: str) -> Optional[list]:
     """读 board_df_cache_{data_date}.json，返回 list[dict] 或 None。"""
     fp = OUTPUT_DIR / f"board_df_cache_{data_date}.json"
     if not fp.exists():
+        return None
+
+
+def _load_market_breadth_cache(report_date: str) -> Optional[dict]:
+    """Read same-day market breadth cache. Never falls back to older files."""
+    fp = BREADTH_DIR / f"market_breadth_{report_date}.csv"
+    if not fp.exists():
+        return None
+    try:
+        with fp.open("r", encoding="utf-8-sig", newline="") as f:
+            rows = list(csv.DictReader(f))
+        if not rows:
+            return None
+        row = rows[0]
+        if str(row.get("report_date", "")).strip() != report_date:
+            print(
+                f"  [warn] market_breadth 日期不匹配: "
+                f"{row.get('report_date')!r} != {report_date!r}"
+            )
+            return None
+        return row
+    except Exception as e:
+        print(f"  [warn] 读 {fp.name} 异常: {type(e).__name__}: {e}")
         return None
     try:
         d = json.loads(fp.read_text(encoding="utf-8"))
@@ -405,15 +429,31 @@ def build_market_daily(report_date: str) -> dict:
               f"raw_score={record['market_sentiment_score_raw']!r} "
               f"raw_verdict={record['market_sentiment_raw_verdict']!r}")
 
-    # —— 1b) 真实赚钱效应判定（基于明细字段，缺数据时降级为"数据不足"）——
-    # 第一阶段所有细分字段都是 None（暂无 API），所以 _judge_market_env
-    # 会返回 "数据不足"；等第二阶段接入 fetch_limit_up_pool 等 API 后
-    # 这里就能输出真实定性。
-    ac = _safe_int(record["advance_count"])   or None
-    dc = _safe_int(record["decline_count"])   or None
-    lu = _safe_int(record["limit_up_count"])  or None
-    ld = _safe_int(record["limit_down_count"]) or None
-    bc = _safe_int(record["burst_count"])     or None
+    # —— 1b) market_breadth：真实赚钱效应明细（同日 cache，不 fallback）——
+    breadth = _load_market_breadth_cache(report_date)
+    if breadth is None:
+        print(f"  ⚠️ market_breadth_{report_date}.csv 缺失，真实赚钱效应保持数据不足")
+    else:
+        source_files.append(f"market_breadth_{report_date}.csv")
+        breadth_status = str(breadth.get("status", "")).strip() or "missing"
+        for k in (
+            "advance_count", "decline_count", "advance_decline_ratio",
+            "limit_up_count", "limit_down_count", "burst_count",
+            "burst_rate", "index_change_pct", "total_amount",
+        ):
+            if str(breadth.get(k, "")).strip() != "":
+                record[k] = breadth[k]
+        print(
+            f"  ✓ market_breadth: status={breadth_status!r} "
+            f"missing={breadth.get('missing_fields', '') or '—'}"
+        )
+
+    # —— 1c) 真实赚钱效应判定（基于明细字段，缺数据时降级为"数据不足"）——
+    ac = _safe_int(record["advance_count"])
+    dc = _safe_int(record["decline_count"])
+    lu = _safe_int(record["limit_up_count"])
+    ld = _safe_int(record["limit_down_count"])
+    bc = _safe_int(record["burst_count"])
     ix = _safe_float(record["index_change_pct"])
     ta = _safe_float(record["total_amount"])
     env_verdict, env_desc, weak_flag, breadth_desc, adr, br = _judge_market_env(
