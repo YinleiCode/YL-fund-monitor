@@ -43,6 +43,7 @@ BASE_DIR   = Path(__file__).resolve().parent.parent
 OUTPUT_DIR = BASE_DIR / "output"
 
 SCRIPT_VERSION = "v1"
+_LAST_ATTEMPTS: list = []
 
 # Exit code 约定（与 dashboard 按钮判定保持一致）
 EXIT_OK              = 0
@@ -53,24 +54,63 @@ EXIT_DATA_SOURCE     = 4  # akshare 拉数全失败
 EXIT_SELF_CHECK      = 6  # 写文件后自检不通过
 
 
-def _print_retry_hint(source_label: str, err: object) -> None:
-    """输出更清晰的数据源失败原因和人工处理建议；不改变失败语义。"""
+def _classify_source_error(err: object) -> tuple:
+    """Classify common akshare/Eastmoney failures for downstream display."""
     err_text = str(err)
+    err_type = type(err).__name__
     hints = []
+    category = "unknown"
     if "NameResolutionError" in err_text or "Failed to resolve" in err_text:
+        category = "dns"
         hints.append("DNS/网络解析失败：先确认当前网络能访问东方财富 push2 接口。")
     if "RemoteDisconnected" in err_text or "closed connection" in err_text:
+        category = "remote_disconnected"
         hints.append("服务端主动断开：可能是东方财富接口临时不可用、限流或反爬。")
+    if "Forbidden" in err_text or "403" in err_text or "429" in err_text:
+        category = "blocked_or_rate_limited"
+        hints.append("接口疑似反爬或限流：可稍后重试，或切换网络后重跑。")
     if "Max retries exceeded" in err_text:
+        category = "max_retries"
         hints.append("请求已达到重试上限：可稍后重跑本脚本。")
     if not hints:
         hints.append("数据源异常：请查看完整错误，稍后重跑或手工检查 akshare/东方财富接口。")
+    return category, err_type, err_text, hints
+
+
+def _print_retry_hint(source_label: str, err: object) -> dict:
+    """输出更清晰的数据源失败原因和人工处理建议；不改变失败语义。"""
+    category, err_type, err_text, hints = _classify_source_error(err)
 
     print(f"  [hint] {source_label} 失败处理建议：")
     for h in hints:
         print(f"         - {h}")
     print("         - 本脚本不会使用旧 cache 冒充今日盘后快照。")
     print("         - 失败后 build_market_daily 会降级为 sector_data_status=missing。")
+    return {
+        "source_label": source_label,
+        "category": category,
+        "error_type": err_type,
+        "error": err_text,
+        "hints": hints,
+    }
+
+
+def _write_failure_meta(report_date: str, source: str, attempts: list) -> None:
+    """Write failure audit metadata only; never writes board_df_cache main data."""
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    fp = OUTPUT_DIR / f"board_df_cache_{report_date}.error.json"
+    payload = {
+        "report_date": report_date,
+        "built_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "status": "error",
+        "source": source,
+        "attempts": attempts,
+        "no_fallback": True,
+        "main_cache_written": False,
+        "message": "盘后板块快照失败，主线板块不可用，明日计划应只观察。",
+    }
+    fp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"  [audit] 已写失败审计：{fp.name}（未写 board_df_cache 主文件）")
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -128,17 +168,31 @@ def _fetch_concept_boards() -> Optional[list]:
         import akshare as ak
     except ImportError as e:
         print(f"  [error] akshare 未安装: {e}")
+        _LAST_ATTEMPTS.append({
+            "source_label": "概念板块接口",
+            "category": "akshare_missing",
+            "error_type": type(e).__name__,
+            "error": str(e),
+            "hints": ["当前 Python 环境未安装 akshare，请先安装依赖或切换到项目 .venv。"],
+        })
         return None
 
     try:
         df = ak.stock_board_concept_name_em()
     except Exception as e:
         print(f"  [error] ak.stock_board_concept_name_em() 失败: {type(e).__name__}: {e}")
-        _print_retry_hint("概念板块接口", e)
+        _LAST_ATTEMPTS.append(_print_retry_hint("概念板块接口", e))
         return None
 
     if df is None or len(df) == 0:
         print(f"  [error] akshare 返回空")
+        _LAST_ATTEMPTS.append({
+            "source_label": "概念板块接口",
+            "category": "empty_data",
+            "error_type": "EmptyDataFrame",
+            "error": "akshare 返回空数据",
+            "hints": ["接口返回空数据：稍后重跑；本脚本不会使用旧 cache。"],
+        })
         return None
 
     # 字段重命名（与 theme_auto._fetch_concept_boards 同口径）
@@ -172,17 +226,31 @@ def _fetch_industry_boards() -> Optional[list]:
     """fallback：调 akshare 行业板块行情。"""
     try:
         import akshare as ak
-    except ImportError:
+    except ImportError as e:
+        _LAST_ATTEMPTS.append({
+            "source_label": "行业板块接口",
+            "category": "akshare_missing",
+            "error_type": type(e).__name__,
+            "error": str(e),
+            "hints": ["当前 Python 环境未安装 akshare，请先安装依赖或切换到项目 .venv。"],
+        })
         return None
 
     try:
         df = ak.stock_board_industry_name_em()
     except Exception as e:
         print(f"  [error] ak.stock_board_industry_name_em() 失败: {type(e).__name__}: {e}")
-        _print_retry_hint("行业板块接口", e)
+        _LAST_ATTEMPTS.append(_print_retry_hint("行业板块接口", e))
         return None
 
     if df is None or len(df) == 0:
+        _LAST_ATTEMPTS.append({
+            "source_label": "行业板块接口",
+            "category": "empty_data",
+            "error_type": "EmptyDataFrame",
+            "error": "akshare 返回空数据",
+            "hints": ["接口返回空数据：稍后重跑；本脚本不会使用旧 cache。"],
+        })
         return None
 
     col_map = {
@@ -215,12 +283,13 @@ def _fetch_boards(source: str) -> tuple:
       'auto'      → 先概念，失败用行业
     返回 (records, data_source_label) 或 (None, None)
     """
+    _LAST_ATTEMPTS.clear()
     if source == "concept":
-        return (_fetch_concept_boards(), "akshare.stock_board_concept_name_em") \
-               if (records := _fetch_concept_boards()) else (None, None)
+        records = _fetch_concept_boards()
+        return (records, "akshare.stock_board_concept_name_em") if records else (None, None)
     if source == "industry":
-        return (_fetch_industry_boards(), "akshare.stock_board_industry_name_em") \
-               if (records := _fetch_industry_boards()) else (None, None)
+        records = _fetch_industry_boards()
+        return (records, "akshare.stock_board_industry_name_em") if records else (None, None)
     # auto
     records = _fetch_concept_boards()
     if records:
@@ -366,7 +435,11 @@ def main() -> int:
         print(f"  [重试建议] 稍后重跑：.venv/bin/python3 scripts/build_board_eod_cache.py")
         print(f"  [重试建议] 若概念板块持续失败，可人工试跑行业源：.venv/bin/python3 scripts/build_board_eod_cache.py --source industry")
         print(f"  [结果] board_df_cache_{report_date}.json 未生成 → "
-              f"build_market_daily 会判 sector_data_status=missing")
+              f"build_market_daily 会判 sector_data_status=error/missing")
+        try:
+            _write_failure_meta(report_date, args.source, list(_LAST_ATTEMPTS))
+        except Exception as e:
+            print(f"  [warn] 写失败审计失败，不影响主流程: {type(e).__name__}: {e}")
         return EXIT_DATA_SOURCE
 
     # —— Step 4: dry-run 分支 ——

@@ -116,7 +116,7 @@ def _check_board_cache_freshness(report_date: str) -> tuple:
     校验 board_df_cache_{report_date}.json 的新鲜度（方案 E · 用户原话）。
 
     返回 (is_fresh: bool, status: str, mtime_str: str, detail: str)
-      status ∈ {"ok", "missing", "stale", "unknown"}
+      status ∈ {"ok", "missing", "stale", "error", "unknown"}
 
     核心规则（用户原话）：
       1. cache 文件名必须与 report_date 同日（不读 data_date）
@@ -129,6 +129,22 @@ def _check_board_cache_freshness(report_date: str) -> tuple:
     """
     fp = OUTPUT_DIR / f"board_df_cache_{report_date}.json"
     if not fp.exists():
+        err_fp = OUTPUT_DIR / f"board_df_cache_{report_date}.error.json"
+        if err_fp.exists():
+            try:
+                err = json.loads(err_fp.read_text(encoding="utf-8"))
+                msg = str(err.get("message", "")).strip()
+                attempts = err.get("attempts") if isinstance(err.get("attempts"), list) else []
+                cats = [str(a.get("category", "")).strip() for a in attempts if isinstance(a, dict)]
+                cats = [c for c in cats if c]
+                detail = msg or "盘后板块快照生成失败"
+                if cats:
+                    detail += "；错误分类：" + "、".join(cats)
+                detail += "；未写 board_df_cache 主文件，不使用旧缓存"
+                return (False, "error", "—", detail)
+            except Exception as e:
+                return (False, "error", "—",
+                        f"找到失败审计 {err_fp.name}，但读取异常: {type(e).__name__}: {e}")
         return (False, "missing", "—",
                 f"找不到 board_df_cache_{report_date}.json"
                 f"（按方案 E：cache 必须与 report_date 同日，不允许 fallback 到 data_date）")
@@ -348,7 +364,7 @@ def build_market_daily(report_date: str) -> dict:
         "total_amount":                 "",
 
         # —— 主线板块 ——
-        "sector_data_status":           "missing",   # ok / missing / stale / mismatch / unknown
+        "sector_data_status":           "missing",   # ok / missing / stale / error / mismatch / unknown
         "sector_data_date":             "",
         "sector_filter_applied":        "noise_blocklist",
         "sector_data_freshness_detail": "",          # 中文，描述新鲜度校验结果
