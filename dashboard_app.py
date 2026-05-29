@@ -527,6 +527,107 @@ def status_banner(message: str, level: str = "info") -> None:
     )
 
 
+def _display_value(v, default: str = "暂无") -> str:
+    if v is None:
+        return default
+    s = str(v).strip()
+    if not s or s.lower() in ("nan", "none", "null"):
+        return default
+    return s
+
+
+def _bool_cn(v) -> str:
+    b = _gb(v)
+    if b is True:
+        return "是"
+    if b is False:
+        return "否"
+    return "暂无"
+
+
+def _v16_action_cn(action: str) -> str:
+    a = _display_value(action, "")
+    mapping = {
+        "v16_plan_only_observe": "V1.6 复盘计划要求只观察",
+        "only_observe": "V1.6 复盘计划要求只观察",
+        "observe_only": "V1.6 复盘计划要求只观察",
+        "allow": "V1.6 复盘计划允许进入后续确认",
+        "allow_check_buy": "V1.6 复盘计划允许进入后续确认",
+        "normal": "V1.6 复盘计划允许进入后续确认",
+        "block": "V1.6 复盘计划拦截",
+        "blocked": "V1.6 复盘计划拦截",
+    }
+    return mapping.get(a, a or "暂无")
+
+
+def _money_decision_cn(decision: str) -> str:
+    d = _display_value(decision, "")
+    mapping = {
+        "keep": "资金条件层观察：资金通过",
+        "pass": "资金条件层观察：资金通过",
+        "filter": "资金条件层观察：资金不通过",
+        "block": "资金条件层观察：资金不通过",
+        "fail": "资金条件层观察：资金不通过",
+        "missing": "资金条件层观察：暂无数据",
+        "unavailable": "资金条件层观察：数据源不可用",
+    }
+    return mapping.get(d, f"资金条件层观察：{d}" if d else "暂无")
+
+
+def _money_source_cn(source: str) -> str:
+    s = _display_value(source, "")
+    mapping = {
+        "push2his": "东方财富主源",
+        "eastmoney": "东方财富主源",
+        "ths_simple": "同花顺备源（简化口径）",
+        "unavailable": "数据源不可用",
+    }
+    return mapping.get(s, s or "暂无")
+
+
+def _v16_mf_layer_html(row) -> str:
+    v16_fields = [
+        "v16_plan_action", "v16_only_observe", "v16_plan_reason",
+        "v16_trade_permission", "v16_allowed_theme_match",
+        "v16_focus_stock_match",
+    ]
+    mf_fields = ["v15_money_decision", "v15_money_source", "v15_money_reason"]
+    row_keys = set(row.index) if hasattr(row, "index") else set(row.keys())
+    has_v16 = any(_display_value(row.get(c), "") for c in v16_fields if c in row_keys)
+    has_mf = any(_display_value(row.get(c), "") for c in mf_fields if c in row_keys)
+    if not has_v16 and not has_mf:
+        return ""
+
+    only_observe = _gb(row.get("v16_only_observe"))
+    observe_text = (
+        "只观察，不进入 9:36 模拟买入"
+        if only_observe is True else
+        ("否" if only_observe is False else "暂无")
+    )
+    plan_action = _v16_action_cn(row.get("v16_plan_action"))
+    plan_reason = _display_value(row.get("v16_plan_reason"))
+    trade_perm = _display_value(row.get("v16_trade_permission"))
+    theme_match = _bool_cn(row.get("v16_allowed_theme_match"))
+    focus_match = _bool_cn(row.get("v16_focus_stock_match"))
+    money_decision = _money_decision_cn(row.get("v15_money_decision"))
+    money_source = _money_source_cn(row.get("v15_money_source"))
+    money_reason = _display_value(row.get("v15_money_reason"))
+
+    return (
+        f"<div style='background:{COLOR_CARD_ALT};border-left:3px solid {COLOR_SECOND};"
+        f"border-radius:6px;padding:9px 12px;margin-top:9px;font-size:12px;"
+        f"color:{COLOR_TEXT};line-height:1.75;'>"
+        f"<div><b>V1.6 复盘计划层</b>：{plan_action}</div>"
+        f"<div>是否只观察：<b>{observe_text}</b> ｜ 交易权限：<b>{trade_perm}</b></div>"
+        f"<div>是否命中主线：<b>{theme_match}</b> ｜ 是否核心观察股：<b>{focus_match}</b></div>"
+        f"<div>V1.6 原因：{plan_reason}</div>"
+        f"<div style='margin-top:4px;'><b>资金条件层（观察模式）</b>：{money_decision}"
+        f" ｜ 来源：<b>{money_source}</b></div>"
+        f"<div>资金原因：{money_reason}</div>"
+        f"</div>"
+    )
+
+
 def stock_card(row: pd.Series, variant: str = "default") -> str:
     """
     通用股票卡片。variant: default/bought/observe/drop
@@ -605,6 +706,8 @@ def stock_card(row: pd.Series, variant: str = "default") -> str:
             f"{' ｜ '.join(parts)}</div>"
         )
 
+    v16_mf_html = _v16_mf_layer_html(row)
+
     # 徽章
     mode_color = COLOR_FULL if mode == "全A" else COLOR_THEME
     mode_badge = (
@@ -647,6 +750,7 @@ def stock_card(row: pd.Series, variant: str = "default") -> str:
         <div>{status_badge}</div>
       </div>
       {price_html}
+      {v16_mf_html}
       {reasons_html}
     </div>
     """
@@ -3570,6 +3674,7 @@ def _lifecycle_render_card(stock: dict, mf_df: Optional[pd.DataFrame]) -> None:
         )
 
     decision_block = "".join(decision_parts)
+    v16_mf_block = _v16_mf_layer_html(primary)
     mf_block = _lifecycle_render_mf_block(mf)
     t1_html = _lifecycle_render_t1_block(primary, stock["any_mode_bought"])
 
@@ -3597,6 +3702,7 @@ def _lifecycle_render_card(stock: dict, mf_df: Optional[pd.DataFrame]) -> None:
         f"<span>{badges_html}</span>"
         f"</div>"
         f"{decision_block}"
+        f"{v16_mf_block}"
         f"{mf_block}"
         f"{t1_html}"
         f"{followup_html}"
@@ -4203,6 +4309,70 @@ def _tp_load_plan_md() -> str:
         return ""
 
 
+def _tp_status_card(title: str, value: str, desc: str, level: str = "info") -> str:
+    """V1.6 明日计划顶部中文状态卡。"""
+    level_map = {
+        "ok":      (COLOR_BOUGHT,  COLOR_BANNER_SUCCESS),
+        "warn":    (COLOR_WAIT_T1, COLOR_BANNER_WARN),
+        "bad":     (COLOR_ERROR,   COLOR_BANNER_ERROR),
+        "info":    (COLOR_SECOND,  COLOR_BANNER_INFO),
+        "neutral": (COLOR_MUTED,   COLOR_CARD),
+    }
+    accent, bg = level_map.get(level, level_map["info"])
+    return (
+        f"<div style='background:{bg};border:1px solid {COLOR_BORDER};"
+        f"border-left:4px solid {accent};border-radius:8px;"
+        f"padding:12px 14px;min-height:118px;margin-bottom:10px;'>"
+        f"<div style='font-size:12px;color:{COLOR_MUTED};line-height:1.4;'>{title}</div>"
+        f"<div style='font-size:20px;font-weight:750;color:{COLOR_TEXT};"
+        f"line-height:1.45;margin-top:4px;'>{value or '—'}</div>"
+        f"<div style='font-size:12.5px;color:{COLOR_TEXT};line-height:1.55;"
+        f"margin-top:8px;'>{desc}</div>"
+        f"</div>"
+    )
+
+
+def _tp_sector_desc(status: str) -> tuple:
+    s = (status or "—").strip()
+    if s == "ok":
+        return "可用", "主线板块数据可用，可以辅助判断明日主线方向。", "ok"
+    if s == "missing":
+        return "未拿到", "主线板块数据未拿到，不能自动判断明天主线。", "bad"
+    return s or "—", f"主线板块数据状态为 {s}，明日主线方向需要人工复核。", "warn"
+
+
+def _tp_permission_desc(perm: str) -> tuple:
+    p = (perm or "—").strip()
+    if p == "只观察":
+        return "明天只看不买，9:36 不会模拟买入。", "warn"
+    if p == "正常交易":
+        return "明天允许符合条件的票进入 9:36 技术确认，但不是强制买。", "ok"
+    if p == "禁止交易":
+        return "明天不做模拟买入，候选票只作为复盘观察。", "bad"
+    if p in ("小仓试错", "只做主线核心"):
+        return "明天只允许更收敛的观察/试错，仍需通过 9:36 技术确认层。", "warn"
+    return "交易权限需要人工确认。", "info"
+
+
+def _tp_risk_desc(risk: str) -> tuple:
+    r = (risk or "—").strip()
+    if r == "高":
+        return "风险高，建议保守。", "bad"
+    if r == "中":
+        return "风险中等，按计划执行，避免追高。", "warn"
+    if r == "低":
+        return "风险较低，但仍需等 9:36 技术确认。", "ok"
+    return "风险等级需要人工确认。", "info"
+
+
+def _tp_allowed_themes_desc(themes: list, sector_status: str) -> tuple:
+    if (sector_status or "").strip() != "ok":
+        return "明日主线方向不可信/为空，明日不应按主线放行。", "bad"
+    if themes:
+        return "这些方向来自 V1.6 复盘计划层，只代表明日重点观察方向。", "ok"
+    return "明日没有明确主线方向，建议降低预期。", "warn"
+
+
 def _tp_run_subprocess(label: str, cmd_list: list, timeout: int) -> dict:
     """
     通用 subprocess 执行器（复用 _run_money_flow_health_probe 模式）。
@@ -4460,7 +4630,7 @@ def page_tomorrow_plan() -> None:
     st.markdown("## 📌 明日交易计划")
     st.caption(
         "V1.6 复盘计划驱动第二天选股。**计划看好 ≠ 直接买入**；"
-        "第二天 9:36 仍由 V1.6 三层（复盘计划层 + 资金条件层 + 9:36 技术确认层）共同决定是否模拟买入。"
+        "第二天 9:36 仍由 V1.6 三层（复盘计划层 + 资金条件层（观察模式）+ 9:36 技术确认层）共同决定是否模拟买入。"
     )
 
     # —— 加载 plan + v16 配置 ——
@@ -4485,23 +4655,63 @@ def page_tomorrow_plan() -> None:
         reviewed_at = plan.get("manual_reviewed_at", "") or "未确认"
         affect_buy = bool(v16.get("affect_check_buy"))
 
-        # 4×2 metric 网格
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("复盘日",      rd)
-        c2.metric("指导交易日",  ntd)
-        c3.metric("市场状态",    state)
-        c4.metric("交易权限",    perm)
-        c5, c6, c7, c8 = st.columns(4)
-        c5.metric("风险等级",        risk)
-        c6.metric("人工待确认",      "⚠️ 是" if need_rv else "✅ 否")
-        c7.metric("最后确认时间",    reviewed_at)
-        c8.metric("V1.6 影响 9:36",  "✅ 是" if affect_buy else "—")
+        sector_status = plan.get("sector_data_status", "—") or "—"
+        allowed = [t.strip() for t in str(plan.get("allowed_themes", "")).split("|") if t.strip()]
+        allowed_value = "、".join(allowed) if allowed else "（无）"
+        sector_label, sector_desc, sector_level = _tp_sector_desc(sector_status)
+        perm_desc, perm_level = _tp_permission_desc(perm)
+        risk_desc, risk_level = _tp_risk_desc(risk)
+        themes_desc, themes_level = _tp_allowed_themes_desc(allowed, sector_status)
+
+        st.caption(f"复盘日：{rd} ｜ 市场状态：{state} ｜ 人工确认：{'待确认' if need_rv else reviewed_at}")
+        c1, c2, c3 = st.columns(3)
+        c1.markdown(
+            _tp_status_card("指导交易日", ntd, "这一天是本计划实际指导的下一个交易日。", "info"),
+            unsafe_allow_html=True,
+        )
+        c2.markdown(
+            _tp_status_card("主线板块数据状态", sector_label, sector_desc, sector_level),
+            unsafe_allow_html=True,
+        )
+        c3.markdown(
+            _tp_status_card("明日交易权限", perm, perm_desc, perm_level),
+            unsafe_allow_html=True,
+        )
+        c4, c5, c6 = st.columns(3)
+        c4.markdown(
+            _tp_status_card("风险等级", risk, risk_desc, risk_level),
+            unsafe_allow_html=True,
+        )
+        c5.markdown(
+            _tp_status_card("明日主线方向", allowed_value, themes_desc, themes_level),
+            unsafe_allow_html=True,
+        )
+        c6.markdown(
+            _tp_status_card(
+                "资金条件层",
+                "观察模式",
+                "资金条件层当前只记录和观察，不作为买入硬拦截。",
+                "neutral",
+            ),
+            unsafe_allow_html=True,
+        )
+        st.caption(f"V1.6 影响 9:36：{'是' if affect_buy else '否'} ｜ 最后确认时间：{reviewed_at}")
 
         # —— 危险提示（用户明确）——
         if perm in ("只观察", "禁止交易") and affect_buy:
             status_banner(
                 f"⚠️ 明天符合该计划时，候选股可能被 V1.6 标记为 only_observe，9:36 不买入。"
-                f"（当前 trade_permission={perm}, v16.affect_check_buy=true）",
+                f"（当前明日交易权限：{perm}；V1.6 已接入 9:36 确认）",
+                "warning",
+            )
+        if perm == "正常交易" and (state == "数据不足" or sector_status != "ok"):
+            status_banner(
+                "❌ 数据不足却允许正常交易，建议改为只观察。",
+                "error",
+            )
+        if sector_status != "ok":
+            status_banner(
+                "⚠️ 明日主线方向不可信/为空，明日不应按主线放行。",
                 "warning",
             )
 
@@ -4514,7 +4724,10 @@ def page_tomorrow_plan() -> None:
 
     with col_a:
         st.markdown("**生成/刷新明日计划**")
-        st.caption("执行 `scripts/build_tomorrow_plan.py`，读取 market_daily / trade_review 等数据生成计划。")
+        st.caption(
+            "执行 `scripts/build_tomorrow_plan.py --merge-keep-manual`，读取 market_daily / trade_review 等数据生成计划，"
+            "并保留已人工确认文案。"
+        )
         plan_locked, plan_lock_ts = _is_locked(TOMORROW_PLAN_BUILD_KEY)
         if plan_locked:
             age = int(time.time() - plan_lock_ts) if plan_lock_ts else 0
@@ -4527,7 +4740,7 @@ def page_tomorrow_plan() -> None:
                     with st.spinner("正在生成明日计划... (最长 60 秒)"):
                         result = _tp_run_subprocess(
                             "build_tomorrow_plan",
-                            [str(PYTHON_BIN), "scripts/build_tomorrow_plan.py"],
+                            [str(PYTHON_BIN), "scripts/build_tomorrow_plan.py", "--merge-keep-manual"],
                             timeout=60,
                         )
                     st.session_state["tp_last_build_result"] = result
@@ -4547,41 +4760,102 @@ def page_tomorrow_plan() -> None:
                 if r.get("stdout"): st.code(r["stdout"], language="text")
                 if r.get("stderr"): st.code(r["stderr"], language="text")
 
+        st.markdown("**危险操作：强制覆盖人工确认**")
+        force_confirm = st.checkbox(
+            "我确认要使用 --force 覆盖已人工确认的明日计划文案",
+            key="tp_force_confirm",
+        )
+        if st.button(
+            "⚠️ 强制重建明日计划（--force）",
+            key="btn_build_plan_force",
+            disabled=plan_locked or not force_confirm,
+            width="stretch",
+        ):
+            if _acquire_lock(TOMORROW_PLAN_BUILD_KEY):
+                try:
+                    with st.spinner("正在强制重建明日计划... (最长 60 秒)"):
+                        result = _tp_run_subprocess(
+                            "build_tomorrow_plan_force",
+                            [str(PYTHON_BIN), "scripts/build_tomorrow_plan.py", "--force"],
+                            timeout=60,
+                        )
+                    st.session_state["tp_last_build_result"] = result
+                finally:
+                    _release_lock(TOMORROW_PLAN_BUILD_KEY)
+                st.rerun()
+
     with col_b:
-        st.markdown("**生成复盘三件套**")
-        st.caption("依次执行：build_market_daily → build_post_stop_tracking → build_tomorrow_plan")
+        st.markdown("**生成 V1.6 复盘四件套**")
+        st.caption(
+            "依次执行：build_board_eod_cache → build_market_daily → "
+            "build_post_stop_tracking → build_tomorrow_plan --merge-keep-manual。"
+        )
         pipe_locked, pipe_lock_ts = _is_locked(REVIEW_PIPELINE_KEY)
         if pipe_locked:
             age = int(time.time() - pipe_lock_ts) if pipe_lock_ts else 0
             st.caption(f"⏳ 正在运行中（已 {age} 秒）...")
 
-        if st.button("🚀 一键生成复盘三件套", key="btn_build_pipeline",
+        if st.button("🚀 一键生成 V1.6 复盘四件套", key="btn_build_pipeline",
                      disabled=pipe_locked, width="stretch"):
             if _acquire_lock(REVIEW_PIPELINE_KEY):
                 try:
                     results = []
-                    with st.spinner("正在依次执行三件套... (最长 180 秒)"):
-                        for label, script in [
-                            ("build_market_daily",        "scripts/build_market_daily.py"),
-                            ("build_post_stop_tracking",  "scripts/build_post_stop_tracking.py"),
-                            ("build_tomorrow_plan",       "scripts/build_tomorrow_plan.py"),
+                    board_failed = False
+                    with st.spinner("正在依次执行 V1.6 复盘四件套... (最长 240 秒)"):
+                        for label, cmd, timeout, stop_on_fail in [
+                            (
+                                "build_board_eod_cache",
+                                [str(PYTHON_BIN), "scripts/build_board_eod_cache.py"],
+                                120,
+                                False,
+                            ),
+                            (
+                                "build_market_daily",
+                                [str(PYTHON_BIN), "scripts/build_market_daily.py"],
+                                120,
+                                True,
+                            ),
+                            (
+                                "build_post_stop_tracking",
+                                [str(PYTHON_BIN), "scripts/build_post_stop_tracking.py"],
+                                120,
+                                True,
+                            ),
+                            (
+                                "build_tomorrow_plan",
+                                [str(PYTHON_BIN), "scripts/build_tomorrow_plan.py", "--merge-keep-manual"],
+                                120,
+                                True,
+                            ),
                         ]:
-                            r = _tp_run_subprocess(label, [str(PYTHON_BIN), script], timeout=120)
+                            r = _tp_run_subprocess(label, cmd, timeout=timeout)
                             results.append(r)
                             if r["returncode"] != 0:
-                                # 失败则停止后续
-                                break
+                                if label == "build_board_eod_cache":
+                                    board_failed = True
+                                    continue
+                                if stop_on_fail:
+                                    break
+                    st.session_state["tp_pipeline_board_failed"] = board_failed
                     st.session_state["tp_pipeline_results"] = results
                 finally:
                     _release_lock(REVIEW_PIPELINE_KEY)
                 st.rerun()
 
-        # 显示三件套结果
+        # 显示四件套结果
         if "tp_pipeline_results" in st.session_state:
             results = st.session_state["tp_pipeline_results"]
+            board_failed = bool(st.session_state.get("tp_pipeline_board_failed"))
             all_ok  = all(r["returncode"] == 0 for r in results)
+            if board_failed:
+                status_banner(
+                    "❌ 盘后板块快照失败，主线板块不可用，明日计划应保持只观察。"
+                    "<br>后续 market_daily / tomorrow_plan 已继续执行，但主线板块数据状态大概率为「未拿到」；"
+                    "本流程不会使用旧缓存，也不会 fallback。",
+                    "error",
+                )
             status_banner(
-                f"三件套执行：{sum(1 for r in results if r['returncode']==0)}/{len(results)} 成功",
+                f"V1.6 复盘四件套执行：{sum(1 for r in results if r['returncode']==0)}/{len(results)} 成功",
                 "success" if all_ok else "error",
             )
             for r in results:
@@ -4612,10 +4886,10 @@ def page_tomorrow_plan() -> None:
             if current_perm not in TP_TRADE_PERMISSIONS:
                 current_perm = "只观察"
             edited_perm = st.selectbox(
-                "trade_permission（交易权限）",
+                "明日交易权限",
                 TP_TRADE_PERMISSIONS,
                 index=TP_TRADE_PERMISSIONS.index(current_perm),
-                help="决定明天候选股的整体动作；只观察/禁止交易会被 V1.6 前置门拦截 9:36 买入",
+                help="决定明天候选股的整体动作；只观察/禁止交易会由 V1.6 复盘计划层拦截 9:36 买入",
             )
 
         with col2:
@@ -4623,35 +4897,54 @@ def page_tomorrow_plan() -> None:
             if current_risk not in TP_RISK_LEVELS:
                 current_risk = "高"
             edited_risk = st.selectbox(
-                "risk_level（风险等级）",
+                "风险等级",
                 TP_RISK_LEVELS,
                 index=TP_RISK_LEVELS.index(current_risk),
             )
 
         edited_strategy = st.text_area(
-            "tomorrow_strategy_desc（一句话明日策略）",
+            "一句话明日策略",
             value=plan.get("tomorrow_strategy_desc", "") or "",
             height=80,
         )
         edited_trigger = st.text_area(
-            "trigger_conditions（触发条件 — 明日可以做的情况）",
+            "触发条件 — 明日可以做的情况",
             value=plan.get("trigger_conditions", "") or "",
             height=120,
         )
         edited_invalid = st.text_area(
-            "invalidation_conditions（失效条件 — 计划失效的情况）",
+            "失效条件 — 计划失效的情况",
             value=plan.get("invalidation_conditions", "") or "",
             height=100,
         )
         edited_emergency = st.text_area(
-            "emergency_plan（应急预案）",
+            "应急预案",
             value=plan.get("emergency_plan", "") or "",
             height=100,
         )
 
+        unsafe_normal_trade = (
+            edited_perm == "正常交易"
+            and (
+                str(plan.get("market_state", "")).strip() == "数据不足"
+                or str(plan.get("sector_data_status", "")).strip() != "ok"
+                or not [t.strip() for t in str(plan.get("allowed_themes", "")).split("|") if t.strip()]
+            )
+        )
+        confirm_unsafe_normal = False
+        if unsafe_normal_trade:
+            st.warning(
+                "当前数据不足或主线缺失，不建议保存为正常交易。"
+                "建议改为「只观察」或「只做主线核心」。"
+            )
+            confirm_unsafe_normal = st.checkbox(
+                "我确认在数据不足/主线缺失情况下仍保存为正常交易。",
+                key="tp_confirm_unsafe_normal_trade",
+            )
+
         # —— 只读展示 ——
         st.markdown("---")
-        st.markdown("**🔥 允许方向（allowed_themes，只读）**")
+        st.markdown("**🔥 明日主线方向（只读）**")
         allowed = [t.strip() for t in str(plan.get("allowed_themes", "")).split("|") if t.strip()]
         if allowed:
             for t in allowed:
@@ -4678,6 +4971,12 @@ def page_tomorrow_plan() -> None:
         submitted = st.form_submit_button("💾 保存人工修改", width="stretch")
 
     if submitted:
+        if unsafe_normal_trade and not confirm_unsafe_normal:
+            st.error(
+                "已拒绝保存：当前数据不足或主线缺失，不能直接保存为「正常交易」。"
+                "请改为「只观察」或「只做主线核心」；如确需保存正常交易，请勾选二次确认。"
+            )
+            return
         edits = {
             "trade_permission":        edited_perm,
             "risk_level":              edited_risk,

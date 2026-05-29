@@ -53,6 +53,26 @@ EXIT_DATA_SOURCE     = 4  # akshare 拉数全失败
 EXIT_SELF_CHECK      = 6  # 写文件后自检不通过
 
 
+def _print_retry_hint(source_label: str, err: object) -> None:
+    """输出更清晰的数据源失败原因和人工处理建议；不改变失败语义。"""
+    err_text = str(err)
+    hints = []
+    if "NameResolutionError" in err_text or "Failed to resolve" in err_text:
+        hints.append("DNS/网络解析失败：先确认当前网络能访问东方财富 push2 接口。")
+    if "RemoteDisconnected" in err_text or "closed connection" in err_text:
+        hints.append("服务端主动断开：可能是东方财富接口临时不可用、限流或反爬。")
+    if "Max retries exceeded" in err_text:
+        hints.append("请求已达到重试上限：可稍后重跑本脚本。")
+    if not hints:
+        hints.append("数据源异常：请查看完整错误，稍后重跑或手工检查 akshare/东方财富接口。")
+
+    print(f"  [hint] {source_label} 失败处理建议：")
+    for h in hints:
+        print(f"         - {h}")
+    print("         - 本脚本不会使用旧 cache 冒充今日盘后快照。")
+    print("         - 失败后 build_market_daily 会降级为 sector_data_status=missing。")
+
+
 # ════════════════════════════════════════════════════════════════════
 # 时间窗口校验（用户原话核心规则）
 # ════════════════════════════════════════════════════════════════════
@@ -114,6 +134,7 @@ def _fetch_concept_boards() -> Optional[list]:
         df = ak.stock_board_concept_name_em()
     except Exception as e:
         print(f"  [error] ak.stock_board_concept_name_em() 失败: {type(e).__name__}: {e}")
+        _print_retry_hint("概念板块接口", e)
         return None
 
     if df is None or len(df) == 0:
@@ -158,6 +179,7 @@ def _fetch_industry_boards() -> Optional[list]:
         df = ak.stock_board_industry_name_em()
     except Exception as e:
         print(f"  [error] ak.stock_board_industry_name_em() 失败: {type(e).__name__}: {e}")
+        _print_retry_hint("行业板块接口", e)
         return None
 
     if df is None or len(df) == 0:
@@ -340,6 +362,9 @@ def main() -> int:
     records, data_source = _fetch_boards(args.source)
     if records is None:
         print(f"  ❌ 数据源全部失败 — 按规则不写文件，不 fallback")
+        print(f"  [安全策略] 主线板块不可用；V1.6 明日计划应保持只观察，直到今日盘后快照成功生成。")
+        print(f"  [重试建议] 稍后重跑：.venv/bin/python3 scripts/build_board_eod_cache.py")
+        print(f"  [重试建议] 若概念板块持续失败，可人工试跑行业源：.venv/bin/python3 scripts/build_board_eod_cache.py --source industry")
         print(f"  [结果] board_df_cache_{report_date}.json 未生成 → "
               f"build_market_daily 会判 sector_data_status=missing")
         return EXIT_DATA_SOURCE

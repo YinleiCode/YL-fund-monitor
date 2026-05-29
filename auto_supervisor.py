@@ -8,6 +8,7 @@ import fcntl
 import json
 import logging
 import os
+import yaml
 import subprocess
 import sys
 from datetime import date, datetime, timedelta
@@ -16,6 +17,7 @@ from pathlib import Path
 BASE_DIR   = Path(__file__).parent
 OUTPUT_DIR = BASE_DIR / "output"
 LOGS_DIR   = BASE_DIR / "logs"
+CONFIG     = BASE_DIR / "config.yaml"
 STATE_FILE = OUTPUT_DIR / "auto_state.json"
 PYTHON     = str(BASE_DIR / ".venv" / "bin" / "python3")
 
@@ -90,6 +92,19 @@ def _acquire_task_lock(label: str, date_str: str) -> bool:
         return False
 
 
+def _simulate_env() -> list:
+    """检查 config.yaml simulate_data，是则返回额外环境变量供子进程继承"""
+    try:
+        with open(CONFIG, encoding="utf-8") as f:
+            cfg = yaml.safe_load(f)
+        if cfg.get("data_source", {}).get("simulate_data", False):
+            logger.info("[supervisor] config.yaml simulate_data=true，子进程继承 SIMULATE_MODE=true")
+            return ["SIMULATE_MODE=true"]
+    except Exception as e:
+        logger.warning(f"[supervisor] 读取 config.yaml 失败（不影响主流程）: {e}")
+    return []
+
+
 def _run(label: str, extra_args: list) -> bool:
     """
     运行 python run.py [extra_args]。
@@ -106,10 +121,15 @@ def _run(label: str, extra_args: list) -> bool:
         return False
 
     cmd = [PYTHON, str(BASE_DIR / "run.py")] + extra_args
-    logger.info(f"===== START {label} =====")
+    env = os.environ.copy()
+    extra_env = _simulate_env()
+    for kv in extra_env:
+        k, v = kv.split("=", 1)
+        env[k] = v
+    logger.info(f"===== START {label} {'(simulate)' if extra_env else ''} =====")
     sys.stdout.flush()
     try:
-        rc = subprocess.call(cmd, cwd=str(BASE_DIR))
+        rc = subprocess.call(cmd, cwd=str(BASE_DIR), env=env)
     except Exception as e:
         logger.error(f"执行异常: {e}")
         rc = -1

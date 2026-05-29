@@ -19,6 +19,7 @@ AKShare 数据获取，带可配置 fallback 和本地缓存。
 每次运行结束后可通过 get_run_provenance() 查询数据源溯源记录。
 """
 import json
+import os
 import re
 import time
 import logging
@@ -249,6 +250,36 @@ def _spot_via_push2delay() -> pd.DataFrame:
     return df
 
 
+def _fetch_simulated_spot() -> pd.DataFrame:
+    """
+    模拟行情：生成带典型特征的 DataFrame，用于测试/演示。
+    不连任何数据源，不影响缓存。
+    """
+    import random as _r
+    _r.seed(42)
+    codes  = [f"{i:06d}" for i in range(600000, 600200)]    # 200 只沪市
+    codes += [f"{i:06d}" for i in range(1, 101)]            # 100 只深市 000001–000100
+    names  = [f"模拟股{i}" for i in range(len(codes))]
+    rows   = []
+    for code, name in zip(codes, names):
+        rows.append({
+            "code":          code,
+            "name":          name,
+            "close":         round(_r.uniform(5, 80), 2),
+            "open":          round(_r.uniform(5, 80), 2),
+            "high":          round(_r.uniform(5, 80), 2),
+            "low":           round(_r.uniform(5, 80), 2),
+            "pre_close":     round(_r.uniform(5, 80), 2),
+            "amount":        _r.randint(50_000_000, 5_000_000_000),
+            "volume":        _r.randint(1_000_000, 100_000_000),
+            "change_pct":    round(_r.uniform(-5, 10), 2),
+            "turnover_rate": round(_r.uniform(0.5, 30), 2),
+        })
+    df = pd.DataFrame(rows)
+    logger.info(f"[simulate] 生成模拟行情 {len(df)} 只股票")
+    return df
+
+
 def _spot_via_sina() -> pd.DataFrame:
     """
     新浪财经 ak.stock_zh_a_spot()，盘前/盘后均可用（约30秒）。
@@ -413,7 +444,17 @@ def fetch_market_spot(
 
     若使用过期缓存兜底，会在 _provenance 中标记 is_stale_cache=True，
     调用方应根据该标记决定是否写入 trade_review.csv 并在推送中给出"仅供观察"提示。
+
+    支持模拟模式（Simulate Mode）：
+      环境变量 SIMULATE_MODE=true 或 config.yaml data_source.simulate_data=true 时，
+      返回模拟行情，不连真实数据源。用于调试/演示/测试。
     """
+    # ── 模拟模式检测：优先于一切真实数据源熔断 ──
+    sim_env  = os.environ.get("SIMULATE_MODE", "").lower() == "true"
+    sim_cfg  = (cfg or {}).get("data_source", {}).get("simulate_data", False)
+    if sim_env or sim_cfg:
+        return _fetch_simulated_spot()
+
     if trade_date is None:
         trade_date = _last_trading_date()
 

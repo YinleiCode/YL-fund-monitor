@@ -75,10 +75,11 @@ output:
   logs_directory: "logs"
 
 data_source:
-  prefer_source: sina              # auto=东方财富优先+新浪兜底 / eastmoney=只用东方财富 / sina=直接用新浪
-  allow_sina_fallback: true        # false=禁止新浪备用（仅东方财富）
+  prefer_source: auto              # auto=东方财富优先+新浪兜底 / eastmoney=只用东方财富 / sina=直接用新浪
+  allow_sina_fallback: true        # true=允许新浪备用（自动模式时新浪兜底）
   log_data_source: true            # true=在日志/MD/CSV记录数据源溯源信息
   min_spot_count: 4000             # 低于此数视为数据不完整，auto模式自动切换新浪
+  simulate_data: false             # true=用模拟数据替代真实行情（测试/simulate 模式），false=正常从东方财富/新浪获取
 
 # ──────────────────────────────────────────────────────────────────────────
 # V1.4 买入标准 = 逻辑 + 资金 + 买点 + 风险
@@ -86,7 +87,7 @@ data_source:
 #   - 修改 version_effective_from 可推迟/提前切换；今天已确认的记录不会重算
 # ──────────────────────────────────────────────────────────────────────────
 buy_rules:
-  version_effective_from: "20260527"   # V1.4 启用日期（含），盘前 report_date
+  version_effective_from: "20260529"   # V1.4 启用日期（含），盘前 report_date
   v1_4:
     # 「有效推荐」预闸：不满足直接观察，不进入9:36买入确认
     theme_strength_min:   50           # theme_auto：主题强度门槛

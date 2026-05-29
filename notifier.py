@@ -12,6 +12,92 @@ logger = logging.getLogger(__name__)
 MEDALS = ["🥇", "🥈", "🥉"]
 
 
+def _display_value(v, default: str = "暂无") -> str:
+    if v is None:
+        return default
+    s = str(v).strip()
+    if not s or s.lower() in ("nan", "none", "null"):
+        return default
+    return s
+
+
+def _bool_cn(v) -> str:
+    s = str(v).strip().lower()
+    if s in ("true", "1", "yes", "y"):
+        return "是"
+    if s in ("false", "0", "no", "n"):
+        return "否"
+    return "暂无"
+
+
+def _v16_action_cn(action: str) -> str:
+    a = _display_value(action, "")
+    mapping = {
+        "v16_plan_only_observe": "V1.6 复盘计划要求只观察",
+        "only_observe": "V1.6 复盘计划要求只观察",
+        "observe_only": "V1.6 复盘计划要求只观察",
+        "allow": "V1.6 复盘计划允许进入 9:36 技术确认",
+        "allow_check_buy": "V1.6 复盘计划允许进入 9:36 技术确认",
+        "normal": "V1.6 复盘计划允许进入 9:36 技术确认",
+        "block": "V1.6 复盘计划拦截",
+        "blocked": "V1.6 复盘计划拦截",
+    }
+    return mapping.get(a, a or "暂无")
+
+
+def _money_decision_cn(decision: str) -> str:
+    d = _display_value(decision, "")
+    mapping = {
+        "keep": "资金条件层观察：资金通过",
+        "pass": "资金条件层观察：资金通过",
+        "filter": "资金条件层观察：资金不通过",
+        "block": "资金条件层观察：资金不通过",
+        "fail": "资金条件层观察：资金不通过",
+        "missing": "资金条件层观察：暂无数据",
+        "unavailable": "资金条件层观察：数据源不可用",
+    }
+    return mapping.get(d, f"资金条件层观察：{d}" if d else "暂无")
+
+
+def _money_source_cn(source: str) -> str:
+    s = _display_value(source, "")
+    mapping = {
+        "push2his": "东方财富主源",
+        "eastmoney": "东方财富主源",
+        "ths_simple": "同花顺备源（简化口径）",
+        "unavailable": "数据源不可用",
+    }
+    return mapping.get(s, s or "暂无")
+
+
+def _format_v16_money_lines(r: dict) -> list:
+    keys = (
+        "v16_plan_action", "v16_only_observe", "v16_plan_reason",
+        "v16_trade_permission", "v16_allowed_theme_match",
+        "v16_focus_stock_match", "v15_money_decision",
+        "v15_money_source", "v15_money_reason",
+    )
+    if not any(_display_value(r.get(k), "") for k in keys):
+        return []
+
+    only_observe = str(r.get("v16_only_observe", "")).strip().lower()
+    if only_observe in ("true", "1", "yes", "y"):
+        observe_text = "只观察，不进入 9:36 模拟买入"
+    elif only_observe in ("false", "0", "no", "n"):
+        observe_text = "否"
+    else:
+        observe_text = "暂无"
+
+    return [
+        f"　├ V1.6复盘计划：{_v16_action_cn(r.get('v16_plan_action'))}",
+        f"　├ 是否只观察：{observe_text}；交易权限：{_display_value(r.get('v16_trade_permission'))}",
+        f"　├ 主线命中：{_bool_cn(r.get('v16_allowed_theme_match'))}；核心观察股：{_bool_cn(r.get('v16_focus_stock_match'))}",
+        f"　├ V1.6原因：{_display_value(r.get('v16_plan_reason'))}",
+        f"　├ 资金条件层（观察模式）：{_money_decision_cn(r.get('v15_money_decision'))}",
+        f"　└ 资金来源：{_money_source_cn(r.get('v15_money_source'))}；原因：{_display_value(r.get('v15_money_reason'))}",
+    ]
+
+
 def format_message(
     top3: List[dict],
     market: dict,
@@ -140,6 +226,8 @@ def format_check_buy_message(results: list, report_date: str) -> tuple:
         "theme_strength_too_low":          "主题强度不足，暂不买入",
         "full_score_not_strong_enough":    "全A模式分数或人气技术不够强，只观察不买入",
         "open_change_too_low_hard":        "开盘跌幅超过3%，明显弱开，直接放弃",
+        "v16_plan_only_observe":           "V1.6 复盘计划要求只观察",
+        "v16_only_observe":                "只观察，不进入 9:36 模拟买入",
         # 9:36 技术确认层辅助提示
         "open_change_weak_watch":          "低开超过1%，开盘偏弱，但不单独否决",
     }
@@ -171,6 +259,7 @@ def format_check_buy_message(results: list, report_date: str) -> tuple:
                 f"**{name}（{code}）{tag}**：不买入（**主因**：{main_zh}）"
             )
             lines.append("　└ 仅作观察样本，未进入9:36买入确认")
+            lines.extend(_format_v16_money_lines(r))
             lines.append("")
             continue
 
@@ -193,6 +282,7 @@ def format_check_buy_message(results: list, report_date: str) -> tuple:
                 lines.append(f"　├ 资金：{br.get('funds', '—')}")
                 lines.append(f"　├ 买点：{br.get('entry', '—')}")
                 lines.append(f"　└ 风险：{br.get('risk',  '—')}")
+            lines.extend(_format_v16_money_lines(r))
             # 软警告（如低开-1%~-3%但仍模拟买入）也展示
             soft = r.get("soft_fail_reasons") or []
             if soft:
@@ -212,6 +302,7 @@ def format_check_buy_message(results: list, report_date: str) -> tuple:
             if soft:
                 soft_zh = "；".join(_reason_map.get(x, x) for x in soft)
                 lines.append(f"　└ 辅助：{soft_zh}")
+            lines.extend(_format_v16_money_lines(r))
 
         lines.append("")
 

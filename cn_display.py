@@ -72,6 +72,23 @@ COL_CN: dict = {
     "risk_adjusted_success":   "风险调整后是否成功",
     "ambiguous_path":          "路径是否不确定",
     "not_bought_tracking":     "未买入观察样本",
+    # V1.5-beta 资金条件审计字段
+    "v15_gate_mode":           "资金门控模式",
+    "v15_money_decision":      "资金判定结果",
+    "v15_money_source":        "资金数据源",
+    "v15_money_reason":        "资金判定原因",
+    "v15_blocks_buy":          "资金是否拦截买入",
+    # V1.6 复盘计划驱动选股字段
+    "v16_plan_enabled":        "复盘计划是否生效",
+    "v16_plan_date":           "计划生成日期",
+    "v16_market_state":        "市场状态（计划预判）",
+    "v16_trade_permission":    "交易权限（计划预判）",
+    "v16_allowed_theme_match": "候选主题是否匹配允许主题",
+    "v16_focus_stock_match":   "候选是否在关注池",
+    "v16_avoid_theme_match":   "候选主题是否在规避主题",
+    "v16_plan_action":         "计划动作描述",
+    "v16_plan_reason":         "计划原因",
+    "v16_only_observe":        "计划指定仅观察",
 }
 
 MODE_CN: dict = {
@@ -86,6 +103,12 @@ BOOL_COLS: set = {
     "risk_adjusted_success", "ambiguous_path", "not_bought_tracking",
     "required_conditions_passed",
     "second_check_passed",
+    "v15_blocks_buy",
+    "v16_plan_enabled",
+    "v16_allowed_theme_match",
+    "v16_focus_stock_match",
+    "v16_avoid_theme_match",
+    "v16_only_observe",
 }
 
 NOTES_CN: dict = {
@@ -109,6 +132,20 @@ NOTES_CN: dict = {
     "second_check_below_ma5":          "10:00 低于5日均线",
     "second_check_not_above_0935":     "10:00 未高于 9:36 价",
     "second_check_unable_limit_up":    "一字涨停买不进",
+    # V1.5-beta 资金审计备注（交叉引用 v15_money_decision）
+    "fund_ok":                         "资金条件通过",
+    "fund_fail":                       "资金条件不通过",
+    "fund_data_missing":               "资金条件缺失",
+    "fund_source_unavailable":         "资金源不可用",
+    "fund_disabled":                   "资金条件未启用",
+    # V1.6 计划动作描述
+    "v16_action_priority_buy":         "优先级买入（核心关注+允许主题双标）",
+    "v16_action_watch_focus":          "关注池观察（在关注池但主题不在允许列表）",
+    "v16_action_watch_theme":          "主题观察（主题在允许列表但不在关注池）",
+    "v16_action_avoid":                "规避主题（主题在规避列表，跳过买入确认）",
+    "v16_action_normal":               "正常观察（不在关注池/允许主题/规避列表）",
+    "v16_action_disabled":             "复盘计划未生效（fallback）",
+    "v16_action_plan_missing":         "无复盘计划数据",
     "realtime_data_missing":           "实时行情获取失败",
     "realtime_price_invalid":          "价格数据无效",
 }
@@ -153,6 +190,10 @@ def generate_cn_csv(
             df["notes"] = df["notes"].apply(_trans_notes)
         if "second_check_reason" in df.columns:
             df["second_check_reason"] = df["second_check_reason"].apply(_trans_notes)
+        if "v15_money_reason" in df.columns:
+            df["v15_money_reason"] = df["v15_money_reason"].apply(_trans_notes)
+        if "v16_plan_reason" in df.columns:
+            df["v16_plan_reason"] = df["v16_plan_reason"].apply(_trans_notes)
 
         df = df.rename(columns={k: v for k, v in COL_CN.items() if k in df.columns})
         df.to_csv(dst, index=False, encoding="utf-8-sig")

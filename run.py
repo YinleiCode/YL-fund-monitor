@@ -58,11 +58,17 @@ def main() -> None:
     parser.add_argument("--monthly-review",  action="store_true", help="生成本月复盘报告并推送")
     parser.add_argument("--test-notify",     action="store_true", help="发送测试推送验证Server酱配置")
     parser.add_argument("--theme-auto",      action="store_true", help="主题龙头模式（并行实验组）")
+    parser.add_argument("--simulate",         action="store_true", help="使用模拟数据（不连真实数据源）")
     args = parser.parse_args()
 
     setup_logging()
     logger = logging.getLogger("run")
     cfg = load_config()
+
+    if args.simulate or load_config().get("data_source", {}).get("simulate_data", False):
+        os.environ["SIMULATE_MODE"] = "true"
+        logger = logging.getLogger("run")
+        logger.info("[simulate] SIMULATE_MODE=true 已设置，data_fetcher 将使用模拟数据")
 
     sendkey = os.environ.get("SERVERCHAN_SENDKEY", "")
     debug   = os.environ.get("DEBUG_MODE", "false").lower() == "true"
