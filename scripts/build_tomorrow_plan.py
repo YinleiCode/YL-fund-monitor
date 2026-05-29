@@ -125,6 +125,25 @@ MARKET_STATE_TO_RISK = {
 }
 
 
+def _data_gap_reasons(
+    market_state: str,
+    sentiment_data_status: str,
+    sector_data_status: str,
+    allowed_themes: list,
+) -> list:
+    """Return conservative safety reasons that require observation mode."""
+    reasons = []
+    if market_state == "数据不足":
+        reasons.append("market_state=数据不足")
+    if sentiment_data_status != "ok":
+        reasons.append(f"sentiment_data_status={sentiment_data_status or 'missing'}")
+    if sector_data_status != "ok":
+        reasons.append(f"sector_data_status={sector_data_status or 'missing'}")
+    if not allowed_themes:
+        reasons.append("allowed_themes 为空")
+    return reasons
+
+
 # 默认 noise blocklist（与 build_market_daily.py 保持一致）
 SECTOR_NOISE_BLOCKLIST_KEYWORDS = [
     "融资融券", "深股通", "沪股通", "创业板综",
@@ -465,18 +484,10 @@ def build_tomorrow_plan(report_date: str) -> dict:
 
     # ── 派生 ──
     state, confidence, state_source = _derive_market_state(daily)
-    permission = MARKET_STATE_TO_PERMISSION.get(state, "只观察")
-    risk_level = MARKET_STATE_TO_RISK.get(state, "高")
-
     allowed_themes_data = _derive_allowed_themes(daily, top_n=5)
     avoid_themes_data   = _derive_avoid_themes()
     focus_stocks_data, _ = _derive_focus_stocks(tr_rows, mf_rows)
     n_stopped, _stopped_list = _has_stop_loss_today(lc_rows)
-
-    trigger, invalidation, emergency = _build_default_trigger_invalidation(
-        state, allowed_themes_data, focus_stocks_data
-    )
-    strategy_desc = _build_strategy_desc(state, permission, allowed_themes_data)
 
     # 审计字段
     sentiment_data_status = _safe_str(daily.get("sentiment_data_status")) if daily else "missing"
@@ -484,16 +495,35 @@ def build_tomorrow_plan(report_date: str) -> dict:
     mf_available          = bool(mf_rows)
     lifecycle_available   = bool(lc_rows is not None and (LC_DIR / f"candidate_lifecycle_{report_date}.csv").exists())
 
+    permission = MARKET_STATE_TO_PERMISSION.get(state, "只观察")
+    risk_level = MARKET_STATE_TO_RISK.get(state, "高")
+    data_gap_reasons = _data_gap_reasons(
+        state, sentiment_data_status, sector_data_status, allowed_themes_data
+    )
+    if data_gap_reasons:
+        permission = "只观察"
+        risk_level = "高"
+
+    trigger, invalidation, emergency = _build_default_trigger_invalidation(
+        state, allowed_themes_data, focus_stocks_data
+    )
+    strategy_desc = _build_strategy_desc(state, permission, allowed_themes_data)
+
     # 是否需要人工确认
     manual_review_required = (
         state == "数据不足"
         or sentiment_data_status != "ok"
         or sector_data_status    != "ok"   # 🆕 主线板块数据缺失/过期也需要人工确认
+        or not allowed_themes_data
         or "[需人工确认]" in (trigger + invalidation + emergency + strategy_desc)
     )
 
     # 🆕 notes 增补：主线板块数据缺失/过期时明确写入（用户原话）
     notes_parts = [f"n_stopped_today={n_stopped}"]
+    if data_gap_reasons:
+        notes_parts.append(
+            "数据不足/主线缺失，仅观察；原因：" + "、".join(data_gap_reasons)
+        )
     if sector_data_status != "ok":
         sector_detail = ""
         if daily is not None:
@@ -822,11 +852,31 @@ def _merge_keep_manual(new_record: dict, existing: dict) -> dict:
     其它字段（market_state / allowed_themes / focus_stocks 等）保持 new_record 的新值。
     """
     merged = dict(new_record)
+    data_gap_reasons = _data_gap_reasons(
+        str(new_record.get("market_state", "")).strip(),
+        str(new_record.get("sentiment_data_status", "")).strip() or "missing",
+        str(new_record.get("sector_data_status", "")).strip() or "missing",
+        [t.strip() for t in str(new_record.get("allowed_themes", "")).split("|") if t.strip()],
+    )
     kept_fields = []
     for k in MERGE_KEEP_FIELDS:
+        if data_gap_reasons and k in ("trade_permission", "risk_level", "manual_review_required", "manual_reviewed_at"):
+            continue
         if k in existing and str(existing.get(k, "")).strip():
             merged[k] = existing[k]
             kept_fields.append(k)
+    if data_gap_reasons:
+        merged["trade_permission"] = "只观察"
+        merged["risk_level"] = "高"
+        merged["manual_review_required"] = "True"
+        merged["manual_reviewed_at"] = ""
+        note = str(merged.get("notes", "")).strip()
+        safety_note = (
+            "merge-keep-manual 安全保护：当前数据不足/主线缺失，未保留旧的正常交易人工字段；原因："
+            + "、".join(data_gap_reasons)
+        )
+        merged["notes"] = f"{note} ｜ {safety_note}" if note else safety_note
+        print(f"  [merge-keep-manual] 安全保护：{safety_note}")
     print(f"  [merge-keep-manual] 保留 {len(kept_fields)} 个人工字段：{kept_fields}")
     return merged
 

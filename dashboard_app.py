@@ -4589,6 +4589,19 @@ def _tp_save_plan_with_edits(orig_plan: dict, edits: dict) -> tuple:
         return False, f"trade_permission={new_plan.get('trade_permission')!r} 不在白名单"
     if new_plan.get("risk_level") not in TP_RISK_LEVELS:
         return False, f"risk_level={new_plan.get('risk_level')!r} 不在白名单"
+    unsafe_normal_trade = (
+        new_plan.get("trade_permission") == "正常交易"
+        and (
+            str(new_plan.get("market_state", "")).strip() == "数据不足"
+            or str(new_plan.get("sector_data_status", "")).strip() != "ok"
+            or not [t.strip() for t in str(new_plan.get("allowed_themes", "")).split("|") if t.strip()]
+        )
+    )
+    if unsafe_normal_trade and not bool(edits.get("confirm_unsafe_normal_trade")):
+        return False, (
+            "当前数据不足或主线缺失，不建议保存为正常交易。"
+            "请改为「只观察」或「只做主线核心」；如确需保存正常交易，请先完成二次确认。"
+        )
 
     # 写入路径
     report_date = str(new_plan.get("report_date", "")).strip()
@@ -4984,6 +4997,7 @@ def page_tomorrow_plan() -> None:
             "trigger_conditions":      edited_trigger,
             "invalidation_conditions": edited_invalid,
             "emergency_plan":          edited_emergency,
+            "confirm_unsafe_normal_trade": confirm_unsafe_normal,
         }
         ok, msg = _tp_save_plan_with_edits(plan, edits)
         if ok:
