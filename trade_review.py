@@ -783,6 +783,21 @@ def _classify_open_change_v14(open_chg: float, cfg: dict) -> tuple:
     return (None, None)
 
 
+def _limit_ratio(code: str) -> float:
+    """创业板/科创板20%，北交所4/8开头30%，其余10%。"""
+    code = str(code).zfill(6)
+    if code.startswith(("300", "301", "688")):
+        return 0.20
+    if code.startswith(("4", "8")):
+        return 0.30
+    return 0.10
+
+
+def _price_frozen_pct(cur_price: float, open_price: float) -> bool:
+    """Use a relative threshold so high-price stocks are not over-flagged."""
+    return open_price > 0 and abs((cur_price - open_price) / open_price) < 0.001
+
+
 def _build_buy_reasons_v14(
     row: pd.Series, mode: str, theme_name: str, theme_strength: Optional[float],
     open_chg: float, cur_price: float, open_p: float, ma5: Optional[float],
@@ -1037,9 +1052,9 @@ def check_buy(cfg: dict) -> list:
         open_chg = (open_p / prev_close - 1) * 100
 
         # 一字涨停板检测
-        limit_r      = 0.20 if code.startswith(("300", "301", "688")) else 0.10
+        limit_r      = _limit_ratio(code)
         at_limit_open = open_chg >= limit_r * 100 - 0.5
-        price_frozen  = abs(cur_price - open_p) < 0.01
+        price_frozen  = _price_frozen_pct(cur_price, open_p)
 
         unable_to_buy = False
         unable_reason = ""
@@ -1345,10 +1360,10 @@ def second_check(cfg: dict) -> list:
         ma5        = _gf(row.get("ma5"))
 
         # 一字涨停（用实时数据再判一次，盘中已成交也算可买）
-        limit_r       = 0.20 if code.startswith(("300", "301", "688")) else 0.10
+        limit_r       = _limit_ratio(code)
         open_chg_rt   = (open_p_rt / prev_close - 1) * 100
         at_limit_open = open_chg_rt >= limit_r * 100 - 0.5
-        price_frozen  = abs(cur_price - open_p_rt) < 0.01
+        price_frozen  = _price_frozen_pct(cur_price, open_p_rt)
         unable_to_buy = at_limit_open and price_frozen and vol_lots < 1000
 
         # ── 二次确认通过条件 ──

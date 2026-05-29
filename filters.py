@@ -14,9 +14,12 @@ logger = logging.getLogger(__name__)
 
 
 def _limit_ratio(code: str) -> float:
-    """创业板300/301、科创板688涨跌幅限制20%，其余10%。"""
+    """创业板300/301、科创板688为20%，北交所4/8开头为30%，其余10%。"""
+    code = str(code).zfill(6)
     if code.startswith(("300", "301", "688")):
         return 0.20
+    if code.startswith(("4", "8")):
+        return 0.30
     return 0.10
 
 
