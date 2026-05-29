@@ -83,11 +83,19 @@ def score_technical(ind: dict, cfg: dict) -> float:
 # ==================== 上涨空间 25分 ====================
 
 def _score_dist_60d(dist_pct: float) -> float:
-    """距60日高点 → 0-10，-5%~-15%最优"""
-    below = -dist_pct  # 转为"距高点多少%"（正数=低于高点）
-    if below < 0:
-        return 2.0  # 创新高，追高风险大
-    return _interp(below, [0, 5, 10, 15, 20, 25, 35, 50], [3, 9, 10, 7, 5, 3, 1, 0])
+    """
+    距60日高点 → 0-10。
+    短线策略中，创新高或接近新高的股票动量最强，给予最高分。
+    远离60日高点的股票趋势偏弱，得分递减。
+    """
+    # dist_pct: 负 = 低于高点, 正 = 高于高点(创新高)
+    # 转为"距高点百分比"（正数=低于高点）
+    below = -dist_pct
+    if below <= 0:
+        # 创新高或刚好在60日高点：短线最强的突破形态，满分
+        return 10.0
+    # 低于高点：越远越弱
+    return _interp(below, [0, 5, 10, 15, 20, 25, 35, 50], [10, 9, 8, 6, 4, 3, 1, 0])
 
 
 def _score_return_5d(ret: float) -> float:
