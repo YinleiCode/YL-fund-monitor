@@ -21,6 +21,7 @@ V1.6 看板包含：🛠 手动补跑 页面
 """
 from __future__ import annotations
 
+import html
 import json
 import math
 import os
@@ -430,6 +431,13 @@ def _num_str(v, digits: int = 2, na: str = "—") -> str:
     return f"{f:.{digits}f}" if f is not None else na
 
 
+def _eh(v, default: str = "") -> str:
+    """Escape text before injecting it into unsafe HTML fragments."""
+    if v is None:
+        return default
+    return html.escape(str(v), quote=True)
+
+
 # ─── 数据加载（只读）─────────────────────────────────────────────────────
 
 @st.cache_data(ttl=30)
@@ -622,23 +630,23 @@ def _v16_mf_layer_html(row) -> str:
         if only_observe is True else
         ("否" if only_observe is False else "暂无")
     )
-    plan_action = _v16_action_cn(row.get("v16_plan_action"))
-    plan_reason = _lifecycle_translate_reason(row.get("v16_plan_reason"))
-    trade_perm = _display_value(row.get("v16_trade_permission"))
-    theme_match = _bool_cn(row.get("v16_allowed_theme_match"))
-    focus_match = _bool_cn(row.get("v16_focus_stock_match"))
-    money_decision = _money_decision_cn(row.get("v15_money_decision"))
-    money_source = _money_source_cn(row.get("v15_money_source"))
-    money_reason = _display_value(row.get("v15_money_reason"))
+    plan_action = _eh(_v16_action_cn(row.get("v16_plan_action")), "暂无")
+    plan_reason = _eh(_lifecycle_translate_reason(row.get("v16_plan_reason")), "暂无")
+    trade_perm = _eh(_display_value(row.get("v16_trade_permission")), "暂无")
+    theme_match = _eh(_bool_cn(row.get("v16_allowed_theme_match")), "暂无")
+    focus_match = _eh(_bool_cn(row.get("v16_focus_stock_match")), "暂无")
+    money_decision = _eh(_money_decision_cn(row.get("v15_money_decision")), "暂无")
+    money_source = _eh(_money_source_cn(row.get("v15_money_source")), "暂无")
+    money_reason = _eh(_display_value(row.get("v15_money_reason")), "暂无")
     buy_signal = _gb(row.get("buy_signal_0935"))
     if is_not_checked(row):
         tech_status = "9:36 技术确认尚未运行"
     elif buy_signal is True:
         tech_status = "9:36 技术确认通过，进入模拟买入记录"
     else:
-        reason = _display_value(row.get("main_reason_cn"), "")
+        reason = _eh(_display_value(row.get("main_reason_cn"), ""), "")
         if not reason:
-            reason = _lifecycle_translate_reason(row.get("notes"))
+            reason = _eh(_lifecycle_translate_reason(row.get("notes")), "暂无")
         tech_status = f"9:36 技术确认未通过：{reason}"
 
     return (
@@ -667,10 +675,10 @@ def stock_card(row: pd.Series, variant: str = "default") -> str:
     elif variant == "observe": color = COLOR_SECOND
     elif variant == "drop":    color = COLOR_DROP
 
-    code  = row.get("stock_code", "")
-    name  = row.get("stock_name", "")
-    mode  = row.get("mode_cn", "")
-    theme = row.get("theme_name", "") or "—"
+    code  = _eh(row.get("stock_code", ""))
+    name  = _eh(row.get("stock_name", ""))
+    mode  = _eh(row.get("mode_cn", ""))
+    theme = _eh(row.get("theme_name", "") or "—")
 
     bs = _gb(row.get("buy_signal_0935"))
     if bs is True:    buy_txt = "✅ 已买入"
@@ -703,8 +711,8 @@ def stock_card(row: pd.Series, variant: str = "default") -> str:
     # ⭐ 自选池标记
     is_pool = str(row.get("is_custom_pool", "")).strip().lower() in ("true", "1")
     if is_pool:
-        pool_pri = str(row.get("custom_pool_priority", "")).strip()
-        pool_reason = str(row.get("custom_pool_reason", "")).strip()
+        pool_pri = _eh(str(row.get("custom_pool_priority", "")).strip())
+        pool_reason = _eh(str(row.get("custom_pool_reason", "")).strip())
         pool_badge = f"⭐ 自选池(优先级{pool_pri})"
         if pool_reason:
             pool_badge += f"：{pool_reason}"
@@ -733,8 +741,8 @@ def stock_card(row: pd.Series, variant: str = "default") -> str:
         )
     else:
         # V1.6 展示层主因 + 其他原因（不再直接读 reason_hard_cn 兼容老逻辑）
-        main_cn = row.get("main_reason_cn", "")
-        sec_cn  = row.get("secondary_reasons_cn", "")
+        main_cn = _eh(row.get("main_reason_cn", ""))
+        sec_cn  = _eh(row.get("secondary_reasons_cn", ""))
         parts = []
         if is_not_checked(row):
             parts.append("9:36 检查尚未运行")
@@ -890,7 +898,7 @@ def generate_today_plain_conclusion(
 
     # 有买入：根据 T+1 状态说明
     if state["bought"] > 0:
-        names_txt = "、".join(bought_names) if bought_names else "—"
+        names_txt = "、".join(_eh(n) for n in bought_names) if bought_names else "—"
         if state["waiting_t1"] > 0:
             return (
                 f"今日已模拟买入 <b style='color:{COLOR_BOUGHT};'>{state['bought']}</b> 只"
@@ -931,6 +939,89 @@ def generate_today_plain_conclusion(
         f"今日推荐 {state['total']} 只，9:36 检查全部完成，<b>无符合买入条件的票</b>，"
         f"按 9:36 技术确认层规则继续观察。"
     )
+
+
+def render_today_hero(df: pd.DataFrame, sel_date: str, state: dict, plain_text: str, bought_names: list) -> None:
+    """更聚焦的首页主区：把结论、节奏和关键指标集中到首屏。"""
+    ms = _gf(df["market_sentiment"].iloc[0]) if "market_sentiment" in df.columns and not df.empty else None
+    bought_txt = "、".join(_eh(n) for n in bought_names[:3]) if bought_names else "无"
+    if len(bought_names) > 3:
+        bought_txt += f" 等 {len(bought_names)} 只"
+
+    top_reasons = _count_main_reasons(df)
+    top_reason = _eh(top_reasons[0][0]) if top_reasons else "暂无"
+    top_reason_count = top_reasons[0][1] if top_reasons else 0
+
+    if state["waiting_t1"] > 0:
+        rhythm_text = f"买入确认已完成，当前等待 {state['waiting_t1']} 只 T+1 复盘。"
+    elif state["checked"] < state["total"]:
+        rhythm_text = f"今天还有 {state['total'] - state['checked']} 只候选等待 9:36 检查。"
+    elif state["bought"] > 0:
+        rhythm_text = "今日主流程已经闭环，可以直接切去 T+1 复盘页看结果。"
+    else:
+        rhythm_text = "今天没有形成执行信号，节奏以观察和准备明日计划为主。"
+
+    plain_text = plain_text or "等待新一轮数据进入后，首页会自动刷新为当日结论。"
+    sentiment_chip = f"情绪 {ms:.1f}/10" if ms is not None else "情绪待补"
+
+    hero_html = f"""
+    <div style="
+        background:linear-gradient(135deg, {COLOR_CARD_DEEP} 0%, {COLOR_CARD} 58%, #F9F3E8 100%);
+        border:1px solid {COLOR_BORDER};
+        border-radius:18px;
+        padding:22px 24px 18px 24px;
+        margin:8px 0 18px 0;
+        box-shadow:0 12px 30px rgba(90, 65, 40, 0.08);">
+      <div style="display:flex;justify-content:space-between;gap:18px;align-items:flex-start;flex-wrap:wrap;">
+        <div style="flex:1;min-width:320px;">
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+            <span style="background:rgba(9,105,218,0.10);color:{COLOR_SECOND};padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;">今日总览</span>
+            <span style="background:rgba(31,136,61,0.10);color:{COLOR_BOUGHT};padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;">{_date_fmt(sel_date)}</span>
+            <span style="background:rgba(154,103,0,0.10);color:{COLOR_WAIT_T1};padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;">{sentiment_chip}</span>
+          </div>
+          <div style="font-size:30px;line-height:1.15;font-weight:800;color:{COLOR_TEXT};letter-spacing:-0.02em;">
+            先看结论，再看执行。
+          </div>
+          <div style="margin-top:12px;font-size:15px;line-height:1.8;color:{COLOR_TEXT};">
+            {plain_text}
+          </div>
+          <div style="margin-top:14px;padding:12px 14px;background:rgba(255,255,255,0.30);border:1px solid {COLOR_BORDER_SOFT};border-radius:12px;">
+            <div style="font-size:12px;color:{COLOR_MUTED};text-transform:uppercase;letter-spacing:0.08em;">Today's Rhythm</div>
+            <div style="margin-top:6px;font-size:14px;color:{COLOR_TEXT};font-weight:600;">{_eh(rhythm_text)}</div>
+          </div>
+        </div>
+        <div style="width:320px;max-width:100%;display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div style="background:{COLOR_CARD};border:1px solid {COLOR_BORDER_SOFT};border-radius:14px;padding:14px;">
+            <div style="font-size:12px;color:{COLOR_MUTED};">今日推荐</div>
+            <div style="margin-top:6px;font-size:28px;font-weight:800;color:{COLOR_TEXT};">{state['total']}</div>
+          </div>
+          <div style="background:{COLOR_CARD};border:1px solid {COLOR_BORDER_SOFT};border-radius:14px;padding:14px;">
+            <div style="font-size:12px;color:{COLOR_MUTED};">9:36 已查</div>
+            <div style="margin-top:6px;font-size:28px;font-weight:800;color:{COLOR_SECOND};">{state['checked']}</div>
+          </div>
+          <div style="background:{COLOR_CARD};border:1px solid {COLOR_BORDER_SOFT};border-radius:14px;padding:14px;">
+            <div style="font-size:12px;color:{COLOR_MUTED};">模拟买入</div>
+            <div style="margin-top:6px;font-size:28px;font-weight:800;color:{COLOR_BOUGHT};">{state['bought']}</div>
+          </div>
+          <div style="background:{COLOR_CARD};border:1px solid {COLOR_BORDER_SOFT};border-radius:14px;padding:14px;">
+            <div style="font-size:12px;color:{COLOR_MUTED};">等待 T+1</div>
+            <div style="margin-top:6px;font-size:28px;font-weight:800;color:{COLOR_WAIT_T1};">{state['waiting_t1']}</div>
+          </div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:12px;margin-top:14px;">
+        <div style="background:{COLOR_CARD};border:1px solid {COLOR_BORDER_SOFT};border-radius:14px;padding:14px 16px;">
+          <div style="font-size:12px;color:{COLOR_MUTED};margin-bottom:6px;">今日买入摘要</div>
+          <div style="font-size:14px;line-height:1.7;color:{COLOR_TEXT};">{bought_txt}</div>
+        </div>
+        <div style="background:{COLOR_CARD};border:1px solid {COLOR_BORDER_SOFT};border-radius:14px;padding:14px 16px;">
+          <div style="font-size:12px;color:{COLOR_MUTED};margin-bottom:6px;">未买主因</div>
+          <div style="font-size:14px;line-height:1.7;color:{COLOR_TEXT};">{top_reason}{("（" + str(top_reason_count) + " 只）") if top_reason_count else ""}</div>
+        </div>
+      </div>
+    </div>
+    """
+    st.markdown(hero_html, unsafe_allow_html=True)
 
 
 # ─── 日期下拉：合并多个数据源 ─────────────────────────────────────────
@@ -987,9 +1078,7 @@ def _collect_available_dates() -> list[str]:
 
 # ─── PAGE 1: 今日总览 ────────────────────────────────────────────────────
 
-def _render_today_sidebar_data(report_date: str) -> None:
-    """展示某日期可用但非 trade_review 的数据摘要。"""
-    st.markdown("#### 📂 当日可用数据")
+def _today_data_records(report_date: str) -> list[tuple[str, str]]:
     records = []
 
     md_path = MARKET_DAILY_DIR / f"market_daily_{report_date}.csv"
@@ -1004,17 +1093,73 @@ def _render_today_sidebar_data(report_date: str) -> None:
     if tp_path.exists():
         records.append(("📌 明日计划", tp_path.name))
 
-    ts_dir = T_SIGNAL_DIR
-    if ts_dir.exists():
-        for f in ts_dir.iterdir():
+    if T_SIGNAL_DIR.exists():
+        for f in T_SIGNAL_DIR.iterdir():
             if f.name.endswith(f"{report_date}.csv"):
                 records.append(("📉 做 T 信号", f.name))
+
+    return records
+
+
+def _render_today_sidebar_data(report_date: str) -> None:
+    """展示某日期可用但非 trade_review 的数据摘要。"""
+    st.markdown("#### 📂 当日可用数据")
+    records = _today_data_records(report_date)
 
     if records:
         for label, fname in records:
             st.markdown(f"- {label}（{fname}）")
     else:
         st.markdown("_除 trade_review 外无其他数据。_")
+
+
+def render_today_empty_hero(sel_date: str) -> None:
+    records = _today_data_records(sel_date)
+    count = len(records)
+    record_tags = "".join(
+        f"<span style='display:inline-block;margin:4px 6px 0 0;padding:5px 10px;border-radius:999px;background:{COLOR_CARD};border:1px solid {COLOR_BORDER_SOFT};font-size:12px;color:{COLOR_TEXT};'>{_eh(label)}</span>"
+        for label, _ in records
+    ) or f"<span style='display:inline-block;margin-top:4px;color:{COLOR_MUTED};font-size:12px;'>暂无旁路数据</span>"
+
+    st.markdown(
+        f"""
+        <div style="
+            background:linear-gradient(135deg, {COLOR_CARD_DEEP} 0%, {COLOR_CARD} 62%, #F9F3E8 100%);
+            border:1px solid {COLOR_BORDER};
+            border-radius:18px;
+            padding:22px 24px 18px 24px;
+            margin:8px 0 18px 0;
+            box-shadow:0 12px 30px rgba(90, 65, 40, 0.06);">
+          <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;">
+            <div style="flex:1;min-width:300px;">
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+                <span style="background:rgba(9,105,218,0.10);color:{COLOR_SECOND};padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;">今日总览</span>
+                <span style="background:rgba(154,103,0,0.10);color:{COLOR_WAIT_T1};padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;">{_date_fmt(sel_date)}</span>
+                <span style="background:rgba(31,136,61,0.10);color:{COLOR_BOUGHT};padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;">旁路数据 {count} 份</span>
+              </div>
+              <div style="font-size:30px;line-height:1.15;font-weight:800;color:{COLOR_TEXT};letter-spacing:-0.02em;">
+                今天没有候选记录，但并不是没有数据。
+              </div>
+              <div style="margin-top:12px;font-size:15px;line-height:1.8;color:{COLOR_TEXT};">
+                当前日期还没有写入 <code>trade_review.csv</code> 的候选或买入确认记录，
+                但市场复盘、明日计划、做 T 观察这些旁路模块已经在工作。
+              </div>
+              <div style="margin-top:14px;padding:12px 14px;background:rgba(255,255,255,0.30);border:1px solid {COLOR_BORDER_SOFT};border-radius:12px;">
+                <div style="font-size:12px;color:{COLOR_MUTED};text-transform:uppercase;letter-spacing:0.08em;">Data Ready</div>
+                <div style="margin-top:6px;font-size:14px;color:{COLOR_TEXT};font-weight:600;">
+                  可以继续查看下方文件摘要，或切去「明日交易计划」「做 T 观察」页继续分析。
+                </div>
+              </div>
+            </div>
+            <div style="width:320px;max-width:100%;background:{COLOR_CARD};border:1px solid {COLOR_BORDER_SOFT};border-radius:14px;padding:16px;">
+              <div style="font-size:12px;color:{COLOR_MUTED};margin-bottom:8px;">当前已生成模块</div>
+              <div style="font-size:14px;line-height:1.8;color:{COLOR_TEXT};">{record_tags}</div>
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def page_today(df_all: pd.DataFrame) -> None:
@@ -1041,6 +1186,7 @@ def page_today(df_all: pd.DataFrame) -> None:
             f"但存在市场复盘 / 明日计划 / T 信号等记录。",
             "info",
         )
+        render_today_empty_hero(sel_date)
         # 依然展示 V1.6 旁路数据摘要
         _render_today_sidebar_data(sel_date)
         return
@@ -1058,7 +1204,7 @@ def page_today(df_all: pd.DataFrame) -> None:
     # 今日结论
     state        = compute_today_state(df)
     bought_names = [r["stock_name"] for _, r in df.iterrows() if is_bought(r)]
-    bought_txt   = "、".join(bought_names) if bought_names else "无"
+    bought_txt   = "、".join(_eh(n) for n in bought_names) if bought_names else "无"
     n_nobuy      = state["checked"] - state["bought"]
     n_uncheck    = state["total"] - state["checked"]
     conclusion = (
@@ -1076,16 +1222,8 @@ def page_today(df_all: pd.DataFrame) -> None:
         unsafe_allow_html=True,
     )
 
-    # —— 大白话结论（动态生成）——
     plain_text = generate_today_plain_conclusion(df, state, bought_names)
-    if plain_text:
-        st.markdown(
-            f"<div style='background:{COLOR_CARD_DEEP};border-left:4px solid {COLOR_SECOND};"
-            f"border-radius:6px;padding:12px 16px;margin-bottom:14px;font-size:14px;"
-            f"color:{COLOR_TEXT};line-height:1.7;'>"
-            f"💬 {plain_text}</div>",
-            unsafe_allow_html=True,
-        )
+    render_today_hero(df, sel_date, state, plain_text, bought_names)
 
     # KPI 卡片（5个）
     cols = st.columns(5)
@@ -1119,33 +1257,18 @@ def page_today(df_all: pd.DataFrame) -> None:
             st.markdown(stock_card(r, variant="bought"), unsafe_allow_html=True)
 
     # —— Top3 不买原因 ——
-    bucket = {}
-    for _, r in df.iterrows():
-        if is_bought(r):
-            continue
-        for p in str(r.get("notes", "")).split(";"):
-            p = p.strip()
-            if not p:
-                continue
-            slot = bucket.setdefault(p, {"count": 0, "stocks": []})
-            slot["count"] += 1
-            nm = str(r.get("stock_name", "")).strip()
-            if nm and nm not in slot["stocks"]:
-                slot["stocks"].append(nm)
-
-    if bucket:
-        top3 = sorted(bucket.items(), key=lambda x: x[1]["count"], reverse=True)[:3]
+    top3 = _count_main_reasons(df)[:3]
+    if top3:
         st.markdown("### 📉 今日不买原因 Top3")
-        for code, data in top3:
-            cn = _reason_zh(code)
-            stocks_txt = "、".join(data["stocks"])
+        for label, count, stocks in top3:
+            stocks_txt = "、".join(_eh(s) for s in stocks)
             st.markdown(
                 f"<div style='background:{COLOR_CARD};border:1px solid {COLOR_BORDER};"
                 f"border-left:3px solid {COLOR_NO_BUY};border-radius:6px;padding:10px 14px;"
                 f"margin-bottom:8px;'>"
-                f"<div style='font-size:13px;color:{COLOR_TEXT};font-weight:600;'>{cn}</div>"
+                f"<div style='font-size:13px;color:{COLOR_TEXT};font-weight:600;'>{_eh(label)}</div>"
                 f"<div style='font-size:12px;color:{COLOR_MUTED};margin-top:4px;'>"
-                f"共 <b>{data['count']}</b> 次　涉及：{stocks_txt}</div>"
+                f"共 <b>{count}</b> 次　涉及：{stocks_txt}</div>"
                 f"</div>",
                 unsafe_allow_html=True,
             )
