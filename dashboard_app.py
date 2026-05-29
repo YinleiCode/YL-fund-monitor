@@ -5286,32 +5286,20 @@ def page_t_signal() -> None:
 
     if display_df.empty:
         if not df_real.empty:
-            # 有真实但筛选后无匹配
             st.info("无匹配真实 T 信号记录。")
             return
         if not df_sample.empty and not show_sample:
-            # 只有测试样例且未勾选
             status_banner(
                 "暂无真实做 T 信号记录。当前测试样例已隐藏；"
                 "测试样例仅用于规则验证，不代表真实行情。",
                 "info",
             )
-            if st.checkbox("显示测试样例记录", key="ts_show_sample_alt",
-                           help="勾选后显示本地测试样例 T 信号"):
-                display_df = df_sample.copy()
-                status_banner(
-                    "当前显示的是本地测试样例 T 信号，仅用于规则验证，"
-                    "不代表真实行情，不构成自动买卖指令。",
-                    "warning",
-                )
-            else:
-                return
-        else:
-            status_banner(
-                "暂无做 T 信号记录。当前模块仅为模拟观察，不会自动买卖。",
-                "info",
-            )
             return
+        status_banner(
+            "暂无做 T 信号记录。当前模块仅为模拟观察，不会自动买卖。",
+            "info",
+        )
+        return
 
     # ── 1. 安全检测（基于 display_df） ──────────────────────────────
     all_simulate = all(
