@@ -962,31 +962,124 @@ def fetch_burst_board_pool(trade_date: str) -> Optional[pd.DataFrame]:
 
 # =================== 上证指数 ===================
 
+def _fetch_sh_index_via_push2delay() -> Optional[float]:
+    """备用源 1：push2delay.eastmoney.com 直连上证指数 K 线，取最新涨跌幅。"""
+    try:
+        # 上证指数 secid = 1.000001
+        secid  = "1.000001"
+        end    = date.today().strftime("%Y%m%d")
+        start  = (date.today() - timedelta(days=10)).strftime("%Y%m%d")
+        params = {
+            "fields1": "f1,f2,f3,f4,f5,f6",
+            "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
+            "ut": "7eea3edcaed734bea9cbfc24409ed989",
+            "klt": 101, "fqt": 0,
+            "secid": secid,
+            "beg": start, "end": end,
+        }
+        path = "/api/qt/stock/kline/get?" + _build_query(params)
+        raw  = _raw_get(_DELAY_HOST, path, timeout=15)
+        if not raw:
+            return None
+        data     = json.loads(raw)
+        klines   = data.get("data", {}).get("klines") or []
+        if not klines:
+            return None
+        last     = klines[-1].split(",")
+        if len(last) < 11:
+            return None
+        chg_pct  = float(last[8])
+        logger.info(f"上证指数获取（push2delay）: {chg_pct:+.2f}%")
+        return chg_pct
+    except Exception as e:
+        logger.debug(f"push2delay 上证指数获取失败: {type(e).__name__}: {e}")
+        return None
+
+
+def _fetch_sh_index_via_sina_hq() -> Optional[float]:
+    """备用源 2：新浪 hq.sinajs.cn 获取上证指数实时涨跌幅。"""
+    try:
+        url     = "https://hq.sinajs.cn/list=s_sh000001"
+        headers = {"Referer": "https://finance.sina.com.cn"}
+        resp    = _requests.get(url, headers=headers, timeout=10)
+        resp.encoding = "gbk"
+        text = resp.text.strip()
+        if not text:
+            return None
+        # var hq_str_s_sh000001="上证指数,3186.63,3186.63,..."
+        fields = text.split('"')
+        if len(fields) < 2:
+            return None
+        parts = fields[1].split(",")
+        if len(parts) < 4:
+            return None
+        # 新浪指数格式: name,close,change_amount,change_pct,volume,amount
+        # 与个股不同（个股: name,open,prev_close,close,high,low,...）
+        # 示例: "上证指数,4068.5691,-30.0667,-0.73,7315977,153206735"
+        if len(parts) >= 4:
+            chg_pct = float(parts[3])
+            logger.info(f"上证指数获取（新浪 hq）: {chg_pct:+.2f}%")
+            return chg_pct
+        return None
+    except Exception as e:
+        logger.debug(f"新浪 hq 上证指数获取失败: {type(e).__name__}: {e}")
+        return None
+
+
 def fetch_sh_index_change(trade_date: str) -> Optional[float]:
+    """
+    获取上证指数涨跌幅(%): 多源 fallback。
+
+    fallback 链:
+      ① 缓存
+      ② akshare index_zh_a_hist (东方财富)
+      ③ push2delay 直连 (东方财富直连，绕过 akshare)
+      ④ 新浪 hq.sinajs.cn
+      ⑤ 全部失败 → None
+    """
+    # ① 缓存
     cached = cache.load("sh_index_chg", trade_date)
     if cached is not None:
         return cached
-    if not _AKSHARE_OK:
-        logger.warning("上证指数获取失败: akshare 不可用")
-        return None
+
+    # ② akshare EM
+    if _AKSHARE_OK:
+        try:
+            end   = date.today().strftime("%Y%m%d")
+            start = (date.today() - timedelta(days=10)).strftime("%Y%m%d")
+            df    = _retry(ak.index_zh_a_hist, symbol="000001", period="daily",
+                           start_date=start, end_date=end)
+            if df is not None and not df.empty:
+                chg_col = next((c for c in df.columns if "涨跌幅" in c), None)
+                if chg_col is not None:
+                    chg = float(df[chg_col].iloc[-1])
+                    cache.save("sh_index_chg", chg, trade_date)
+                    logger.info(f"上证指数获取（akshare）: {chg:+.2f}%")
+                    return chg
+        except Exception as e:
+            logger.warning(f"上证指数获取（akshare）失败: {type(e).__name__}: {e}")
+
+    # ③ push2delay 直连
     try:
-        end   = date.today().strftime("%Y%m%d")
-        start = (date.today() - timedelta(days=10)).strftime("%Y%m%d")
-        df    = _retry(ak.index_zh_a_hist, symbol="000001", period="daily",
-                       start_date=start, end_date=end)
-        if df is None or df.empty:
-            logger.warning("上证指数获取失败: akshare 返回空数据")
-            return None
-        chg_col = next((c for c in df.columns if "涨跌幅" in c), None)
-        if chg_col is None:
-            logger.warning(f"上证指数获取失败: 未找到涨跌幅列 columns={list(df.columns)}")
-            return None
-        chg = float(df[chg_col].iloc[-1])
-        cache.save("sh_index_chg", chg, trade_date)
-        return chg
+        chg = _fetch_sh_index_via_push2delay()
+        if chg is not None:
+            cache.save("sh_index_chg", chg, trade_date)
+            return chg
     except Exception as e:
-        logger.warning(f"上证指数获取失败: {e}")
-        return None
+        logger.debug(f"上证指数获取（push2delay）异常: {type(e).__name__}: {e}")
+
+    # ④ 新浪 hq
+    try:
+        chg = _fetch_sh_index_via_sina_hq()
+        if chg is not None:
+            cache.save("sh_index_chg", chg, trade_date)
+            return chg
+    except Exception as e:
+        logger.debug(f"上证指数获取（新浪 hq）异常: {type(e).__name__}: {e}")
+
+    # ⑤ 全部失败
+    logger.warning("上证指数获取失败: 所有数据源（akshare/push2delay/新浪 hq）均失败")
+    return None
 
 
 def last_trading_date() -> str:
