@@ -166,6 +166,7 @@ def _reset_v15_flags_cache() -> None:
 #     → v16_plan_reason 写明 fallback 原因
 
 _V16_FLAGS_CACHE: Optional[dict] = None
+_V16_PLAN_LOAD_REASON: str = ""
 
 
 def _load_v16_flags() -> dict:
@@ -210,6 +211,9 @@ def _load_v16_plan_for_report_date(report_date: str, flags: dict) -> Optional[di
     返回 plan dict（含派生 allowed_themes_set / avoid_themes_set / focus_codes_set）；
     任何缺失/不匹配返回 None（上层做 fallback）。
     """
+    global _V16_PLAN_LOAD_REASON
+    _V16_PLAN_LOAD_REASON = ""
+
     if not flags.get("enabled", False) or not flags.get("plan_filter_enabled", False):
         return None
 
@@ -219,11 +223,16 @@ def _load_v16_plan_for_report_date(report_date: str, flags: dict) -> Optional[di
     if source == "latest":
         fp = plan_dir / "tomorrow_plan_latest.csv"
     else:
-        # by_date 模式：用 report_date 的"前一交易日"作为 plan_date
-        # 第一阶段仅支持 latest，by_date 留接口
-        fp = plan_dir / f"tomorrow_plan_{report_date}.csv"
+        # by_date 模式：今天的 9:36 推荐由前一交易日盘后计划指导。
+        try:
+            from data_fetcher import prev_trading_date
+            plan_date = prev_trading_date(str(report_date))
+        except Exception:
+            plan_date = str(report_date)
+        fp = plan_dir / f"tomorrow_plan_{plan_date}.csv"
 
     if not fp.exists():
+        _V16_PLAN_LOAD_REASON = f"明日计划文件不存在：{fp.name}"
         return None
 
     try:
@@ -231,9 +240,11 @@ def _load_v16_plan_for_report_date(report_date: str, flags: dict) -> Optional[di
         with fp.open("r", encoding="utf-8-sig", newline="") as f:
             rows = list(_csv.DictReader(f))
         if not rows:
+            _V16_PLAN_LOAD_REASON = f"明日计划文件为空：{fp.name}"
             return None
         plan = rows[0]
     except Exception as e:
+        _V16_PLAN_LOAD_REASON = f"读取明日计划异常：{type(e).__name__}: {e}"
         logger.warning(f"[v16] 读 plan 文件异常: {type(e).__name__}: {e}")
         return None
 
@@ -241,6 +252,10 @@ def _load_v16_plan_for_report_date(report_date: str, flags: dict) -> Optional[di
     # 即：今天 (report_date) 的推荐，要由昨天生成的计划指导
     plan_next_td = str(plan.get("next_trade_date", "")).strip()
     if plan_next_td != str(report_date):
+        _V16_PLAN_LOAD_REASON = (
+            f"明日计划日期不匹配：plan.next_trade_date={plan_next_td or '空'}，"
+            f"当前检查日={report_date}"
+        )
         logger.warning(
             f"[v16] plan.next_trade_date={plan_next_td!r} != report_date={report_date!r}，"
             f"日期不匹配，本次推荐 V1.6 不生效"
@@ -344,11 +359,12 @@ def _apply_v16_plan_to_candidate(
         out["v16_plan_reason"] = "V1.6 plan_filter 关闭，按 V1.4/V1.5 运行"
         return out
     if plan is None:
+        reason = _V16_PLAN_LOAD_REASON or "明日计划缺失或日期不匹配"
         if flags.get("fallback_to_v14_when_plan_missing", True):
-            out["v16_plan_reason"] = "明日计划缺失或日期不匹配，已回退 V1.4/V1.5"
+            out["v16_plan_reason"] = f"{reason}，已回退 V1.4/V1.5"
         else:
             # 第一阶段不允许 fallback=false（守卫）
-            out["v16_plan_reason"] = "明日计划缺失（fallback_to_v14 已强制启用）"
+            out["v16_plan_reason"] = f"{reason}（fallback_to_v14 已强制启用）"
         return out
 
     # —— plan 存在，开始打标 ——

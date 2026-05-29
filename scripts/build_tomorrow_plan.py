@@ -197,6 +197,16 @@ def _next_trading_date_safe(report_date: str) -> str:
         return nd.strftime("%Y%m%d")
 
 
+def _default_report_date() -> str:
+    """Use the shared date contract: post-close/weekend plans are built from data_date."""
+    try:
+        from data_fetcher import calc_dates
+        data_date, _report_date = calc_dates()
+        return data_date
+    except Exception:
+        return datetime.now().strftime("%Y%m%d")
+
+
 # ════════════════════════════════════════════════════════════════════
 # 数据加载（全部容错；缺文件返回 None / 空 dict / 空 list）
 # ════════════════════════════════════════════════════════════════════
@@ -886,7 +896,7 @@ def main() -> int:
         description="V1.6 Stage 1：明日交易计划派生脚本（只读 + 派生写）"
     )
     p.add_argument("--report-date", type=str, default=None,
-                   help="复盘日 YYYYMMDD（默认今天）")
+                   help="复盘日 YYYYMMDD（默认 data_fetcher.calc_dates()[0]，即实际行情数据日）")
     p.add_argument("--dry-run", action="store_true",
                    help="只打印不写文件")
     p.add_argument("--no-latest", action="store_true",
@@ -902,7 +912,7 @@ def main() -> int:
                             "manual_review_required=False / manual_reviewed_at 原值）")
     args = p.parse_args()
 
-    report_date = args.report_date or datetime.now().strftime("%Y%m%d")
+    report_date = args.report_date or _default_report_date()
     if not (len(report_date) == 8 and report_date.isdigit()):
         print(f"❌ report_date 格式错误: {report_date!r}（应为 YYYYMMDD）")
         return EXIT_BAD_ARGS

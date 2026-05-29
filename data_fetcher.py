@@ -143,6 +143,12 @@ def next_trading_date(date_str: str) -> str:
     return _next_weekday(d).strftime("%Y%m%d")
 
 
+def prev_trading_date(date_str: str) -> str:
+    """返回 date_str 的前一个交易日（仅排除周末，不含节假日）。"""
+    d = datetime.strptime(date_str, "%Y%m%d").date()
+    return _prev_weekday(d).strftime("%Y%m%d")
+
+
 def _retry(fn, *args, retries=3, delay=2, **kwargs):
     for i in range(retries):
         try:
