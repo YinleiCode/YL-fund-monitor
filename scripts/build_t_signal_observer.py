@@ -63,6 +63,9 @@ FIELDS = [
     "signal_price",
     "created_at",
     "source",
+    "data_mode",            # sample / real
+    "price_is_real",        # False / True
+    "stock_name_is_real",   # False / True
     # 规则字段
     "ma10",
     "ma10_slope_up",
@@ -469,13 +472,27 @@ def _build_signal_output(
 
 # ─────────────────── 输出 ────────────────────────────────────────────
 
+def _is_sample_csv(csv_path: str) -> bool:
+    """Detect if CSV comes from the minute_samples directory."""
+    try:
+        resolved = os.path.abspath(csv_path)
+        sample_dir = str(SAMPLE_DIR.resolve())
+        return resolved.startswith(sample_dir)
+    except Exception:
+        return "minute_samples" in csv_path
+
+
 def _make_row(signal: dict, report_date: str) -> dict:
     """Build a full CSV row from a signal dict, filling in defaults."""
     base = {f: "" for f in FIELDS}
     base["report_date"] = report_date
     base["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     base["source"] = "t_signal_observer"
-    base["stock_name"] = ""  # 第一版留空，可由外部数据补充
+
+    # 默认：真实模式（由上游 signal dict 按需覆盖）
+    base["data_mode"] = "real"
+    base["price_is_real"] = "True"
+    base["stock_name_is_real"] = "True"
 
     for k, v in signal.items():
         if k in FIELDS:
@@ -487,29 +504,89 @@ def _make_row(signal: dict, report_date: str) -> dict:
     return base
 
 
+def _load_existing_rows(path: Path) -> list[dict]:
+    """Load existing CSV rows from a dated t_signal file, return list of dicts."""
+    if not path.exists():
+        return []
+    try:
+        with open(path, encoding="utf-8-sig", newline="") as f:
+            return list(csv.DictReader(f))
+    except Exception:
+        return []
+
+
+def _merge_rows(existing: list[dict], new_rows: list[dict]) -> list[dict]:
+    """
+    Merge new rows into existing by (report_date, stock_code, signal_type).
+    New rows with matching key replace old ones; truly new rows are appended.
+    """
+    merged = {(_key(r), _subkey(r)): r for r in existing}
+    for r in new_rows:
+        merged[(_key(r), _subkey(r))] = r
+    return list(merged.values())
+
+
+def _key(r: dict) -> str:
+    return str(r.get("report_date", "")) + "|" + str(r.get("stock_code", ""))
+
+
+def _subkey(r: dict) -> str:
+    # signal_time + signal_type as sub-key to differentiate multiple signals per stock
+    return str(r.get("signal_time", "")) + "|" + str(r.get("signal_type", ""))
+
+
 def write_output(all_signals: list[dict], report_date: str) -> None:
-    """Write t_signal CSV files (dated + latest)."""
+    """Write t_signal CSV files (dated + latest), merging with existing data."""
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     dated_path = OUTPUT_DIR / f"t_signal_{report_date}.csv"
     latest_path = OUTPUT_DIR / "t_signal_latest.csv"
 
-    rows = [_make_row(s, report_date) for s in all_signals]
+    new_rows = [_make_row(s, report_date) for s in all_signals]
+
+    # Load existing rows for the same date, merge to avoid overwrite
+    existing = _load_existing_rows(dated_path)
+    merged = _merge_rows(existing, new_rows)
 
     for path in (dated_path, latest_path):
         with open(path, "w", encoding="utf-8-sig", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=FIELDS)
             writer.writeheader()
-            for row in rows:
+            for row in merged:
                 writer.writerow(row)
 
-    print(f"✅ 已写入：{dated_path.name} ({len(rows)} 行)")
+    print(f"✅ 已写入：{dated_path.name} ({len(merged)} 行, 新增{len(new_rows)} 合并{len(existing)})")
     print(f"✅ 已覆盖：{latest_path.name}")
 
 
 # ─────────────────── CLI ──────────────────────────────────────────────
 
 def parse_ma10_overrides(raw: list[str]) -> dict[str, float]:
+    """Parse --ma10-override CODE:VALUE pairs into dict."""
+    result = {}
+    for item in raw:
+        parts = item.split(":")
+        if len(parts) == 2:
+            code = parts[0].strip()
+            try:
+                val = float(parts[1].strip())
+                result[code] = val
+            except ValueError:
+                pass
+    return result
+
+
+def parse_name_overrides(raw: list[str]) -> dict[str, str]:
+    """Parse --name-override CODE:名称 pairs into dict."""
+    result = {}
+    for item in raw:
+        parts = item.split(":", 1)
+        if len(parts) == 2:
+            code = parts[0].strip()
+            name = parts[1].strip()
+            if name:
+                result[code] = name
+    return result
     """Parse --ma10-override CODE:VALUE pairs into dict."""
     result = {}
     for item in raw:
@@ -532,6 +609,8 @@ def main() -> None:
                         help="1分钟数据 CSV 路径（可多次指定，如 --input-minute-csv a.csv --input-minute-csv b.csv）")
     parser.add_argument("--ma10-override", action="append", default=[],
                         help="MA10 覆盖值，格式 CODE:VALUE（如 300001:100.0）")
+    parser.add_argument("--name-override", action="append", default=[],
+                        help="股票名称，格式 CODE:名称（如 300001:龙辰科技），查不到名称时必填")
     args = parser.parse_args()
 
     report_date = args.report_date
@@ -544,6 +623,7 @@ def main() -> None:
         return
 
     ma10_overrides = parse_ma10_overrides(args.ma10_override)
+    name_overrides = parse_name_overrides(args.name_override)
 
     all_signals = []
 
@@ -560,14 +640,50 @@ def main() -> None:
                 print(f"  ⏭️  跳过 {csv_path}：无法匹配 --codes 中的股票代码")
                 continue
 
+            is_sample = _is_sample_csv(csv_path)
+            sample_tag = " (测试样例)" if is_sample else ""
             minute_bars = load_minute_csv(csv_path)
-            print(f"  📊 加载分钟数据：{csv_path} ({len(minute_bars)} bars)")
+            print(f"  📊 加载分钟数据：{csv_path} ({len(minute_bars)} bars){sample_tag}")
 
             for code in matched_codes:
                 ma10_val = ma10_overrides.get(code)
+                name_val = name_overrides.get(code, "")
                 ma10_info = f", ma10={ma10_val}" if ma10_val is not None else ", ma10=未指定"
-                print(f"  🔍 扫描 {code}{ma10_info} ...")
+                name_info = f", name={name_val}" if name_val else ""
+                print(f"  🔍 扫描 {code}{name_info}{ma10_info}{sample_tag} ...")
                 sigs = evaluate_t_signals(minute_bars, code, ma10_override=ma10_val)
+                for s in sigs:
+                    if is_sample:
+                        # 测试样例模式：使用测试名称，标记为非真实
+                        s["data_mode"] = "sample"
+                        s["price_is_real"] = False
+                        s["stock_name_is_real"] = False
+                        s["source"] = "minute_sample"
+                        s["observer_note"] = (
+                            "本记录来自本地测试样例，股票名称和价格不代表真实市场数据。"
+                        )
+                        # 按代码映射测试名称（名称自带"（样例）"标签）
+                        sample_names = {
+                            "300001": "测试低吸股（样例）",
+                            "300002": "测试高抛股（样例）",
+                            "300003": "测试失败股（样例）",
+                            "600001": "测试样例A（样例）",
+                            "600002": "测试样例B（样例）",
+                        }
+                        s["stock_name"] = sample_names.get(code, f"测试{code}（样例）")
+                        # 信号价格也加标签
+                        if s.get("signal_price") is not None:
+                            sp = s["signal_price"]
+                            if isinstance(sp, (int, float)):
+                                s["signal_price"] = f"{sp}（样例）"
+                            else:
+                                s["signal_price"] = f"{sp}（样例）"
+                    else:
+                        # 真实模式
+                        s["stock_name"] = name_val or "名称未获取"
+                        s["stock_name_is_real"] = bool(name_val)
+                    if not s.get("observer_note"):
+                        s["observer_note"] = OBSERVER_NOTE
                 all_signals.extend(sigs)
     else:
         print("⚠️ 第一版需要 --input-minute-csv 提供分钟数据")

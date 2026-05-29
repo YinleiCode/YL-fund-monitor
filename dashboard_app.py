@@ -4497,12 +4497,19 @@ def _tp_risk_desc(risk: str) -> tuple:
     return "风险等级需要人工确认。", "info"
 
 
-def _tp_allowed_themes_desc(themes: list, sector_status: str) -> tuple:
+def _tp_allowed_themes_desc(themes: list, sector_status: str, trade_permission: str = "只观察") -> tuple:
+    perm = (trade_permission or "只观察").strip()
     if (sector_status or "").strip() != "ok":
-        return "明日主线方向不可信/为空，明日不应按主线放行。", "bad"
-    if themes:
-        return "这些方向来自 V1.6 复盘计划层，只代表明日重点观察方向。", "ok"
-    return "明日没有明确主线方向，建议降低预期。", "warn"
+        return "主线数据不可信，明日不应按主线方向放行。", "bad"
+    if not themes:
+        return "明日没有明确观察方向，建议降低预期。", "warn"
+    if perm == "只观察":
+        return "以下方向为今日领涨，仅作明日观察池，不代表可买，市场退潮下不建议追高。", "warn"
+    if perm in ("小仓试错", "只做主线核心"):
+        return "以下方向为小仓试错观察池，仍需 9:36 技术确认。", "warn"
+    if perm == "正常交易":
+        return "以下方向为明日重点观察方向，需经 9:36 技术确认层后才可买入。", "ok"
+    return "以下方向供人工参考，不构成买入建议。", "info"
 
 
 def _tp_run_subprocess(label: str, cmd_list: list, timeout: int) -> dict:
@@ -4806,7 +4813,7 @@ def page_tomorrow_plan() -> None:
         sector_label, sector_desc, sector_level = _tp_sector_desc(sector_status)
         perm_desc, perm_level = _tp_permission_desc(perm)
         risk_desc, risk_level = _tp_risk_desc(risk)
-        themes_desc, themes_level = _tp_allowed_themes_desc(allowed, sector_status)
+        themes_desc, themes_level = _tp_allowed_themes_desc(allowed, sector_status, perm)
 
         st.caption(f"复盘日：{rd} ｜ 市场状态：{state} ｜ 人工确认：{'待确认' if need_rv else reviewed_at}")
         c1, c2, c3 = st.columns(3)
@@ -4827,8 +4834,17 @@ def page_tomorrow_plan() -> None:
             _tp_status_card("风险等级", risk, risk_desc, risk_level),
             unsafe_allow_html=True,
         )
+        # 根据交易权限决定方向卡片标题
+        if perm == "只观察":
+            themes_label = "今日领涨观察池"
+        elif perm in ("小仓试错", "只做主线核心"):
+            themes_label = "小仓试错观察方向"
+        elif perm == "正常交易":
+            themes_label = "重点观察方向"
+        else:
+            themes_label = "明日观察方向"
         c5.markdown(
-            _tp_status_card("明日主线方向", allowed_value, themes_desc, themes_level),
+            _tp_status_card(themes_label, allowed_value, themes_desc, themes_level),
             unsafe_allow_html=True,
         )
         c6.markdown(
@@ -4857,6 +4873,14 @@ def page_tomorrow_plan() -> None:
         if sector_status != "ok":
             status_banner(
                 "⚠️ 明日主线方向不可信/为空，明日不应按主线放行。",
+                "warning",
+            )
+
+        # —— 追高/一日游风险提示 ——
+        if state in ("退潮", "数据不足") or risk in ("高",):
+            status_banner(
+                "当前不适合根据今日涨幅直接追高。今日领涨板块可能存在一日游或资金避险轮动风险，"
+                "应等待下一交易日盘中确认，不直接追买。",
                 "warning",
             )
 
@@ -4930,23 +4954,30 @@ def page_tomorrow_plan() -> None:
                 st.rerun()
 
     with col_b:
-        st.markdown("**生成 V1.6 复盘四件套**")
+        st.markdown("**生成 V1.6 盘后复盘流程**")
         st.caption(
-            "依次执行：build_board_eod_cache → build_market_daily → "
-            "build_post_stop_tracking → build_tomorrow_plan --merge-keep-manual。"
+            "依次执行：盘后板块快照 → 市场赚钱效应复盘 → "
+            "持仓/止损后跟踪 → 明日交易计划。",
         )
+        with st.expander("📄 查看具体脚本"):
+            st.caption(
+                "1. scripts/build_board_eod_cache.py → 盘后板块快照\n"
+                "2. scripts/build_market_daily.py → 市场赚钱效应复盘\n"
+                "3. scripts/build_post_stop_tracking.py → 持仓/止损后跟踪\n"
+                "4. scripts/build_tomorrow_plan.py → 明日交易计划"
+            )
         pipe_locked, pipe_lock_ts = _is_locked(REVIEW_PIPELINE_KEY)
         if pipe_locked:
             age = int(time.time() - pipe_lock_ts) if pipe_lock_ts else 0
             st.caption(f"⏳ 正在运行中（已 {age} 秒）...")
 
-        if st.button("🚀 一键生成 V1.6 复盘四件套", key="btn_build_pipeline",
+        if st.button("🚀 一键生成 V1.6 盘后复盘流程", key="btn_build_pipeline",
                      disabled=pipe_locked, width="stretch"):
             if _acquire_lock(REVIEW_PIPELINE_KEY):
                 try:
                     results = []
                     board_failed = False
-                    with st.spinner("正在依次执行 V1.6 复盘四件套... (最长 240 秒)"):
+                    with st.spinner("正在依次执行 V1.6 盘后复盘流程... (最长 240 秒)"):
                         for label, cmd, timeout, stop_on_fail in [
                             (
                                 "build_board_eod_cache",
@@ -5000,12 +5031,18 @@ def page_tomorrow_plan() -> None:
                     "error",
                 )
             status_banner(
-                f"V1.6 复盘四件套执行：{sum(1 for r in results if r['returncode']==0)}/{len(results)} 成功",
+                f"V1.6 盘后复盘流程执行：{sum(1 for r in results if r['returncode']==0)}/{len(results)} 成功",
                 "success" if all_ok else "error",
             )
             for r in results:
+                label_cn = {
+                    "build_board_eod_cache": "盘后板块快照",
+                    "build_market_daily": "市场赚钱效应复盘",
+                    "build_post_stop_tracking": "持仓/止损后跟踪",
+                    "build_tomorrow_plan": "明日交易计划",
+                }.get(r['label'], r['label'])
                 emoji = "✅" if r["returncode"] == 0 else "❌"
-                with st.expander(f"{emoji} {r['label']}（{r['duration_s']}s, exit={r['returncode']}）",
+                with st.expander(f"{emoji} {label_cn}（{r['duration_s']}s）",
                                  expanded=False):
                     if r.get("stdout"): st.code(r["stdout"], language="text")
                     if r.get("stderr"): st.code(r["stderr"], language="text")
@@ -5227,40 +5264,92 @@ def page_t_signal() -> None:
         )
         return
 
-    # ── 1. 安全检测 ──────────────────────────────────────────────────
+    # ── 0. 区分真实信号与测试样例 ──────────────────────────────────
+    is_sample_mask = df.get("data_mode", pd.Series(dtype=str)).astype(str).str.lower().isin(
+        ("sample", "test")
+    ) if "data_mode" in df.columns else pd.Series([False]*len(df))
+    df_real = df[~is_sample_mask].copy()
+    df_sample = df[is_sample_mask].copy()
+
+    # ── 0.5 测试样例显示开关 ─────────────────────────────────────────
+    show_sample = st.checkbox("显示测试样例记录", value=False,
+                              help="勾选后显示本地测试样例 T 信号（仅用于规则验证）")
+    if show_sample:
+        display_df = pd.concat([df_real, df_sample], ignore_index=True)
+        status_banner(
+            "当前显示的是本地测试样例 T 信号，仅用于规则验证，"
+            "不代表真实行情，不构成自动买卖指令。",
+            "warning",
+        )
+    else:
+        display_df = df_real.copy()
+
+    if display_df.empty:
+        if not df_real.empty:
+            # 有真实但筛选后无匹配
+            st.info("无匹配真实 T 信号记录。")
+            return
+        if not df_sample.empty and not show_sample:
+            # 只有测试样例且未勾选
+            status_banner(
+                "暂无真实做 T 信号记录。当前测试样例已隐藏；"
+                "测试样例仅用于规则验证，不代表真实行情。",
+                "info",
+            )
+            if st.checkbox("显示测试样例记录", key="ts_show_sample_alt",
+                           help="勾选后显示本地测试样例 T 信号"):
+                display_df = df_sample.copy()
+                status_banner(
+                    "当前显示的是本地测试样例 T 信号，仅用于规则验证，"
+                    "不代表真实行情，不构成自动买卖指令。",
+                    "warning",
+                )
+            else:
+                return
+        else:
+            status_banner(
+                "暂无做 T 信号记录。当前模块仅为模拟观察，不会自动买卖。",
+                "info",
+            )
+            return
+
+    # ── 1. 安全检测（基于 display_df） ──────────────────────────────
     all_simulate = all(
         str(v).strip().lower() == "simulate"
-        for v in df.get("execution_mode", pd.Series(dtype=str))
-    )
+        for v in display_df.get("execution_mode", pd.Series(dtype=str))
+    ) if not display_df.empty else True
     all_live_blocked = all(
         str(v).strip().lower() == "false"
-        for v in df.get("can_execute_live", pd.Series(dtype=str))
-    )
+        for v in display_df.get("can_execute_live", pd.Series(dtype=str))
+    ) if not display_df.empty else True
     all_not_submitted = all(
         str(v).strip().lower() == "not_submitted"
-        for v in df.get("order_status", pd.Series(dtype=str))
-    )
+        for v in display_df.get("order_status", pd.Series(dtype=str))
+    ) if not display_df.empty else True
     all_broker_disconnected = all(
         str(v).strip().lower() == "not_connected"
-        for v in df.get("broker_status", pd.Series(dtype=str))
-    )
+        for v in display_df.get("broker_status", pd.Series(dtype=str))
+    ) if not display_df.empty else True
     safety_ok = all_simulate and all_live_blocked and all_not_submitted and all_broker_disconnected
 
-    # ── 2. 顶部状态卡 ────────────────────────────────────────────────
-    total = len(df)
-    n_low = int((df.get("signal_type", "") == "low_absorb").sum())
-    n_high = int((df.get("signal_type", "") == "high_throw").sum())
-    n_pass = int(df.get("rule_pass", pd.Series(dtype=str)).astype(str).str.lower().isin(("true", "1")).sum())
-    n_fail = total - n_pass
+    # ── 2. 顶部状态卡（仅统计真实信号） ──────────────────────────────
+    total_real = len(df_real)
+    n_low_real = int((df_real.get("signal_type", "") == "low_absorb").sum()) if not df_real.empty else 0
+    n_high_real = int((df_real.get("signal_type", "") == "high_throw").sum()) if not df_real.empty else 0
+    n_pass_real = int(df_real.get("rule_pass", pd.Series(dtype=str)).astype(str).str.lower().isin(
+        ("true", "1")).sum()) if not df_real.empty else 0
+    n_fail_real = total_real - n_pass_real
 
-    st.markdown("### 📊 今日 T 信号概览")
+    st.markdown("### 📊 今日真实 T 信号")
+    if not df_sample.empty:
+        st.caption(f"另有 {len(df_sample)} 条测试样例记录（已隐藏，可勾选显示）")
 
     c1, c2, c3, c4, c5 = st.columns(5)
-    c1.markdown(kpi_card("信号总数", total, COLOR_TEXT), unsafe_allow_html=True)
-    c2.markdown(kpi_card("低吸信号", n_low, "#1F883D"), unsafe_allow_html=True)
-    c3.markdown(kpi_card("高抛信号", n_high, "#B91C1C"), unsafe_allow_html=True)
-    c4.markdown(kpi_card("规则通过", n_pass, "#1F883D"), unsafe_allow_html=True)
-    c5.markdown(kpi_card("规则未通过", n_fail, "#9A6700"), unsafe_allow_html=True)
+    c1.markdown(kpi_card("真实信号总数", total_real, COLOR_TEXT), unsafe_allow_html=True)
+    c2.markdown(kpi_card("低吸信号", n_low_real, "#1F883D"), unsafe_allow_html=True)
+    c3.markdown(kpi_card("高抛信号", n_high_real, "#B91C1C"), unsafe_allow_html=True)
+    c4.markdown(kpi_card("规则通过", n_pass_real, "#1F883D"), unsafe_allow_html=True)
+    c5.markdown(kpi_card("规则未通过", n_fail_real, "#9A6700"), unsafe_allow_html=True)
 
     with st.expander("🔒 安全状态检查", expanded=True):
         safe_color = "#1F883D" if safety_ok else "#B91C1C"
@@ -5296,7 +5385,7 @@ def page_t_signal() -> None:
     st.markdown("### 🔍 筛选")
 
     # report_date filter
-    dates = sorted(df["report_date"].unique(), reverse=True) if "report_date" in df.columns else []
+    dates = sorted(display_df["report_date"].unique(), reverse=True) if "report_date" in display_df.columns else []
     sel_date = st.selectbox("报告日期", ["全部"] + dates, key="ts_date")
 
     # signal_type filter
@@ -5311,7 +5400,7 @@ def page_t_signal() -> None:
     sel_code = st.text_input("股票代码搜索", key="ts_code").strip()
 
     # ── 5. 表格 ──────────────────────────────────────────────────────
-    display = df.copy()
+    display = display_df.copy()
 
     if sel_date != "全部":
         display = display[display["report_date"] == sel_date]
@@ -5335,44 +5424,115 @@ def page_t_signal() -> None:
         st.info("无匹配信号记录。")
         return
 
-    # Build display columns with Chinese labels
-    show = pd.DataFrame()
-    show["报告日期"]    = display.get("report_date", "")
-    show["股票代码"]    = display.get("stock_code", "")
-    show["股票名称"]    = display.get("stock_name", "")
-    show["信号时间"]    = display.get("signal_time", "")
-    show["信号类型"]    = display.get("signal_type", "").map(
-        lambda v: {"low_absorb": "低吸 T", "high_throw": "高抛 T"}.get(str(v).strip(), str(v)))
-    show["操作方向"]    = display.get("signal_side", "").map(
-        lambda v: {"sim_buy": "模拟买入", "sim_sell": "模拟卖出"}.get(str(v).strip(), str(v)))
-    show["信号价格"]    = pd.to_numeric(display.get("signal_price", ""), errors="coerce")
-    show["规则通过"]    = display.get("rule_pass", "").map(
-        lambda v: "✅ 规则通过" if str(v).strip().lower() in ("true", "1") else "❌ 规则未通过")
-    show["失败原因"]    = display.get("fail_reason", "").map(
-        lambda v: _FAIL_REASON_CN.get(str(v).strip(), str(v)))
-    show["MA10"]        = pd.to_numeric(display.get("ma10", ""), errors="coerce")
-    show["MA10向上"]    = display.get("ma10_slope_up", "").map(
-        lambda v: _ts_bool_cn(v, "向上", "向下/未知"))
-    show["窗口(分钟)"]  = display.get("window_minutes", "")
-    show["涨跌%"]       = pd.to_numeric(display.get("move_pct", ""), errors="coerce")
-    show["放量倍数"]    = pd.to_numeric(display.get("volume_multiple", ""), errors="coerce")
-    show["缩量比"]      = pd.to_numeric(display.get("shrink_ratio", ""), errors="coerce")
-    show["缩量确认"]    = display.get("shrink_confirmed", "").map(
-        lambda v: "是" if str(v).strip().lower() in ("true", "1") else "否")
-    show["T仓位"]       = display.get("t_ratio", "")
-    show["持仓状态"]    = display.get("has_position", "")
-    show["可卖数量"]    = display.get("sellable_qty", "")
-    show["模拟T数量"]   = display.get("sim_t_qty", "")
-    show["执行模式"]    = display.get("execution_mode", "").map(
-        lambda v: "模拟观察" if str(v).strip().lower() == "simulate" else str(v))
-    show["允许实盘"]    = display.get("can_execute_live", "").map(
-        lambda v: "否" if str(v).strip().lower() in ("false", "0") else "⚠️ 是")
-    show["实盘拦截原因"] = display.get("live_block_reason", "")
-    show["订单状态"]    = display.get("order_status", "").map(
-        lambda v: "未提交" if str(v).strip().lower() == "not_submitted" else str(v))
-    show["券商状态"]    = display.get("broker_status", "").map(
-        lambda v: "未连接" if str(v).strip().lower() == "not_connected" else str(v))
-    show["备注"]        = display.get("observer_note", "")
+    # ── 通用清洗函数：None/NaN/空 → "—" ──
+    def _cln(v):
+        """Convert None/NaN/empty/unknown/simulate to Chinese display."""
+        if v is None:
+            return "—"
+        s = str(v).strip().lower()
+        if s in ("", "nan", "none", "null"):
+            return "—"
+        return v
+
+    # ── 样例/真实分类 ──
+    is_sample_mask = display.get("data_mode", pd.Series(dtype=str)).astype(str).str.lower().isin(
+        ("sample", "test")
+    ) if "data_mode" in display.columns else pd.Series([False]*len(display))
+
+    # 逐行构建展示数据
+    show_rows = []
+    for idx in range(len(display)):
+        row = display.iloc[idx]
+        samp = is_sample_mask.iloc[idx] if idx < len(is_sample_mask) else False
+
+        # 规则通过状态
+        rule_pass_raw = str(row.get("rule_pass", "")).strip().lower()
+        rule_pass_ok = rule_pass_raw in ("true", "1")
+
+        # 失败原因：通过则为 "—"
+        fail_reason_raw = str(row.get("fail_reason", "")).strip()
+        if rule_pass_ok or not fail_reason_raw or fail_reason_raw in ("nan", "none", ""):
+            fail_reason_display = "—"
+        else:
+            fail_reason_display = _FAIL_REASON_CN.get(fail_reason_raw, fail_reason_raw)
+
+        # MA10
+        ma10_raw = str(row.get("ma10", "")).strip()
+        if samp and (not ma10_raw or ma10_raw in ("nan", "none", "")):
+            ma10_display = "样例未提供"
+        elif ma10_raw in ("", "nan", "none"):
+            ma10_display = "—"
+        else:
+            try:
+                ma10_display = round(float(ma10_raw), 2)
+            except (ValueError, TypeError):
+                ma10_display = "—"
+
+        # MA10向上
+        ma10_up_raw = str(row.get("ma10_slope_up", "")).strip().lower()
+        if samp:
+            if ma10_up_raw in ("true", "1"):
+                ma10_up_display = "✅ 样例向上"
+            else:
+                ma10_up_display = "样例未验证"
+        else:
+            if ma10_up_raw in ("true", "1"):
+                ma10_up_display = "✅ 向上"
+            elif ma10_up_raw in ("false", "0"):
+                ma10_up_display = "❌ 向下/未知"
+            else:
+                ma10_up_display = "—"
+
+        # 数值列（样例直接用字符串，真实转数值）
+        def _num_or_dash(v):
+            try:
+                return round(float(v), 2)
+            except (ValueError, TypeError):
+                return "—"
+
+        # 信号价格
+        price_raw = str(row.get("signal_price", "")).strip()
+        if price_raw in ("", "nan", "none"):
+            price_display = "—"
+        elif samp:
+            price_display = price_raw  # 已带"（样例）"
+        else:
+            price_display = _num_or_dash(price_raw)
+
+        show_rows.append({
+            "报告日期":  _cln(row.get("report_date", "")),
+            "股票代码":  _cln(row.get("stock_code", "")),
+            "股票名称":  _cln(row.get("stock_name", "")),
+            "数据模式":  "测试样例" if samp else ("真实数据" if str(row.get("data_mode", "")).strip().lower() == "real" else "—"),
+            "价格性质":  "样例价格" if str(row.get("price_is_real", "")).strip().lower() in ("false", "0") else ("真实价格" if str(row.get("price_is_real", "")).strip().lower() in ("true", "1") else "—"),
+            "名称性质":  "样例名称/未确认" if str(row.get("stock_name_is_real", "")).strip().lower() in ("false", "0") else ("真实名称" if str(row.get("stock_name_is_real", "")).strip().lower() in ("true", "1") else "—"),
+            "数据源":    "本地分钟样例" if "minute_sample" in str(row.get("source", "")).lower() else _cln(row.get("source", "")),
+            "信号时间":  _cln(row.get("signal_time", "")),
+            "信号类型":  {"low_absorb": "低吸 T", "high_throw": "高抛 T"}.get(str(row.get("signal_type", "")).strip(), _cln(row.get("signal_type", ""))),
+            "操作方向":  {"sim_buy": "模拟买入", "sim_sell": "模拟卖出"}.get(str(row.get("signal_side", "")).strip(), _cln(row.get("signal_side", ""))),
+            "信号价格":  price_display,
+            "规则通过":  "✅ 规则通过" if rule_pass_ok else "❌ 规则未通过",
+            "失败原因":  fail_reason_display,
+            "MA10":      ma10_display,
+            "MA10向上":  ma10_up_display,
+            "窗口(分钟)": _num_or_dash(row.get("window_minutes", "")),
+            "涨跌%":     _num_or_dash(row.get("move_pct", "")),
+            "放量倍数":  _num_or_dash(row.get("volume_multiple", "")),
+            "缩量比":    _num_or_dash(row.get("shrink_ratio", "")),
+            "缩量确认":  "是" if str(row.get("shrink_confirmed", "")).strip().lower() in ("true", "1") else "否",
+            "T仓位":     _cln(row.get("t_ratio", "")),
+            "持仓状态":  {"unknown": "—", "true": "有持仓", "1": "有持仓", "false": "无持仓", "0": "无持仓"}.get(str(row.get("has_position", "")).strip().lower(), _cln(row.get("has_position", ""))),
+            "可卖数量":  _cln(row.get("sellable_qty", "")),
+            "模拟T数量": _cln(row.get("sim_t_qty", "")),
+            "执行模式":  "模拟观察" if str(row.get("execution_mode", "")).strip().lower() == "simulate" else _cln(row.get("execution_mode", "")),
+            "允许实盘":  "否" if str(row.get("can_execute_live", "")).strip().lower() in ("false", "0") else ("⚠️ 是" if str(row.get("can_execute_live", "")).strip().lower() in ("true", "1") else "—"),
+            "实盘拦截原因": {"simulated_observer_only": "模拟观察，不接实盘"}.get(str(row.get("live_block_reason", "")).strip(), _cln(row.get("live_block_reason", ""))),
+            "订单状态":  "未提交" if str(row.get("order_status", "")).strip().lower() == "not_submitted" else _cln(row.get("order_status", "")),
+            "券商状态":  "未连接" if str(row.get("broker_status", "")).strip().lower() == "not_connected" else _cln(row.get("broker_status", "")),
+            "备注":      _cln(row.get("observer_note", "")),
+        })
+
+    show = pd.DataFrame(show_rows)
 
     st.markdown("### 📋 信号明细")
     st.dataframe(show, width="stretch", hide_index=True)
