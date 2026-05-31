@@ -59,6 +59,8 @@ MONEY_FLOW_PROBE_KEY  = "money_flow_health"     # 锁 + session_state 用的 key
 # —— V1.6 · 做 T 信号观察模块（旁路，不插入 9:36 买入主链）——
 T_SIGNAL_DIR     = OUTPUT_DIR / "t_signal"
 T_SIGNAL_LATEST  = T_SIGNAL_DIR / "t_signal_latest.csv"
+T_TRADE_DIR      = OUTPUT_DIR / "t_trade"
+T_TRADE_LATEST   = T_TRADE_DIR / "t_trade_latest.csv"
 
 # ─── 颜色（V1.6 奶油色主题：避免大面积纯白，统一温和质感）────────────────
 # 页面级 → .streamlit/config.toml 控制 backgroundColor=#F5EFE3
@@ -5350,6 +5352,86 @@ def _ts_load_signals() -> Optional[pd.DataFrame]:
         return None
 
 
+def _tt_load_latest() -> Optional[pd.DataFrame]:
+    """Load latest T-trade CSV; return None if missing/empty."""
+    if not T_TRADE_LATEST.exists():
+        return None
+    try:
+        df = pd.read_csv(T_TRADE_LATEST)
+        return df if not df.empty else None
+    except Exception:
+        return None
+
+
+def _tt_load_bs_log(report_date: str) -> Optional[pd.DataFrame]:
+    """Load dated B/S log by report_date; return None if missing/empty."""
+    if not report_date:
+        return None
+    path = T_TRADE_DIR / f"t_bs_log_{report_date}.csv"
+    if not path.exists():
+        return None
+    try:
+        df = pd.read_csv(path)
+        return df if not df.empty else None
+    except Exception:
+        return None
+
+
+def _tt_infer_data_mode(df: pd.DataFrame) -> pd.Series:
+    if "data_mode" in df.columns:
+        mode = df["data_mode"].astype(str).str.strip().str.lower()
+        return mode.where(mode.ne(""), "real")
+    joined = (
+        df.get("source", pd.Series("", index=df.index)).astype(str)
+        + " "
+        + df.get("stock_name", pd.Series("", index=df.index)).astype(str)
+        + " "
+        + df.get("observer_note", pd.Series("", index=df.index)).astype(str)
+        + " "
+        + df.get("note", pd.Series("", index=df.index)).astype(str)
+    )
+    return joined.str.lower().map(lambda s: "sample" if ("样例" in s or "sample" in s) else "real")
+
+
+def _tt_filter_mode(df: Optional[pd.DataFrame], show_sample: bool) -> Optional[pd.DataFrame]:
+    if df is None or df.empty:
+        return df
+    data = df.copy()
+    data["data_mode"] = _tt_infer_data_mode(data)
+    if not show_sample:
+        data = data[data["data_mode"] == "real"]
+    return data
+
+
+def _tt_trade_stats(df: pd.DataFrame) -> dict:
+    if df.empty:
+        return {
+            "total": 0,
+            "tp": 0,
+            "sl": 0,
+            "open": 0,
+            "return_sum": 0.0,
+            "pnl_sum": 0.0,
+            "win_rate": 0.0,
+        }
+    ret = pd.to_numeric(df.get("return_pct", 0), errors="coerce").fillna(0.0)
+    pnl = pd.to_numeric(df.get("pnl_amount", 0), errors="coerce").fillna(0.0)
+    reasons = df.get("exit_reason", pd.Series(dtype=str)).astype(str)
+    statuses = df.get("trade_status", pd.Series(dtype=str)).astype(str)
+    closed_mask = statuses.isin(["closed", "stopped", "expired"])
+    win_mask = ret > 0
+    closed_count = int(closed_mask.sum())
+    return {
+        "total": len(df),
+        "tp": int(reasons.eq("take_profit_1_5").sum() + reasons.eq("buyback_1_5").sum()),
+        "sl": int(reasons.eq("stop_loss_1_5").sum() + reasons.eq("stop_buyback_1_5").sum()),
+        "open": int(statuses.isin(["open", "data_missing"]).sum()),
+        "return_sum": float(ret.sum()),
+        "pnl_sum": float(pnl.sum()),
+        "win_rate": float((win_mask & closed_mask).sum() / closed_count) if closed_count else 0.0,
+    }
+
+
 _FAIL_REASON_CN = {
     "ma10_missing":                      "10 日均线缺失",
     "ma10_not_up":                       "10 日均线未向上",
@@ -5389,6 +5471,7 @@ def page_t_signal() -> None:
     st.caption(
         "V1.6 旁路模块：只识别和记录 T 信号，不自动买卖，不插入 9:36 买入主链。"
     )
+    st.caption("当前为做 T 模拟记录，不构成自动买卖指令。")
 
     df = _ts_load_signals()
 
@@ -5660,7 +5743,116 @@ def page_t_signal() -> None:
     st.markdown("### 📋 信号明细")
     st.dataframe(show, width="stretch", hide_index=True)
 
-    # ── 6. 安全提示横幅（底部重复） ─────────────────────────────────
+    # ── 6. T 交易记录（同样默认隐藏 sample）─────────────────────────
+    trades_raw = _tt_load_latest()
+    trades = _tt_filter_mode(trades_raw, show_sample)
+
+    st.markdown("### 📒 今日 T 交易记录")
+    if trades is None or trades.empty:
+        if show_sample:
+            status_banner("当前还没有 T 交易记录。请先运行 build_t_trade_tracker.py。", "info")
+        else:
+            status_banner("暂无真实 T 数据。当前默认不展示 sample T 交易记录。", "info")
+    else:
+        trade_safe = (
+            all(str(v).strip().lower() == "simulate" for v in trades.get("execution_mode", pd.Series(dtype=str)))
+            and all(str(v).strip().lower() == "false" for v in trades.get("can_execute_live", pd.Series(dtype=str)))
+            and all(str(v).strip().lower() == "not_submitted" for v in trades.get("order_status", pd.Series(dtype=str)))
+            and all(str(v).strip().lower() == "not_connected" for v in trades.get("broker_status", pd.Series(dtype=str)))
+        )
+        if not trade_safe:
+            status_banner("检测到异常：T 交易记录里出现了疑似可实盘字段，请检查。", "error")
+
+        stats = _tt_trade_stats(trades)
+        t1, t2, t3, t4, t5, t6, t7 = st.columns(7)
+        t1.markdown(kpi_card("今日 T 笔数", stats["total"], COLOR_TEXT), unsafe_allow_html=True)
+        t2.markdown(kpi_card("已止盈笔数", stats["tp"], "#1F883D"), unsafe_allow_html=True)
+        t3.markdown(kpi_card("已止损笔数", stats["sl"], "#B91C1C"), unsafe_allow_html=True)
+        t4.markdown(kpi_card("未完成笔数", stats["open"], "#9A6700"), unsafe_allow_html=True)
+        t5.markdown(kpi_card("总收益率", f"{stats['return_sum'] * 100:.2f}%", COLOR_SECOND), unsafe_allow_html=True)
+        t6.markdown(kpi_card("模拟盈亏", f"{stats['pnl_sum']:.2f}", COLOR_TEXT), unsafe_allow_html=True)
+        t7.markdown(kpi_card("胜率", f"{stats['win_rate'] * 100:.1f}%", "#1F883D" if stats["win_rate"] >= 0.5 else "#9A6700"), unsafe_allow_html=True)
+
+        trade_show = pd.DataFrame()
+        trade_show["股票代码"] = trades.get("stock_code", "")
+        trade_show["股票名称"] = trades.get("stock_name", "")
+        trade_show["信号类型"] = trades.get("signal_type", "").map(
+            lambda v: {"low_absorb": "低吸 T", "high_throw": "高抛 T"}.get(str(v), str(v))
+        )
+        trade_show["B点时间"] = trades.apply(
+            lambda r: r.get("entry_time", "") if str(r.get("entry_point", "")) == "B" else r.get("exit_time", ""),
+            axis=1,
+        )
+        trade_show["B点价格"] = trades.apply(
+            lambda r: r.get("entry_price", "") if str(r.get("entry_point", "")) == "B" else r.get("exit_price", ""),
+            axis=1,
+        )
+        trade_show["S点时间"] = trades.apply(
+            lambda r: r.get("entry_time", "") if str(r.get("entry_point", "")) == "S" else r.get("exit_time", ""),
+            axis=1,
+        )
+        trade_show["S点价格"] = trades.apply(
+            lambda r: r.get("entry_price", "") if str(r.get("entry_point", "")) == "S" else r.get("exit_price", ""),
+            axis=1,
+        )
+        trade_show["止盈价"] = trades.apply(
+            lambda r: r.get("take_profit_price", "") if str(r.get("signal_type", "")) == "low_absorb" else r.get("buyback_price", ""),
+            axis=1,
+        )
+        trade_show["止损价"] = trades.apply(
+            lambda r: r.get("stop_loss_price", "") if str(r.get("signal_type", "")) == "low_absorb" else r.get("stop_buyback_price", ""),
+            axis=1,
+        )
+        trade_show["退出原因"] = trades.get("exit_reason", "")
+        trade_show["盈亏%"] = pd.to_numeric(trades.get("return_pct", ""), errors="coerce").map(
+            lambda v: f"{v * 100:.2f}%" if pd.notna(v) else ""
+        )
+        trade_show["状态"] = trades.get("trade_status", "")
+        trade_show["数据模式"] = trades.get("data_mode", "")
+        trade_show["是否实盘允许"] = trades.get("can_execute_live", "").map(
+            lambda v: "否" if str(v).strip().lower() in ("false", "0") else "⚠️ 是"
+        )
+        st.dataframe(trade_show, width="stretch", hide_index=True)
+
+        # ── 7. B/S 点与盈亏统计 ─────────────────────────────────────
+        report_date = ""
+        if "report_date" in trades.columns and not trades.empty:
+            report_date = str(trades["report_date"].iloc[0]).strip()
+        bs_log = _tt_filter_mode(_tt_load_bs_log(report_date), show_sample)
+
+        st.markdown("### 🧭 B/S 点与盈亏统计")
+        if bs_log is None or bs_log.empty:
+            status_banner("当前还没有 B/S 点记录。", "info")
+        else:
+            b_points = bs_log[bs_log.get("point_type", "").astype(str).eq("B")]
+            s_points = bs_log[bs_log.get("point_type", "").astype(str).eq("S")]
+            bcol, scol = st.columns(2)
+            with bcol:
+                st.markdown("#### B 点列表")
+                b_show = pd.DataFrame()
+                b_show["股票代码"] = b_points.get("stock_code", "")
+                b_show["股票名称"] = b_points.get("stock_name", "")
+                b_show["B点原因"] = b_points.get("point_reason", "")
+                b_show["B点时间"] = b_points.get("point_time", "")
+                b_show["B点价格"] = b_points.get("point_price", "")
+                b_show["关联收益"] = pd.to_numeric(b_points.get("return_pct_after_exit", ""), errors="coerce").map(
+                    lambda v: f"{v * 100:.2f}%" if pd.notna(v) else ""
+                )
+                st.dataframe(b_show, width="stretch", hide_index=True)
+            with scol:
+                st.markdown("#### S 点列表")
+                s_show = pd.DataFrame()
+                s_show["股票代码"] = s_points.get("stock_code", "")
+                s_show["股票名称"] = s_points.get("stock_name", "")
+                s_show["S点原因"] = s_points.get("point_reason", "")
+                s_show["S点时间"] = s_points.get("point_time", "")
+                s_show["S点价格"] = s_points.get("point_price", "")
+                s_show["关联收益"] = pd.to_numeric(s_points.get("return_pct_after_exit", ""), errors="coerce").map(
+                    lambda v: f"{v * 100:.2f}%" if pd.notna(v) else ""
+                )
+                st.dataframe(s_show, width="stretch", hide_index=True)
+
+    # ── 8. 安全提示横幅（底部重复） ─────────────────────────────────
     status_banner(
         "当前仅为做 T 信号模拟记录，不构成自动买卖指令。",
         "warning",
