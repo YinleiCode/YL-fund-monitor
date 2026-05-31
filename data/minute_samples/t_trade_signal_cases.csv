@@ -1,0 +1,5 @@
+report_date,stock_code,stock_name,signal_time,signal_type,signal_side,signal_price,source,data_mode,rule_pass,t_ratio,sim_t_qty,execution_mode,can_execute_live,order_status,broker_status,observer_note
+20260529,300011,低吸止盈样例股,2026-05-29 09:39:00,low_absorb,sim_buy,98.8,minute_sample,sample,True,0.3333,100,simulate,False,not_submitted,not_connected,当前为做 T 模拟记录，不构成自动买卖指令。
+20260529,300012,低吸止损样例股,2026-05-29 09:39:00,low_absorb,sim_buy,98.8,minute_sample,sample,True,0.3333,100,simulate,False,not_submitted,not_connected,当前为做 T 模拟记录，不构成自动买卖指令。
+20260529,300013,高抛回补样例股,2026-05-29 09:39:00,high_throw,sim_sell,101.6,minute_sample,sample,True,0.3333,100,simulate,False,not_submitted,not_connected,当前为做 T 模拟记录，不构成自动买卖指令。
+20260529,300014,高抛踏空样例股,2026-05-29 09:39:00,high_throw,sim_sell,101.6,minute_sample,sample,True,0.3333,100,simulate,False,not_submitted,not_connected,当前为做 T 模拟记录，不构成自动买卖指令。
