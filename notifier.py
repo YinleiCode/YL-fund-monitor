@@ -1,8 +1,11 @@
 """
 生成微信推送内容，通过 Server酱发送。
 """
+import csv
 import logging
+import os
 from datetime import datetime
+from pathlib import Path
 from typing import List, Dict, Optional
 
 import requests
@@ -10,6 +13,137 @@ import requests
 logger = logging.getLogger(__name__)
 
 MEDALS = ["🥇", "🥈", "🥉"]
+
+# ──────────────────────────────────────────────────────────────────────
+# 推送节流：全局每天最多 1 条异常告警
+# 2026-06-01 引入：方案 A 推送层合并要求一天 ≤ 3 主消息 + 1 告警
+# 2026-06-01 修订（用户拍板）：原来按 alert_type 各自计数会导致 1 天累计 N 条
+#                              告警，超 ServerChan 5/日 免费额度。改为 GLOBAL
+#                              节流：任意 alert_type 触发的告警当日合计仅 1 条
+#                              微信推送，第 2 条起一律只写日志。
+# ──────────────────────────────────────────────────────────────────────
+_ALERT_STATE_DIR = Path(__file__).resolve().parent / "output" / "state"
+
+
+def _global_alert_marker_path(today_tag: Optional[str] = None) -> Path:
+    """返回当日全局告警节流标记文件路径。"""
+    if today_tag is None:
+        today_tag = datetime.now().strftime("%Y%m%d")
+    return _ALERT_STATE_DIR / f"alert_sent_{today_tag}_global.flag"
+
+
+def _global_alert_sent_today() -> bool:
+    """检查今天是否已经发过任何类型的微信告警（全局节流）。
+
+    所有 alert_type 共享同一个 `alert_sent_YYYYMMDD_global.flag` 标记文件，
+    确保每个交易日合计最多 1 条微信告警，避免超 ServerChan 免费额度。
+    """
+    return _global_alert_marker_path().exists()
+
+
+def _mark_global_alert_sent_today(alert_type: str, title: str) -> None:
+    """落 global 标记表示今天已经发过 1 条告警。
+
+    标记文件内容保留首次告警的 alert_type / title / 时间戳，方便人工审计追溯。
+    """
+    today_tag = datetime.now().strftime("%Y%m%d")
+    try:
+        _ALERT_STATE_DIR.mkdir(parents=True, exist_ok=True)
+        marker = _global_alert_marker_path(today_tag)
+        marker.write_text(
+            f"first_alert_type={alert_type}\n"
+            f"first_alert_title={title}\n"
+            f"sent_at={datetime.now().isoformat()}\n"
+            f"note=后续任何 alert_type 当日均不再微信推送，仅写日志。\n",
+            encoding="utf-8",
+        )
+    except Exception as e:
+        logger.warning(f"[notifier] 写全局告警标记失败（不影响推送）: {e}")
+
+
+def send_alert_once_per_day(
+    title: str,
+    body: str,
+    sendkey: str,
+    alert_type: str,
+) -> bool:
+    """节流告警推送：所有 alert_type 共享全局节流，每个交易日合计最多 1 条微信。
+
+    alert_type 参数仍然保留，用于：
+      - 日志区分（identify 哪个链路异常触发）
+      - 标记文件审计内容（first_alert_type）
+
+    但节流判断走 GLOBAL（任意 alert_type 首条都会占用当日唯一额度）。
+    被节流跳过时 alert_type / title / body 全文都会写日志，方便排查。
+
+    返回 True 表示已发送（含本次），False 表示被节流跳过（已写日志）。
+    """
+    if _global_alert_sent_today():
+        # 全局节流：当日已发过告警，本条只写日志不推微信
+        logger.warning(
+            f"[notifier] 告警节流：今日已推送过 1 条告警（全局节流），"
+            f"跳过本次微信推送。alert_type={alert_type} title={title!r}"
+        )
+        # body 也写日志，避免信息丢失
+        for line in str(body).splitlines():
+            logger.info(f"[notifier] [throttled body] {line}")
+        return False
+    ok = send_to_serverchan(title, body, sendkey)
+    if ok:
+        _mark_global_alert_sent_today(alert_type, title)
+        logger.info(
+            f"[notifier] 已推送当日首条告警（占用全局节流额度）。"
+            f"alert_type={alert_type} title={title!r}"
+        )
+    return ok
+
+
+# ──────────────────────────────────────────────────────────────────────
+# trade_review.csv 只读读取（用于 --morning-digest 等合并推送）
+# ──────────────────────────────────────────────────────────────────────
+
+
+def _load_today_top_from_review(
+    report_date: str,
+    mode: str,
+    limit: int = 3,
+    csv_path: Optional[Path] = None,
+) -> List[dict]:
+    """从 output/trade_review.csv 读取指定 report_date + mode 的前 N 行（按 rank 升序）。
+
+    用于 --morning-digest 等子命令在不重跑选股的前提下合并读取 full / theme_auto
+    两条独立轨道的结果。
+
+    report_date: 'YYYYMMDD' 或 'YYYY-MM-DD'（自动归一化）
+    mode:        'full' / 'theme_auto'（精确匹配）
+    limit:       最多取几行（默认 3）
+
+    返回 [dict, ...] 行级 raw 数据；CSV 不存在或无匹配返回 []。
+    """
+    if csv_path is None:
+        csv_path = Path(__file__).resolve().parent / "output" / "trade_review.csv"
+    if not csv_path.exists():
+        return []
+    target = str(report_date).replace("-", "").strip()
+    rows: List[dict] = []
+    try:
+        with csv_path.open("r", encoding="utf-8-sig") as f:
+            for r in csv.DictReader(f):
+                rd = str(r.get("report_date", "")).replace("-", "").strip()
+                md = str(r.get("mode", "")).strip()
+                if rd == target and md == mode:
+                    rows.append(r)
+    except Exception as e:
+        logger.warning(f"[notifier] 读取 trade_review.csv 失败: {e}")
+        return []
+    # 按 rank 升序，rank 缺失/非数字的塞到末尾
+    def _rank_key(row: dict) -> int:
+        try:
+            return int(str(row.get("rank", "")).strip() or 999)
+        except (TypeError, ValueError):
+            return 999
+    rows.sort(key=_rank_key)
+    return rows[:limit]
 
 
 def _display_value(v, default: str = "暂无") -> str:
@@ -715,6 +849,337 @@ def format_weekly_review_message(summary: dict) -> tuple:
 def format_monthly_review_message(summary: dict) -> tuple:
     """生成月复盘微信推送内容（V1.6：含个股明细 + 主要不买原因）。"""
     return _format_period_review_message(summary, "月")
+
+
+# ════════════════════════════════════════════════════════════════════════
+# 2026-06-01 推送层合并：3+3 早盘 digest / 合并 9:36 / 合并 15:25 复盘
+#
+# 设计目标（用户拍板方案 A）：
+#   - 一天 ≤ 3 条主消息 + 1 条异常告警
+#   - full（mode=full）和 theme_auto（mode=theme_auto）独立写 trade_review.csv
+#   - 不并入 main 主排序、不绕过 V1.6/9:36
+#   - 降级：某 mode 缺则只展示有的那部分，标注异常但不冒充补足
+# ════════════════════════════════════════════════════════════════════════
+
+
+def _fmt_pct(v, na: str = "—") -> str:
+    """把 0.0152 这样的小数格式化成 +1.52%；None / 非数字返回 na。"""
+    try:
+        f = float(v)
+        sign = "+" if f >= 0 else ""
+        return f"{sign}{f * 100:.2f}%"
+    except (TypeError, ValueError):
+        return na
+
+
+def _fmt_num(v, digits: int = 2, na: str = "—") -> str:
+    try:
+        return f"{float(v):.{digits}f}"
+    except (TypeError, ValueError):
+        return na
+
+
+def _format_morning_section(
+    rows: list,
+    section_title: str,
+    rank_offset: int = 0,
+) -> list:
+    """渲染一组（main 或 leader）的早盘条目，返回 lines 列表。
+
+    rows: 来自 trade_review.csv 的 dict 列表（_load_today_top_from_review 返回）
+    section_title: e.g. "主策略 · TOP 3" 或 "龙头 · TOP 3"
+    rank_offset: medal 索引偏移
+    """
+    lines = [f"### {section_title}"]
+    if not rows:
+        lines.append("（本组无数据）")
+        return lines
+    for i, r in enumerate(rows):
+        code  = str(r.get("stock_code", "")).strip()
+        name  = str(r.get("stock_name", "")).strip()
+        total = r.get("total_score", "")
+        pop   = r.get("popularity_score", "")
+        tech  = r.get("technical_score", "")
+        space = r.get("space_score", "")
+        risk  = r.get("risk_score", "")
+        theme = str(r.get("theme_name", "") or "").strip()
+        ta_sc = r.get("theme_auto_score", "")
+        wl    = str(r.get("is_custom_pool", "")).strip().lower() in ("true", "1")
+        wl_mark = "⭐ " if wl else ""
+        ma5   = r.get("ma5", "")
+        med_idx = rank_offset + i
+        medal = MEDALS[med_idx] if med_idx < len(MEDALS) else f"第{med_idx + 1}名"
+
+        lines.append("")
+        lines.append(f"**{medal} {wl_mark}{code} {name}**（总分 **{_fmt_num(total, 0)}**）")
+        if theme:
+            tag = f" 主题:{theme}"
+            if ta_sc:
+                tag += f" 主题分:{_fmt_num(ta_sc, 1)}"
+            lines.append(f"　{tag}")
+        lines.append(
+            f"　分项：人气 {_fmt_num(pop, 0)} ｜ 技术 {_fmt_num(tech, 0)} ｜ "
+            f"空间 {_fmt_num(space, 0)} ｜ 风险扣 {_fmt_num(risk, 0)}"
+        )
+        if ma5:
+            lines.append(f"　关键位：5日线 {_fmt_num(ma5, 2)}")
+    return lines
+
+
+def format_morning_digest_message(
+    main_rows: list,
+    leader_rows: list,
+    report_date: str,
+    status_flags: Optional[dict] = None,
+) -> tuple:
+    """早盘 3+3 合并推送（替代 full / theme_auto 各自单独的推送）。
+
+    Args:
+      main_rows:    trade_review.csv mode=full 当日 top 3 的 dict 列表（按 rank 升序）
+      leader_rows:  trade_review.csv mode=theme_auto 当日 top 3 的 dict 列表
+      report_date:  'YYYYMMDD'
+      status_flags: 可选 {"full_ok": bool, "theme_auto_ok": bool, ...}
+
+    降级策略：
+      - main 有 / leader 无 → 标题加 [龙头池数据异常]，body 写"theme_auto 今日无结果"
+      - main 无 / leader 有 → 标题加 [主策略数据异常]
+      - 两个都无 → 调用方应改用 send_alert_once_per_day 推 1 条告警，而不是调本函数
+    """
+    def _fmt(d: str) -> str:
+        d = str(d).replace("-", "")
+        return f"{d[:4]}-{d[4:6]}-{d[6:8]}" if len(d) == 8 else str(d)
+
+    flags = status_flags or {}
+    full_ok   = bool(main_rows)
+    leader_ok = bool(leader_rows)
+
+    # 标题：默认 3+3，缺一边时加状态标
+    if full_ok and leader_ok:
+        tag = ""
+    elif full_ok and not leader_ok:
+        tag = "[龙头池数据异常]"
+    elif leader_ok and not full_ok:
+        tag = "[主策略数据异常]"
+    else:
+        tag = "[策略链路全异常]"
+    title = f"【朱哥短线雷达 V1.6｜{_fmt(report_date)}早盘 3+3】{tag}".rstrip()
+
+    lines: List[str] = [
+        f"**【朱哥短线雷达 V1.6｜{_fmt(report_date)}早盘 3+3】{tag}**".rstrip(),
+        "",
+    ]
+    lines.append("> 主策略与龙头观察为两条独立轨道，6 只均需经 9:36 技术确认层逐一过门。")
+    lines.append("> ⭐ 标记代表自选池股票。")
+    lines.append("")
+
+    # ── 主策略组 ──
+    if full_ok:
+        lines.extend(_format_morning_section(main_rows, "主策略 · TOP 3", rank_offset=0))
+    else:
+        reason = flags.get("full_fail_reason") or "主策略数据链路异常或今日无候选"
+        lines.append("### 主策略 · TOP 3")
+        lines.append(f"⚠️ {reason}")
+        lines.append("> 不冒充补位，本次不推主策略推荐。")
+
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    # ── 龙头观察组 ──
+    if leader_ok:
+        lines.extend(_format_morning_section(leader_rows, "龙头观察 · TOP 3", rank_offset=0))
+    else:
+        reason = flags.get("theme_auto_fail_reason") or "theme_auto 今日无结果或数据链路异常"
+        lines.append("### 龙头观察 · TOP 3")
+        lines.append(f"⚠️ {reason}")
+        lines.append("> 不为凑 3+3 用自选池冒充龙头；龙头观察留空。")
+
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+    lines.append(
+        "> 本工具只做筛选和检查清单，不构成买卖建议。"
+        "买入由 9:36 技术确认层逐一过门。"
+    )
+
+    body = "\n".join(lines)
+    if (_contains_simulated_stock(main_rows, name_key="stock_name")
+            or _contains_simulated_stock(leader_rows, name_key="stock_name")):
+        title, body = _prepend_simulated_warning(title, body)
+    return title, body
+
+
+def format_combined_check_buy_message(
+    results: list,
+    report_date: str,
+) -> tuple:
+    """9:36 合并买入确认（main 3 + leader 3 一次推完）。
+
+    results 是 trade_review.check_buy() 返回的列表，每个元素 dict 含
+    `mode` 字段（'full' / 'theme_auto'）+ buy_signal / hard_fail_reasons 等。
+    按 mode 分组展示，不改 trade_review.py 主判断逻辑。
+    """
+    def _fmt(d: str) -> str:
+        d = str(d).replace("-", "")
+        return f"{d[:4]}-{d[4:6]}-{d[6:8]}" if len(d) == 8 else str(d)
+
+    title = f"【朱哥短线雷达 V1.6｜{_fmt(report_date)} 9:36 合并买入确认】"
+    lines = [f"**【朱哥短线雷达 V1.6｜{_fmt(report_date)} 9:36 合并买入确认】**", ""]
+
+    # 按 mode 分组
+    main_results   = [r for r in results if str(r.get("mode", "full")) == "full"]
+    leader_results = [r for r in results if str(r.get("mode", "")) == "theme_auto"]
+
+    # 各自走原 format_check_buy_message 的渲染规则，但拆成两段（去掉重复的页头）
+    def _render_group(group: list, group_title: str) -> list:
+        if not group:
+            return [f"### {group_title}", "（本组无数据）", ""]
+        sub_title, sub_body = format_check_buy_message(group, report_date)
+        # 去掉 format_check_buy_message 的前两行（顶层标题 + 空行）和末尾 footer
+        sub_lines = sub_body.split("\n")
+        # 找到第一个不为空且不是 "**" 包裹标题 / V1.6 提示行 的位置作为起点
+        body_start = 0
+        for idx, ln in enumerate(sub_lines):
+            if ln.startswith("**【朱哥") or ln.strip() == "":
+                continue
+            if ln.startswith(">"):
+                continue
+            body_start = idx
+            break
+        # 找 footer 起点（"> 本工具" 那一行）
+        body_end = len(sub_lines)
+        for idx in range(len(sub_lines) - 1, -1, -1):
+            if sub_lines[idx].startswith("> 本工具"):
+                body_end = idx
+                break
+        rendered = sub_lines[body_start:body_end]
+        return [f"### {group_title}", *rendered]
+
+    lines.extend(_render_group(main_results, "主策略 · 9:36 确认"))
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+    lines.extend(_render_group(leader_results, "龙头观察 · 9:36 确认"))
+    lines.append("")
+    lines.append("---")
+    lines.append("> 本工具仅做模拟记录，不构成买卖建议。买入由 V1.6 三层独立判定。")
+
+    body = "\n".join(lines)
+    if _contains_simulated_stock(results, name_key="name"):
+        title, body = _prepend_simulated_warning(title, body)
+    return title, body
+
+
+def format_combined_review_message(
+    stats: dict,
+    report_date: str,
+    t_summary: Optional[dict] = None,
+    second_check_summary: Optional[dict] = None,
+) -> tuple:
+    """15:25 合并复盘（main 3 + leader 3 复盘 + T 摘要 + 10:00 二次确认摘要）。
+
+    在原 format_update_review_message 基础上：
+      - 按 mode 分组展示已买入复盘
+      - 末尾追加 T 模块摘要（做 T 信号 / B 点 / S 点 / 模拟盈亏）
+      - 末尾追加 10:00 second_check 摘要（如果当天跑过）
+    """
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    title = f"【朱哥短线雷达 V1.6｜{today_str} 合并复盘扫描】"
+
+    updated  = stats.get("updated", 0)
+    skipped  = stats.get("skipped", 0)
+    failed   = stats.get("failed",  0)
+    rows     = stats.get("rows", [])
+    bought   = [r for r in rows if not r.get("not_bought_tracking", False)]
+
+    lines = [f"**【朱哥短线雷达 V1.6｜{today_str} 合并复盘扫描】**", ""]
+    lines.append(f"本次处理：补全 **{updated}** 条　跳过 {skipped}　失败 {failed}")
+    lines.append("")
+
+    if not bought:
+        lines.append("> 本次没有已买入且到达 T+1 的记录。")
+    else:
+        # 按 mode 分组
+        main_bought   = [r for r in bought if str(r.get("mode", "full")) == "full"]
+        leader_bought = [r for r in bought if str(r.get("mode", "")) == "theme_auto"]
+
+        def _render_bought(group: list, group_title: str) -> list:
+            if not group:
+                return [f"### {group_title}", "（本组无数据）", ""]
+            ls = [f"### {group_title}", ""]
+            for r in group:
+                code    = r.get("code", "")
+                name    = r.get("name", "")
+                ret     = r.get("simulated_trade_return")
+                max_r   = r.get("t1_max_return")
+                stop    = r.get("stop_loss_triggered", False)
+                risk_ok = r.get("risk_adjusted_success", False)
+
+                ret_str  = _fmt_pct(ret)
+                max_str  = _fmt_pct(max_r)
+                stop_str = "⛔止损" if stop else "✅未触止损"
+                risk_str = "✅风险调整成功" if risk_ok else "❌未达成功标准"
+                ls.extend([
+                    f"**{code} {name}**",
+                    f"　模拟收益 {ret_str}　最高浮盈 {max_str}",
+                    f"　{stop_str}　{risk_str}",
+                    "",
+                ])
+            return ls
+
+        lines.extend(_render_bought(main_bought, "主策略 · T+1 复盘"))
+        lines.append("---")
+        lines.append("")
+        lines.extend(_render_bought(leader_bought, "龙头观察 · T+1 复盘"))
+
+    # ── 10:00 second_check 摘要（可选）──
+    if second_check_summary:
+        lines.append("---")
+        lines.append("")
+        lines.append("### 10:00 二次确认摘要")
+        total_sc = second_check_summary.get("total", 0)
+        passed   = second_check_summary.get("passed", 0)
+        failed_n = second_check_summary.get("failed", 0)
+        lines.append(
+            f"扫描 {total_sc} 只 · 通过 {passed} · 不通过 {failed_n}"
+        )
+        # 最多展示 5 条明细
+        details = second_check_summary.get("details", []) or []
+        for d in details[:5]:
+            code = d.get("code", "")
+            name = d.get("name", "")
+            verdict = d.get("verdict", "")
+            reason  = d.get("reason", "")
+            lines.append(f"- {code} {name}：{verdict}{' ｜ ' + reason if reason else ''}")
+        if len(details) > 5:
+            lines.append(f"- …另有 {len(details) - 5} 条详情见 trade_review.csv")
+        lines.append("")
+
+    # ── T 模块摘要（可选）──
+    if t_summary:
+        lines.append("---")
+        lines.append("")
+        lines.append("### 做 T 摘要（模拟，simulate）")
+        n_sig = t_summary.get("signal_count", 0)
+        n_b   = t_summary.get("b_count", 0)
+        n_s   = t_summary.get("s_count", 0)
+        pnl   = t_summary.get("pnl_total")
+        lines.append(
+            f"T 信号 {n_sig} 个 · B 点 {n_b} · S 点 {n_s} · "
+            f"累计模拟盈亏 {('+' if (pnl or 0) >= 0 else '')}{_fmt_num(pnl, 2)}"
+        )
+        # 安全字段（确保用户知道是模拟）
+        lines.append(
+            "> execution_mode=simulate · can_execute_live=False · "
+            "order_status=not_submitted · broker_status=not_connected"
+        )
+        lines.append("")
+
+    lines.append("---")
+    lines.append("> 本工具仅做模拟记录，不构成买卖建议。")
+
+    body = "\n".join(lines)
+    return title, body
 
 
 def send_test_notify(sendkey: str) -> bool:
