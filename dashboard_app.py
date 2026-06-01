@@ -7915,21 +7915,56 @@ def page_watchlist() -> None:
             result = st.session_state.get("wl_identify_result")
             if result:
                 if result.get("matched"):
-                    st.success(f"识别成功：{result.get('code')} {result.get('name')}")
-                    if st.button("加入自选池", type="primary", key="wl_add_btn"):
+                    code = str(result.get("code", "")).strip().zfill(6)
+                    name = str(result.get("name", "")).strip()
+                    # 预先判断该股票是否已在自选池里，按状态切换按钮文案 + 提示色
+                    # （修 Codex 2026-06-01 HANDOFF 中提到的"按钮文案误导"问题）
+                    existing_table = _wl_clean_rows(_wl_load())
+                    existing_row = next(
+                        (r for r in existing_table
+                         if str(r.get("stock_code", "")).strip().zfill(6) == code),
+                        None
+                    )
+                    existing_status = (
+                        str(existing_row.get("status", "")).strip().lower()
+                        if existing_row else ""
+                    )
+
+                    # 按三种情况切换提示和按钮
+                    if existing_row is None:
+                        # 情况 1：未在池里 → 新增
+                        st.success(f"识别成功：{code} {name} · 未在观察池")
+                        btn_label = "加入自选池"
+                        btn_disabled = False
+                        action_mode = "add"
+                    elif existing_status == "active":
+                        # 情况 2：已在池里且 active → 按钮禁用，提示用户
+                        st.info(
+                            f"识别成功：{code} {name} · 已在自选池（状态：active），"
+                            f"无需再次添加"
+                        )
+                        btn_label = "已在自选池"
+                        btn_disabled = True
+                        action_mode = "noop"
+                    else:
+                        # 情况 3：已在池里但 status 非 active（例如 inactive / watch）→ 重新激活
+                        st.warning(
+                            f"识别成功：{code} {name} · 已在池里（当前状态："
+                            f"{existing_status or '空'}），可重新激活"
+                        )
+                        btn_label = "更新为 active"
+                        btn_disabled = False
+                        action_mode = "activate"
+
+                    if st.button(btn_label, type="primary", key="wl_add_btn",
+                                 disabled=btn_disabled):
+                        # 重新读一次（防止 race），并按 action_mode 执行
                         table = _wl_clean_rows(_wl_load())
-                        code = str(result.get("code", ""))
-                        found = False
-                        for row in table:
-                            if row.get("stock_code") == code:
-                                row["stock_name"] = str(result.get("name", ""))
-                                row["status"] = "active"
-                                found = True
-                                break
-                        if not found:
+                        success_msg = ""
+                        if action_mode == "add":
                             table.append({
                                 "stock_code": code,
-                                "stock_name": str(result.get("name", "")),
+                                "stock_name": name,
                                 "priority": "1",
                                 "theme": "",
                                 "reason": "",
@@ -7938,8 +7973,17 @@ def page_watchlist() -> None:
                                 "max_position_pct": "",
                                 "note": "",
                             })
+                            success_msg = f"已加入自选池：{code} {name}"
+                        elif action_mode == "activate":
+                            for row in table:
+                                if str(row.get("stock_code", "")).strip().zfill(6) == code:
+                                    row["stock_name"] = name or row.get("stock_name", "")
+                                    row["status"] = "active"
+                                    break
+                            success_msg = f"已激活：{code} {name}（状态更新为 active）"
+                        # noop 不会进入这里（按钮 disabled）
                         if _wl_save(_wl_clean_rows(table)):
-                            status_banner("已加入自选池。", "success")
+                            status_banner(success_msg, "success")
                             time.sleep(0.4)
                             st.rerun()
                         else:
