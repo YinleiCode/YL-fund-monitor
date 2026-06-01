@@ -713,6 +713,123 @@ stMarkdownContainer），CSS flex chain 在多层嵌套下不可靠。
 - 如果用户希望“自选池 P1/P2 必须严格占满前三”，还需要进一步调整最终 top3 选择策略。
 - 当前修复是温和版本：自选池通过基础安全与指标计算后优先，但不是无条件推荐。
 
+## 2026-06-01 Claude（推送层合并 + 月复盘 + T 模块实时）
+
+### 操作模型
+
+Claude (Sonnet 4.5)
+
+### 本次任务
+
+用户连续提了 3 件相关需求：
+
+1. **微信推送从 5+ 条/日改成 ≤ 5 条**（不超过 ServerChan 免费额度）
+2. **月复盘自动化**（不再手动跑 `scripts/run_monthly_review.sh`）
+3. **T 模块接 launchd + 真实 1 分钟数据**（替代 sample，模拟盘记录 B/S 点 + 收盘统计盈亏 + 一个月累积）
+
+### 用户拍板的关键决策
+
+1. 推送方案 A：双轨独立 + 推送层合并
+2. 3+3 结构（主策略 mode=full 3 + 龙头观察 mode=theme_auto 3）
+3. 全局告警节流（所有 alert_type 共享每日 1 条额度）
+4. second_check 取消独立推送（结果合并到 15:25 复盘）
+5. T 模块：模拟盘 + 盘中记录 B/S 时间 + 收盘统计盈亏 + 不推送只看板
+6. T 数据源用 akshare（免费 1 分钟 K 线，延迟 1-2 分钟）
+7. 触发频率：盘中每分钟 + 收盘 15:30
+
+### 修改文件
+
+- `data_fetcher.py`：新增 `fetch_minute_today()` 函数 + `from pathlib import Path` import
+- `notifier.py`：新增 5 个推送/节流函数 + `_load_today_top_from_review` helper
+- `run.py`：
+  - 新增 `--morning-digest` 子命令
+  - 新增 `--last-month` 参数
+  - 改 `--check-buy` 用 `format_combined_check_buy_message`
+  - 改 `--update-review` 用 `format_combined_review_message` + 读 T 摘要 + second_check JSON
+  - 改 `--second-check` 写 state JSON 不再推送
+  - 改 `--theme-auto` 数据链路失败时走节流告警
+  - 改 full 模式末尾不再单独推送
+  - 新增 `_load_t_module_summary()` helper
+- `periodic_review.py`：新增 `_last_month_range()` + `monthly_review(last_month)` 参数
+- `dashboard_app.py`：自选池按钮文案按 status 切换（上次会话遗留独立提）
+
+### 新增文件
+
+- `launchd/com.zhuge.stock.morningdigest.plist`（09:05 早盘 3+3）
+- `launchd/com.zhuge.stock.monthlyreview.plist`（每月 1 号 17:00 上月月报）
+- `launchd/com.zhuge.stock.tintraday.plist`（每 60 秒触发，wrapper 判断时段）
+- `launchd/com.zhuge.stock.teod.plist`（15:30 T 模块收盘汇总）
+- `scripts/run_morning_digest.sh`
+- `scripts/run_monthly_review_auto.sh`
+- `scripts/run_t_intraday.py`（盘中 T 信号识别 + akshare 拉数据）
+- `scripts/run_t_intraday.sh`（wrapper，时段判断）
+- `scripts/run_t_eod.py`（收盘 T 汇总）
+- `scripts/run_t_eod.sh`
+
+### 禁改文件检查
+
+- `run.py`：**用户授权改动**（增加子命令 + 改推送格式 + 关闭单独推送）
+- `trade_review.py`：未改
+- `output/trade_review.csv`：未改（仅 append 不修改历史）
+- `config/version_flags.yaml`：未改
+- `launchd/*.plist`：**用户授权增加 4 个新 plist**，未修改既有 plist
+- `scripts/build_t_signal_observer.py` / `build_t_trade_tracker.py`：仅 subprocess 调用，未修改本体
+
+### 是否运行 python run.py
+
+- **没有**。任何 `python run.py` 子命令都未运行。
+- 仅运行 `python -m py_compile`。
+- 用 mock CSV / mock requests / mock datetime / mock akshare 做单元测试。
+
+### 装载 launchd（系统级操作，用户授权）
+
+按用户原话「自动跑 别让我我操作」，本会话**主动 launchctl load** 了 4 个新 plist：
+
+```bash
+launchctl load ~/Library/LaunchAgents/com.zhuge.stock.morningdigest.plist
+launchctl load ~/Library/LaunchAgents/com.zhuge.stock.monthlyreview.plist
+launchctl load ~/Library/LaunchAgents/com.zhuge.stock.tintraday.plist
+launchctl load ~/Library/LaunchAgents/com.zhuge.stock.teod.plist
+```
+
+`launchctl list | grep com.zhuge` 验证 12 个任务全部在线。
+
+### 验收
+
+- `python -m py_compile data_fetcher.py notifier.py run.py periodic_review.py scripts/run_t_intraday.py scripts/run_t_eod.py`：✅ PASS
+- Mock 测试：
+  - notifier 推送合并 + 全局节流：**12/12 PASS**
+  - T pipeline：**7/7 PASS**
+  - monthly_review `_last_month_range`：**3/3 PASS**
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- 本次会话 7 个 commit（按时间顺序）：
+  ```
+  8636442 fix(dashboard): watchlist quick-add button label by stock status
+  582b1a2 feat(notifier): merge push 3+3 + global daily alert throttle
+  96a1d75 feat(run): add --morning-digest + merge check-buy/update-review push
+  dbdbeb0 chore(launchd): add morning-digest schedule at 09:05
+  05ad30f feat(monthly): auto monthly review on the 1st via launchd
+  588d3c1 feat(fetcher): add fetch_minute_today for T module (akshare 1-min K)
+  0145717 feat(t-module): real-time intraday B/S signal + EOD aggregation
+  ```
+- status：clean（除本次 HANDOFF / CHANGELOG 更新，紧接着会提交）
+
+### 遗留问题
+
+1. **T 模块实战验证未做**（按 AI_RULES 不能跑 run.py，必须等 2026-06-02 真实跑后看效果）
+2. **akshare 接口在沙盒里测试失败一次**（`Connection aborted`），用户实际网络可能更好；接口失败时 fetch_minute_today 返回 None，pipeline 容错
+3. **9 个 dashboard 页面 V2.2 视觉化未推进**（用户暂时让先做后端逻辑）
+4. **付费实时数据源未调研**（用户认为 akshare 模拟盘够用）
+
+### 用户教训追溯
+
+会话末尾用户问"现在的进展 其他ai也可以知道是吧" — Claude 立刻意识到 AI_RULES 第 9 条违反：**全部 7 个 commit 落库后，AI_HANDOFF.md / AI_CHANGELOG.md 完全没更新**，立刻补救（本节）。
+
+**给后续 AI 的提醒**：每次任务结束**必须**更新 HANDOFF / CHANGELOG，即使任务被打断也要保留完整状态文档，否则下一个 AI 接手就只能翻 commit messages 拼凑。
+
 ## 后续记录模板
 
 ```markdown

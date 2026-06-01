@@ -754,6 +754,189 @@ WebSocket 渲染完毕。这是验证 UI 改动的可靠手段。
 
 - 如需更强版本，可继续改为「自选池 P1/P2 严格占满前三，不足再由全市场补齐」，但那会进一步改变选股策略，应单独确认。
 
+## 2026-06-01 推送层合并 + 月复盘自动化 + T 模块实时（重要里程碑）
+
+### 任务背景
+
+用户提了 3 件相互关联的事：
+
+1. **微信推送过载**：原 5+ 条/日单独推送（pick / themeauto / checkbuy / secondcheck / update），逼近 ServerChan 免费 5 条/日 上限，数据源失败告警还会爆掉。
+2. **月复盘缺失**：周复盘 launchd 已装，但月复盘只有 `scripts/run_monthly_review.sh` 注释明确说"手动运行"，没自动调度。
+3. **T 模块只是 sample**：`scripts/build_t_signal_observer.py` 和 `build_t_trade_tracker.py` 代码完整，但没接 launchd / 没真实分钟数据源，`output/t_trade/*.csv` 都是 5-29 的 sample 验证记录。
+
+### 用户拍板的决策
+
+1. **推送方案**：方案 A 双轨独立 + 推送层合并（不改主选股逻辑）
+2. **3+3 结构**：主策略 3 只（mode=full）+ 龙头观察 3 只（mode=theme_auto）独立写 trade_review.csv，推送时合并展示
+3. **告警节流**：所有 alert_type **共享每日 1 条**全局额度（不是 per-alert_type 1 条）
+4. **second_check**：取消单独推送，保留 CSV 写入，结果合并到 19:00 复盘
+5. **T 模块定位**：模拟盘 + 盘中实时记录 B/S 点 + 收盘统计盈亏 + 一个月累积 + 不推送、只看板看（用户原话："这个是模拟盘 你只需要记录你盘中的bs点 并且记录你bs的时间 收盘统计bs的盈亏"）
+6. **数据源**：选项 A akshare 免费（用户原话："接受"）
+7. **触发频率**：盘中每分钟跑（StartInterval=60）+ 收盘 15:30 汇总一次
+
+### 7 个落库 commit（按时间顺序）
+
+```text
+8636442 fix(dashboard): watchlist quick-add button label by stock status
+582b1a2 feat(notifier): merge push 3+3 + global daily alert throttle
+96a1d75 feat(run): add --morning-digest + merge check-buy/update-review push
+dbdbeb0 chore(launchd): add morning-digest schedule at 09:05
+05ad30f feat(monthly): auto monthly review on the 1st via launchd
+588d3c1 feat(fetcher): add fetch_minute_today for T module (akshare 1-min K)
+0145717 feat(t-module): real-time intraday B/S signal + EOD aggregation
+```
+
+### 12 个 launchd 任务（全部装载）
+
+```text
+08:50  pick.plist              full 选股 → CSV，不推送
+08:55  themeauto.plist         主题龙头 → CSV，不推送
+09:05  morningdigest.plist     早盘 3+3 合并推送 ⭐ 本会话新增
+09:35-14:55  tintraday.plist   每 60 秒触发，wrapper 判断时段 ⭐ 本会话新增
+              （拉 1 分钟 K + 识别 B/S → t_signal_*.csv）
+09:36  checkbuy.plist          9:36 合并买入确认推送
+10:01  secondcheck.plist       写 state，不推送（合并到 19:00）
+15:30  teod.plist              T 模块收盘汇总 ⭐ 本会话新增
+              （配对 B/S + 算盈亏 + 写 t_summary JSON）
+19:00  update.plist            合并复盘 + T 摘要推送
+19:10  summary.plist           仅 Excel
+1 号 17:00  monthlyreview.plist   上月月报推送 ⭐ 本会话新增
+周末   weeklyreview.plist      周报推送
+/      supervisor.plist        监督告警
+```
+
+工作日预计：3-4 条主推送 + ≤1 条全局告警 ≤ 5 条/日 ✅
+
+### 每日数据流（明天起按这个跑）
+
+```
+08:50  trade_review.csv 写入 mode=full 3 行
+08:55  trade_review.csv 写入 mode=theme_auto 3 行
+09:05  morning-digest 读 csv → 合并推送 3+3
+09:35-14:55  每分钟拉 6 只股 1 分钟 K → 增量识别信号 → t_signal_<date>.csv（盘中实时）
+09:36  check-buy → buy_signal_0935 写回 → 合并 3+3 推送
+15:30  EOD：重新拉全天 → 配对 B/S → 算盈亏 → t_trade_<date>.csv + t_bs_log_<date>.csv → output/state/t_summary_<date>.json
+19:00  update-review → 合并复盘 + T 摘要（从 t_summary JSON 读）→ 推送
+```
+
+### 关键技术决策追溯
+
+- 推送合并用 `format_morning_digest_message` / `format_combined_check_buy_message` / `format_combined_review_message` 三个新函数
+- 全局告警节流：`output/state/alert_sent_YYYYMMDD_global.flag` 标记
+- 月复盘新增 `_last_month_range()`：1 号跑统计上月（跨月/跨年自动处理）
+- T 模块用 `ak.stock_zh_a_hist_min_em` 拉 1 分钟 K（中文列名映射成英文）
+- T 模块 pipeline：`run_t_intraday.py`（盘中信号）+ `run_t_eod.py`（收盘汇总）
+- pipeline 用 subprocess 调用 `build_t_signal_observer.py` / `build_t_trade_tracker.py`，**不修改这两个脚本本体**
+
+### Mock 测试（全 PASS）
+
+- notifier 推送合并 + 全局节流：**12/12**（含跨日期 mock datetime）
+- T pipeline：**7/7**（含 _today_codes_from_review、列名映射、容错、aggregation）
+- monthly_review `_last_month_range`：**3/3**（跨月 / 跨年 / 30-31 天月份）
+
+### 重要：禁改文件 + 安全边界
+
+本会话**未触碰**：
+
+- ✅ `trade_review.py` — T 模块通过 subprocess 调外部脚本，不修改主买入判断
+- ✅ `output/trade_review.csv` 历史数据 — 仅 append，不改已有行
+- ✅ `config/version_flags.yaml`
+- ✅ 自动下单 / 券商连接 / 止损主逻辑 / T+1 收益主逻辑
+
+本会话**修改了**（用户授权后改动）：
+
+- `run.py`：新增 `--morning-digest` / `--last-month` 子命令 + 改 check-buy/update-review 推送格式
+- `launchd/*.plist`：新增 morningdigest / monthlyreview / tintraday / teod 4 个 plist
+
+本会话**新增**：
+
+- `data_fetcher.py` 新增 `fetch_minute_today()` 函数
+- `notifier.py` 新增 5 个推送/节流函数
+- `periodic_review.py` 新增 `_last_month_range()`
+- `scripts/run_t_intraday.py` / `run_t_intraday.sh`
+- `scripts/run_t_eod.py` / `run_t_eod.sh`
+- `scripts/run_monthly_review_auto.sh`
+
+### T 模块字段安全（未改）
+
+所有 T 模块字段保持 simulate：
+
+```text
+execution_mode=simulate
+can_execute_live=False
+order_status=not_submitted
+broker_status=not_connected
+```
+
+### 已知局限（写给接手 AI）
+
+1. **akshare 1 分钟 K 接口延迟 1-2 分钟**
+   - 不是 Tick 级毫秒数据，是 K 线级
+   - 对模拟盘记录场景完全够用（写入的 timestamp 是 K 线真实时间）
+   - 真要实战按信号下单会有 1-2 分钟滑点 — 但用户场景是模拟盘 + 看板复盘
+
+2. **akshare 接口稳定性未实测**
+   - 沙盒里测试时 `Connection aborted, RemoteDisconnected` 一次
+   - 用户实际网络环境可能更好
+   - 接口失败时 `fetch_minute_today` 返回 None，pipeline 容错
+   - 建议接手 AI 在 2026-06-02 第一次跑后看 `logs/auto_run.log` 验证实战稳定性
+
+3. **morning-digest 09:05 时点**
+   - pick 08:50 + themeauto 08:55 → 给 10/15 分钟执行窗口
+   - 如果某天 pick / themeauto 超过 10 分钟还没写完 csv，morning-digest 可能拿不到完整数据
+   - 实测后若需调整可改 09:10 或 09:15
+
+4. **T 模块跑约 220 次/日（每分钟）**
+   - 60 秒 wrapper 启动 + 时段判断
+   - 每分钟拉 6 只股 = 6 次 HTTP 请求
+   - 全天约 220 × 6 = 1320 次 HTTP 请求到东方财富
+   - 如果被限流，可调 plist `StartInterval` 到 120（每 2 分钟）
+
+5. **`docs/ui_refs/stitch_designs/`** 已经在 c550774 commit 备份到仓库内（不会丢）
+
+### 接手 AI 立刻该做什么
+
+#### 第 1 步：确认 git + launchd 状态
+
+```bash
+git log --oneline -10            # 应当看到 7 个本会话 commit
+git status                       # 应当 clean
+launchctl list | grep com.zhuge  # 应当 12 个任务全在
+```
+
+#### 第 2 步：检查明天（2026-06-02）实战效果
+
+如果接手 AI 在 2026-06-02 之后启动：
+
+```bash
+# 检查 morning-digest 是否真推送了
+tail -200 logs/auto_run.log | grep -i "morning_digest"
+
+# 检查 T 模块是否真跑了
+tail -500 logs/auto_run.log | grep -i "t_intraday\|t_eod"
+
+# 检查 trade_review.csv 当天数据
+awk -F, '$1=="20260602"' output/trade_review.csv | head -10
+
+# 检查 T 模块产出
+ls -la output/t_trade/t_*_20260602.csv 2>/dev/null
+cat output/state/t_summary_20260602.json 2>/dev/null
+```
+
+#### 第 3 步：如果有异常，可能的修复方向
+
+- **morning-digest 没推送**：检查 logs/auto_run.log 是否有 morning_digest 启动日志；trade_review.csv 是否当天有数据
+- **T 模块没数据**：akshare 接口失败概率高，看日志里 `fetch_minute_today` warning
+- **launchd 任务没跑**：`launchctl list | grep <task>` 看是否有 exit code
+- **告警炸 5 条/日**：检查 `output/state/alert_sent_*_global.flag` 标记是否正常工作
+
+### 后续可能的迭代方向（用户尚未拍板）
+
+1. **看板「做 T 观察」页**：现在默认隐藏 sample，real data 第一次出现是 2026-06-02 15:30 之后。可以做月度统计图（一个月 B/S 累积 / 胜率 / 盈亏曲线）
+2. **付费实时数据源升级**：如果用户发现 akshare 1-2 分钟延迟影响实战感，升级到同花顺 iFinD（¥3000/年）或自建 push2delay daemon
+3. **9 个其他 dashboard 页面 UI 改造**：方案 A 推送层合并完成后，仍剩 9 页待 V2.2 视觉化（我的自选 / 买入确认 / T+1 复盘 / 等）
+4. **T 模块 dashboard 月度统计**：现在 page_t_signal 只展示当日，可以加月度 trends 图
+
 ## 禁止事项
 
 详细规则见 `AI_RULES.md`。
