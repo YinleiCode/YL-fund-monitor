@@ -26,6 +26,7 @@ import logging
 import ssl
 import socket
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -889,6 +890,92 @@ def fetch_stock_history(
     else:
         cache.save(key, raw_df, trade_date)
     return raw_df
+
+
+def fetch_minute_today(
+    code: str,
+    date_str: Optional[str] = None,
+    end_time: Optional[str] = None,
+    save_dir: Optional[Path] = None,
+    retries: int = 2,
+) -> Optional[pd.DataFrame]:
+    """拉取单只股票当日 1 分钟分时数据（用于 T 模块盘中识别 B/S 点）。
+
+    2026-06-01 引入：方案 A 选项 1，akshare `stock_zh_a_hist_min_em` period='1'，
+    免费数据源，盘中调用延迟约 1-2 分钟（K 线级，非 Tick 级）。
+
+    Args:
+        code:     6 位股票代码（不带 SH/SZ 前缀，如 "600522"）
+        date_str: 'YYYYMMDD'，默认今天
+        end_time: 'HH:MM:SS'，默认 "15:00:00"（盘中调用时可以传当前时间提前截止）
+        save_dir: 可选，保存 DataFrame 到 {save_dir}/{date}_{code}.csv（utf-8）
+        retries:  接口失败重试次数
+
+    Returns:
+        pd.DataFrame 含列 [datetime, open, high, low, close, volume]，
+        与 scripts/build_t_signal_observer.py 的 load_minute_csv() 期望格式一致；
+        失败返回 None。
+
+    注意：本函数不写 trade_review.csv / 不动主交易链路，仅供 T 模块脚本调用。
+    """
+    import akshare as ak
+    if date_str is None:
+        date_str = date.today().strftime("%Y%m%d")
+    if len(date_str) != 8 or not date_str.isdigit():
+        logger.warning(f"[minute] date_str 格式错误: {date_str!r}")
+        return None
+    date_iso = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
+    start = f"{date_iso} 09:30:00"
+    end   = f"{date_iso} {end_time or '15:00:00'}"
+
+    df = None
+    for attempt in range(retries + 1):
+        try:
+            df = ak.stock_zh_a_hist_min_em(
+                symbol=code,
+                start_date=start,
+                end_date=end,
+                period="1",
+                adjust="",
+            )
+            break
+        except Exception as e:
+            logger.warning(
+                f"[minute] {code} 第 {attempt + 1} 次尝试失败: {type(e).__name__}: {e}"
+            )
+            if attempt < retries:
+                time.sleep(1.5)
+    if df is None or df.empty:
+        logger.warning(f"[minute] {code} 全部尝试失败或返回空")
+        return None
+
+    # akshare 返回中文列名，映射到 build_t_signal_observer.load_minute_csv 期望格式
+    column_map = {
+        "时间":   "datetime",
+        "开盘":   "open",
+        "最高":   "high",
+        "最低":   "low",
+        "收盘":   "close",
+        "成交量": "volume",
+    }
+    df = df.rename(columns=column_map)
+    keep = ["datetime", "open", "high", "low", "close", "volume"]
+    df = df[[c for c in keep if c in df.columns]].copy()
+
+    if df.empty:
+        return None
+
+    # datetime 列保证字符串形式（observer 用 _parse_datetime 解析）
+    df["datetime"] = df["datetime"].astype(str)
+
+    if save_dir is not None:
+        save_dir = Path(save_dir)
+        save_dir.mkdir(parents=True, exist_ok=True)
+        out = save_dir / f"{date_str}_{code}.csv"
+        df.to_csv(out, index=False, encoding="utf-8")
+        logger.info(f"[minute] {code} 已保存 {len(df)} bars → {out}")
+
+    return df
 
 
 def fetch_batch_history(
