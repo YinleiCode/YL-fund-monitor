@@ -432,6 +432,202 @@ worktree 状态：clean（除非本次会话还有 AI 文档追加）
 
 V1.6 dirty worktree 4 个包（P1 / A / B / C）至此全部提交落库。
 
+## 2026-06-01 V2.2 today 重构尝试（未 commit，未达预期，等 Codex 接手决策）
+
+### 任务背景
+
+A 包 V2 commit `d243b8c` 用户实际看不出明显视觉差异（V2 只做了 token / 全局 CSS，
+没动页面 layout 框架）。用户要求按 Stitch 设计稿做真实重构，**显著**对齐视觉。
+
+用户具体要求（2026-06-01 session 后半段）：
+
+1. 全部英文 → 中文（label / chip / 标题 / 状态文字）
+2. 空的地方不要留白（学习 Stitch 排版）
+3. 整体功能不变，只改 UI
+4. 风格统一
+
+### 我（Claude）做了什么
+
+**仅改了 1 个文件**：`dashboard_app.py`（worktree dirty，881 insertions / 59 deletions）
+
+具体新增 / 重写：
+
+1. **新增辅助**：
+   - `_h(s)` HTML dedent helper（处理 Streamlit Markdown 缩进式代码块识别坑）
+   - `_v2_sparkline_svg(values, color)` 内联 SVG sparkline 趋势线
+   - `_v2_mock_sparkline_from_pct(pct)` 基于涨幅生成 mock 走势（**承认是假数据**）
+
+2. **重写 / 升级**：
+   - `kpi_hero_strip()` 长条横排 → **5 张独立方卡 grid**（含 sparkline + 环形进度）
+   - `_v2_stock_card()` 升级：全中文 + sparkline + 涨幅条 + V1.6 三层 chip（复盘 / 资金 / 9:36）
+   - `_v2_sidebar_capital()` 重命名为「市场脉冲」，6 行数据（北向资金 / 两市成交额 / 涨跌家数 / 涨跌停）
+   - `_v2_sidebar_v16_rates()` 重命名为「V1.6 达标流程」，3 条进度条 + 口径说明 + V1.6 智能算法引擎徽章
+   - `_v2_sidebar_top3()` 重命名为「核心推荐」，**空数据时返回 ""（不渲染整张卡）**
+   - `_v2_signal_stream()` 中文表头 + min-height: 360px + LIVE 脉冲
+   - `render_today_v2_stitch()` 全面改造：全中文 KPI + 智能 grid（候选 < 4 时按 n 列撑满）+ 策略洞察卡 + 实时信号流嵌入左侧
+3. **数据翻译表**：
+   - 新增 `V16_NOTES_CN`（V1.6 相关 notes code → 中文）9 条
+   - 加入 `NOTES_CN` 合并，修复 `v16_plan_only_observe` 等英文 code 显示问题
+4. **import 新增**：`re`, `textwrap`
+5. **CSS 改动**：
+   - 新增 V2.2 marker class `.rt-v2-today-marker`（display:none，仅作选择器锚点）
+   - 全局 CSS 末尾加 V2.2 两栏对齐补丁（用 `:has()` + flex-grow）
+
+### 哪些成功了
+
+- ✅ 全中文化（label / chip / 标题 / 状态 / 表头 全是中文）
+- ✅ 5 张 KPI Hero 方卡（不再是长条）+ sparkline / 环形进度
+- ✅ 候选股票卡显著升级（左侧 accent + 大价格 + 涨幅 + 涨幅条 + sparkline + V1.6 三层 chip）
+- ✅ 策略洞察卡（含主要未买入原因 chip）
+- ✅ 实时信号流移到左侧主区底部
+- ✅ V16 code 英文显示问题修复（v16_plan_only_observe → V1.6 复盘计划要求只观察）
+- ✅ Stitch 设计稿视觉一致性：玻璃态 + 电光青 / 霓虹绿 / 品红霓虹 + JetBrains Mono
+- ✅ 用户视觉确认：「我的自选 / KPI Hero / 候选卡 / 实时信号流」都没问题
+
+### 哪些反复失败 / 用户不满意
+
+**核心矛盾：两栏底部对齐**
+
+- 第 1 次：CSS `align-items: stretch` + `flex-grow: 1` 选择器 → 用户截图证明无效
+- 第 2 次：换 `:has()` 选择器 + `display:none` marker → 用户截图证明仍然无效
+- 第 3 次：放弃 CSS hack，改 workaround：
+  - 「核心推荐」空数据时不渲染整张卡（让右侧从 3 块变 2 块）
+  - 「实时信号流」加 `min-height: 360px` 撑高
+  - 我用 Chrome DevTools CDP 自检截图，左右底部对齐差 < 10px
+  - 用户后续无反馈，但用户认为整体 V2.2 推进效率拉垮，决定换 Codex 接手
+
+**根本问题**：Streamlit 的 `st.columns()` 内部有多层 wrapper（`stHorizontalBlock` →
+`stColumn` → `stVerticalBlock` → `stElementContainer` → `stMarkdownContainer` ...），
+CSS flex chain 在多层嵌套下不可靠，每次 streamlit 升级版本结构都可能变。
+
+**Workaround 的代价**：
+
+- 「核心推荐」空数据时整张卡消失（视觉信息减少）
+- 「实时信号流」min-height: 360px 数据少时底部有视觉空白
+- 这些不是根本解，是绷出来对齐的
+
+### 用户对 V2.2 的态度
+
+直接原话："你太拉垮了，洗一下总结，我让 codex 去搞"。
+
+意思：
+- 不否定 V2.2 视觉方向（中文化 / 玻璃态 / Hero / 候选卡 / 设计语言都认可）
+- 但实施过程反复失败 + 对齐 hack 让用户不耐烦
+- 要换 Codex 接手收尾
+
+### Codex 接手时立刻该做什么
+
+#### 第 0 步：确认 git 状态
+
+```bash
+git status        # 应当显示 M dashboard_app.py
+git log --oneline -5   # 最近 commit 应当是 3fa182a docs ... d243b8c V2 token + CSS ...
+git diff --stat   # dashboard_app.py 881 insertions / 59 deletions
+```
+
+#### 第 1 步：方向决策（与用户对齐）
+
+**选项 A：基于 V2.2 dirty 继续修**
+- 优点：用户认可的视觉元素（中文化 / KPI Hero / 候选卡 / 策略洞察 / 实时信号流）已经在 worktree 里
+- 缺点：要解决两栏对齐根本问题（不能再用 CSS hack）
+- 推荐方法：用 `streamlit.components.v1.html` 完全自渲染主区（绕过 streamlit 多层 wrapper），用纯 CSS grid 自己控制 layout
+
+**选项 B：git restore，回到 V2.1（commit `d243b8c`）**
+- 优点：clean state，全新规划
+- 缺点：V2.2 dirty 里有用户认可的视觉元素全部丢弃
+- 命令：`git restore dashboard_app.py`
+
+**选项 C：把 V2.2 dirty 当 WIP commit 落库，再决定**
+- `git add dashboard_app.py && git commit -m "wip: V2.2 today refactor (alignment unresolved)"`
+- 然后基于此 commit 接续工作或 revert
+
+#### 第 2 步：如果选 A 或 C，重点解决对齐
+
+**不要**继续用 CSS `:has()` + flex-grow 这条路（已证明在 streamlit 嵌套下不稳）。
+
+**建议**：用 `st.components.v1.html()` 完全自渲染整个主区
+- 单一 HTML 文档，无 streamlit wrapper 干扰
+- CSS grid `grid-template-columns: 2fr 1fr` 完全可控
+- 缺点：失去 streamlit 反应式（点击 button / hover 等需要回调）—— 但当前 V2.2 主区本来也是纯展示
+
+或者：把整个主区写成一个超大 HTML（不用 columns），用 CSS grid 直接铺。
+保留 streamlit columns 只用在「日期选择器」等需要交互的地方。
+
+#### 第 3 步：剩下未做的事
+
+按现有 V2.2 改动后，还有 6 个页面没改造：
+
+1. ⭐ 我的自选（`page_watchlist`）
+2. 买入确认（`page_buy_check`）
+3. T+1 复盘（`page_t1_review`）
+4. 未买入跟踪（`page_not_bought`）
+5. 周月复盘（`page_period_review`）
+6. 做T观察（`page_t_signal`）
+7. 候选复盘（`page_candidate_lifecycle`）
+8. 明日计划（`page_tomorrow_plan`）
+9. 手动补跑（`page_manual_rerun`）
+
+每页都需要参考 `/tmp/stitch_designs/` 下对应的 Stitch 设计稿来重构。
+
+**Stitch 设计稿位置**：
+- `/tmp/stitch_designs/01_today_overview.png` 今日总览 ✅ 已落地（dirty 状态）
+- `02_watchlist.png` 我的自选
+- `03_buy_check.png` 买入确认
+- `04_t1_review.png` T+1 复盘
+- `05_not_bought_tracking.png` 未买入跟踪
+- `06_t_signal.png` 做T观察
+- `07_period_review.png` 周月复盘
+- 缺 3 张：候选复盘 / 明日计划 / 手动补跑（Stitch 服务挂了，下次会话再补）
+
+#### 第 4 步：还有 5 个用户问过的「真假」问题
+
+详见用户 session 中段提的 5 问及我的回答（详细记录在本节之前）：
+
+| 问题 | 答案 | 状态 |
+|---|---|---|
+| 指标真假 | 5 大数字**全真**（CSV / JSON） | ✅ 真 |
+| 模拟收入 | T+1 后才有，今天 ¥0 是真实状态 | ⏳ 待 T+1 |
+| K 线图 (sparkline) | **mock 假数据**，基于涨跌方向生成 | ⚠️ 需接 akshare/efinance |
+| V1.6 达标流程 | 复盘层 ✅真；资金 / 9:36 层是**简化代理** | ⚠️ 需改 trade_review.py 加 `capital_layer_passed` / `confirm_layer_passed` 字段 |
+| 大段空白 | 已修（核心推荐空隐藏 + 实时信号流 min-height） | ✅ 已修（但是 workaround） |
+
+**用户没有明确允许改 trade_review.py（禁改文件）来精准化 V1.6 三层达标率。**
+**用户没有明确要求做真实 sparkline（接 akshare/efinance）。**
+**这两个都需要 Codex 接手时先和用户对齐才做。**
+
+### Codex 接手前的环境清理
+
+- ✅ 已 kill streamlit 进程
+- ✅ 已 kill chrome headless 进程
+- ✅ 端口 8501 已释放
+- ✅ `py_compile dashboard_app.py` PASS
+
+### 关键文件位置
+
+- 主 UI 文件：`dashboard_app.py`（worktree dirty）
+- 配置文件：`.streamlit/config.toml`（已 commit，无 worktree 改动）
+- Stitch 设计稿：`/tmp/stitch_designs/01-07*.png`（重启后会丢，备份重要）
+- 自检脚本：`/tmp/cdp_shot.py` 和 `/tmp/cdp_shot_hd.py`（用 Chrome DevTools 远程调试 + Python websockets 库自截图，绕过 streamlit WebSocket SPA 渲染异步问题）
+
+### 自检截图工具（Codex 可继续用）
+
+```bash
+# 启动 chrome headless + CDP debugging
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  --headless=new --disable-gpu --no-sandbox \
+  --remote-debugging-port=9222 \
+  --user-data-dir=/tmp/cdp_chrome_profile \
+  --window-size=1600,1300 \
+  about:blank &
+
+# 跑截图脚本
+python3 /tmp/cdp_shot.py    # 普通分辨率，约 250KB PNG
+python3 /tmp/cdp_shot_hd.py # 2x deviceScaleFactor，约 650KB PNG
+```
+
+CDP 截图能等到 `Page.lifecycleEvent: networkIdle` 之后再 sleep 4s 截，确保 streamlit
+WebSocket 渲染完毕。这是验证 UI 改动的可靠手段。
+
 ## 禁止事项
 
 详细规则见 `AI_RULES.md`。
