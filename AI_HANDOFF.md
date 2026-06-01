@@ -293,6 +293,62 @@ T 模块不接券商，不自动下单，不写入 `output/trade_review.csv`。
 6. 如果继续修 dashboard，优先只改 `dashboard_app.py` 和 `.streamlit/config.toml`。
 7. 每次任务结束必须更新 `AI_HANDOFF.md` 和 `AI_CHANGELOG.md`。
 
+## 当前活跃会话状态（2026-06-01，会话可能因重启中断）
+
+如果你是接手的新模型 / 新会话，下面是上一次会话的完整状态。
+
+### 已完成（本日已 commit 落库）
+
+1. P1 修复 `4fe0272`：`trade_review.check_buy()` 实时行情失败状态写回 + dashboard 区分「实时行情缺失 / 实时价格无效」与「尚未运行」+ `STATUS_NOBUY_DATA_FAIL` 顶层标签。详见「2026-06-01 P1 修复补充」节。
+2. B 包 `6ce3187`：`run.py` 自选池优先入候选池 + 排名截断后补回 + `theme_auto.py` 三级 fallback（EM 概念 → EM 行业 → THS 行业 → 缓存）+ 成分股 EM 概念→EM 行业 fallback + `degraded_watchlist` 降级标记 + 跳过 trade_review.csv 写入。18/18 monkeypatch PASS。详见 B 节。
+3. C 包 `0cc5779`：自选池从 3 只扩展到 13 只。详见 C 节。
+
+### 待办（A 包）
+
+**A 包**：`.streamlit/config.toml`（13 行）+ `dashboard_app.py`（3749 行 UI 改动）。前序遗留的 RADAR_TERMINAL 暗黑终端 dashboard 整理 + 我的自选页面 UI 优化。
+
+A 包阻塞在「需要用户视觉确认」。用户已表达要用 **Stitch MCP** 来优化 UI（用户已接入 Stitch MCP server，但上一次会话工具列表里还没看到它，需要重启会话才能加载）。
+
+### 重启后立刻该做的
+
+1. 列工具命名空间，确认 Stitch MCP 是否已加载（找 `mcp__stitch__*` 或类似前缀）。
+2. 如果加载成功：和用户对齐 UI 优化目标（哪几个页面、哪种风格），调用 Stitch 生成设计稿，再把设计稿落地到 `dashboard_app.py` 和 `.streamlit/config.toml`。
+3. 如果还是没加载：让用户 `/mcp` 看状态，或检查 `~/.config/claude-code/mcp.json` 的 Stitch 配置。
+
+### 用户偏好（与协作约定）
+
+- **必须严格遵守 `AI_RULES.md`**：不运行 `python run.py` 或任何子命令；不动 `output/trade_review.csv` 历史；不引入真实交易；改禁改文件必须先说明；任务结束必须更新 `AI_HANDOFF.md` 和 `AI_CHANGELOG.md`。
+- **拆 commit 习惯**：每个功能/修复一个独立 commit，不混；commit message 要写清楚 safety、verification、docs。
+- **验收方式**：优先 `py_compile` + monkeypatch，禁止跑 `run.py`。
+- **dashboard 改 UI 时**：只能改 `dashboard_app.py` 和 `.streamlit/config.toml`，且要说明只影响前端。
+- **T 模块**：永远保持 simulate；不能接 launchd 实盘。
+- 用户说话风格：简短、直接、口语化；接受中英混排；偶尔有拼音/输入法错字（如「嘎玛」「康熙」「记者」），按上下文还原意思即可。
+
+### 已知待决策项（用户拍板）
+
+- 自选池 `priority=1` 是否硬提到前三（强优先）还是只优先观察（弱优先）。
+- T 模块何时接 launchd（保持 simulate 前提下）。
+- T 模块真实 1 分钟数据源接入方案。
+- A 包 UI 优化的最终方向（等 Stitch 配合）。
+
+### 当前 git 状态（重启时为 dirty）
+
+```
+分支：restore/radar-terminal-keep-t
+最近 5 个 commit：
+  0cc5779 update custom stock watchlist to 13 names    ← C 包
+  6ce3187 prioritize watchlist candidates ...          ← B 包
+  4fe0272 fix(check_buy): write back realtime data ... ← P1
+  8ed7261 document handoff plan for pending work
+  6cd4939 add AI handoff and project rules docs
+
+dirty worktree (仅 A 包)：
+  M .streamlit/config.toml      13 行
+  M dashboard_app.py          3749 行
+```
+
+如果接手的新会话需要重做安全验证，确认上面 git log 和这两个 dirty 文件没变即可。
+
 ## 禁止事项
 
 详细规则见 `AI_RULES.md`。
