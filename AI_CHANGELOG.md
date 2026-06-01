@@ -539,6 +539,180 @@ stMarkdownContainer），CSS flex chain 在多层嵌套下不可靠。
 - T 模块仍 simulate，未接 launchd
 - V1.6 三层达标率口径不精准（是简化代理）
 
+## 2026-06-01 Codex
+
+### 本次任务
+
+- 接手 Claude 未完成的 V1.6 dashboard UI 重构。
+- 先处理「今日总览」两栏对齐问题，不改后端交易逻辑。
+- 备份 `/tmp/stitch_designs/` 设计稿到仓库，避免 Mac 重启后丢失。
+
+### 修改文件
+
+- `dashboard_app.py`
+- `AI_HANDOFF.md`
+- `AI_CHANGELOG.md`
+
+### 新增文件
+
+- `docs/ui_refs/stitch_designs/01_today_overview.html`
+- `docs/ui_refs/stitch_designs/01_today_overview.png`
+- `docs/ui_refs/stitch_designs/02_watchlist.png`
+- `docs/ui_refs/stitch_designs/03_buy_check.png`
+- `docs/ui_refs/stitch_designs/04_t1_review.png`
+- `docs/ui_refs/stitch_designs/05_not_bought_tracking.png`
+- `docs/ui_refs/stitch_designs/06_t_signal.png`
+- `docs/ui_refs/stitch_designs/07_period_review.png`
+
+### 禁改文件检查
+
+- `run.py`：未改。
+- `trade_review.py`：未改。
+- `output/trade_review.csv`：未改。
+- `config/version_flags.yaml`：未改。
+- `launchd/*.plist`：未改。
+
+### 是否运行 python run.py
+
+- 没有。
+- 未运行任何 `python run.py` 子命令。
+
+### 验收
+
+- `.venv/bin/python3 -m py_compile dashboard_app.py`：通过。
+- Streamlit AppTest 初始加载：无异常。
+- Streamlit AppTest 10 个导航页切换：全部无异常。
+- 今日总览主区已从 `st.columns()` 对齐 hack 改为 `st.html()` + CSS Grid。
+- Chrome 实测今日总览左右主区基本对齐，实时信号流不再固定 360px 撑出大空白。
+- Chrome 实测 10 个导航页均可点击打开。
+- 已修复顶部导航切换后保留旧滚动位置的问题。
+- 已解除 `⭐ 我的自选` 页面一屏锁定，13 只自选股票可继续向下滚动查看。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：未提交。
+- status：`dashboard_app.py`、`AI_HANDOFF.md`、`AI_CHANGELOG.md` 修改；`docs/ui_refs/` 新增。
+
+### 遗留问题
+
+- 需要用户在浏览器中确认今日总览视觉效果是否达标。
+- `⭐ 我的自选` 页面仍需继续 UI 收紧和个股卡片优化。
+- 其他页面仍待按 V2.2 视觉体系逐步重构。
+
+## 2026-06-01 Codex 功能 QA
+
+### 本次任务
+
+- 在用户确认今日总览视觉基本可接受后，补做实际功能验证。
+- 核对自选池、今日候选、T 交易记录、B/S 点、页面导航和安全边界。
+
+### 修改文件
+
+- `AI_HANDOFF.md`
+- `AI_CHANGELOG.md`
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- `run.py`：未改。
+- `trade_review.py`：未改。
+- `output/trade_review.csv`：未改。
+- `config/version_flags.yaml`：未改。
+- `launchd/*.plist`：未改。
+
+### 是否运行 python run.py
+
+- 没有。
+- 未运行任何 `python run.py` 子命令。
+
+### 验收
+
+- `data/watchlist/custom_stock_pool.csv` 当前 13 只股票，均为 active / P1。
+- Chrome 实测 `⭐ 我的自选`：
+  - 展示 13 / 13。
+  - 搜索 `胜宏` 可过滤到 `胜宏科技`。
+  - 输入 `300476` 可识别 `胜宏科技`。
+  - 输入 `胜宏科技` 可识别 `300476`。
+  - 未点击最终添加按钮，未写入 CSV。
+- `output/trade_review.csv` 只读核对：
+  - 2026-06-01 有 3 条候选。
+  - 三条均为 `buy_signal_0935=false` 与 `notes=v16_plan_only_observe`。
+  - 判断：今天是 V1.6 计划层只观察，不是 dashboard 漏显示买入。
+- `output/t_trade/t_trade_latest.csv` 只读核对：
+  - 4 条 sample T 交易记录完整。
+  - 低吸止盈、低吸止损、高抛回补、高抛踏空止损的退出原因和收益率均符合预期。
+  - 安全字段均保持 simulate / not submitted / not connected。
+- `output/t_trade/t_bs_log_20260529.csv` 只读核对：
+  - 8 条 B/S 点记录完整。
+- `output/t_trade/*` 与 `output/trade_review.csv` 均被 `.gitignore` 忽略。
+- `.venv/bin/python3 -m py_compile dashboard_app.py scripts/build_t_trade_tracker.py`：通过。
+- Streamlit AppTest：10 个导航页全部无异常。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：未提交。
+- status：`dashboard_app.py`、`AI_HANDOFF.md`、`AI_CHANGELOG.md` 修改；`docs/ui_refs/` 新增。
+
+### 遗留问题
+
+- T 脚本尚未接入 launchd，所以今天没有真实 T 记录。
+- 真实分钟数据源仍需稳定性验证，否则 T 只能显示 sample 或 data_missing。
+- 已存在自选股识别成功后按钮仍显示「加入自选池」，文案后续建议优化。
+- AppTest 提示 `st.components.v1.html` 未来弃用，后续需要替代导航自动回顶实现。
+
+## 2026-06-01 Codex 自选池优先级修复
+
+### 本次任务
+
+- 根据用户确认，把选股逻辑调整为更明确的「自选池优先」。
+- 修复自选股可能在历史过滤阶段被清掉，导致最终推荐不体现自选池优先的问题。
+
+### 修改文件
+
+- `run.py`
+- `AI_HANDOFF.md`
+- `AI_CHANGELOG.md`
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- `trade_review.py`：未改。
+- `output/trade_review.csv`：未改。
+- `config/version_flags.yaml`：未改。
+- `launchd/*.plist`：未改。
+
+### 是否运行 python run.py
+
+- 没有。
+- 未运行任何 `python run.py` 子命令。
+
+### 验收
+
+- `.venv/bin/python3 -m py_compile run.py`：通过。
+- mock 验证 `_keep_watchlist_after_rank()`：
+  - 排名/过滤后仍有普通候选时，自选池可补回。
+  - 历史过滤结果为空时，自选池也可从候选评估池补回。
+- 自选池仍只改变候选来源优先级，不绕过 V1.6 明日计划层、9:36 技术确认，不触发买入。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：未提交。
+- status：`run.py` 新增修改；此前仍有 `dashboard_app.py`、`AI_HANDOFF.md`、`AI_CHANGELOG.md` 修改和 `docs/ui_refs/` 新增。
+
+### 遗留问题
+
+- 如果用户希望“自选池 P1/P2 必须严格占满前三”，还需要进一步调整最终 top3 选择策略。
+- 当前修复是温和版本：自选池通过基础安全与指标计算后优先，但不是无条件推荐。
+
 ## 后续记录模板
 
 ```markdown

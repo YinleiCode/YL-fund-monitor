@@ -628,6 +628,132 @@ python3 /tmp/cdp_shot_hd.py # 2x deviceScaleFactor，约 650KB PNG
 CDP 截图能等到 `Page.lifecycleEvent: networkIdle` 之后再 sleep 4s 截，确保 streamlit
 WebSocket 渲染完毕。这是验证 UI 改动的可靠手段。
 
+## 2026-06-01 Codex 接手 V2.2 today 布局修复
+
+### 本次判断
+
+- 不建议直接 `git restore` 回退 Claude 的 dirty UI 改动，因为其中已经包含 V2.2 today 页面的大量视觉素材和数据卡片函数。
+- 不继续在 `st.columns()` 内做 CSS flex 对齐。Claude 反复失败的根因是 Streamlit columns 多层 wrapper 高度链条不可控。
+- 已把「今日总览」主展示区改为单个 HTML Grid 结构，通过 `st.html()` 渲染，避开 `st.columns()` 与 `:has(.rt-v2-today-marker)` 对齐 hack。
+
+### 已完成
+
+- 已备份 Stitch 设计稿到仓库内：
+  - `docs/ui_refs/stitch_designs/01_today_overview.html`
+  - `docs/ui_refs/stitch_designs/01_today_overview.png`
+  - `docs/ui_refs/stitch_designs/02_watchlist.png`
+  - `docs/ui_refs/stitch_designs/03_buy_check.png`
+  - `docs/ui_refs/stitch_designs/04_t1_review.png`
+  - `docs/ui_refs/stitch_designs/05_not_bought_tracking.png`
+  - `docs/ui_refs/stitch_designs/06_t_signal.png`
+  - `docs/ui_refs/stitch_designs/07_period_review.png`
+- `dashboard_app.py` 今日总览已从 `st.columns()` 主区改为 `.rt-v22-layout` CSS Grid。
+- 今日总览左侧「策略洞察 / 实时信号流」已进一步压紧，Chrome 实测左右主区底部基本对齐。
+- 已修复导航切换后保留滚动位置的问题：切换顶部导航时自动把 `stMain` 滚回顶部。
+- 已解除 `⭐ 我的自选` 页面的一屏锁定；自选池有 13 只股票，需要允许页面滚动。
+- 未修改选股、买入、T 模块、卖出、复盘记录等后端逻辑。
+
+### 验收结果
+
+- `.venv/bin/python3 -m py_compile dashboard_app.py`：通过。
+- Streamlit AppTest：10 个导航页全部 non-crash。
+- Chrome 实测：今日总览 / 买入确认 / T+1 复盘 / 未买入跟踪 / 周月复盘 / 候选复盘 / 明日计划 / 做T观察 / 我的自选 / 手动补跑 均可切换打开。
+- 未运行 `python run.py` 或任何 `run.py` 子命令。
+
+### 下一步建议
+
+1. 用户先看今日总览是否比 Claude 版本更稳、更少空白。
+2. 如果今日总览方向确认，再按以下顺序继续页面 UI：
+   - `⭐ 我的自选`：用户最敏感，当前布局仍需要收紧和提升个股卡片密度。
+   - `买入确认`：交易主流程入口，优先级高。
+   - `做T观察`：已具备 T 记录 / B/S 点 / 盈亏统计，适合做成实战监控面板。
+   - `明日计划`：用于第二天执行准备。
+   - `T+1 复盘`、`未买入跟踪`、`周月复盘`、`候选复盘`、`手动补跑`。
+
+## 2026-06-01 Codex 功能 QA 补充
+
+### 已核对
+
+- 当前工作区未改禁改文件：`run.py`、`trade_review.py`、`output/trade_review.csv`、`config/version_flags.yaml`、`launchd/*.plist` 均无 diff。
+- `data/watchlist/custom_stock_pool.csv` 当前有 13 只股票，字段为 `stock_code, stock_name, priority, theme, reason, research_date, status, max_position_pct, note`。
+- `⭐ 我的自选` 页面 Chrome 实测：
+  - 展示 13 / 13 只股票。
+  - 搜索 `胜宏` 后只显示 `胜宏科技`。
+  - 输入 `300476` 可识别为 `胜宏科技`。
+  - 输入 `胜宏科技` 可识别为 `300476 胜宏科技`。
+  - 未点击最终「加入自选池」按钮，因此未写入 CSV。
+- `output/trade_review.csv` 当前 2026-06-01 有 3 条候选：
+  - `600522 中天科技`
+  - `600027 华电国际`
+  - `300327 中颖电子`
+  - 三条均为 `buy_signal_0935=false`，`notes=v16_plan_only_observe`，说明今天是 V1.6 计划层观察，不是已确认买入。
+- `output/t_trade/t_trade_latest.csv` 当前是 2026-05-29 sample 验证记录，共 4 笔：
+  - 低吸止盈：`take_profit_1_5`，`closed`，`return_pct=0.015`
+  - 低吸止损：`stop_loss_1_5`，`stopped`，`return_pct=-0.015`
+  - 高抛回补：`buyback_1_5`，`closed`，`return_pct=0.015`
+  - 高抛踏空止损：`stop_buyback_1_5`，`stopped`，`return_pct=-0.015`
+- T 记录安全字段保持模拟：
+  - `execution_mode=simulate`
+  - `can_execute_live=False`
+  - `order_status=not_submitted`
+  - `broker_status=not_connected`
+- `output/t_trade/*` 和 `output/trade_review.csv` 均被 `.gitignore` 的 `output/` 规则忽略。
+
+### 验收结果
+
+- `.venv/bin/python3 -m py_compile dashboard_app.py scripts/build_t_trade_tracker.py`：通过。
+- Streamlit AppTest：10 个导航页全部无异常。
+- `做T观察` 页面 Chrome 实测：
+  - 默认显示「暂无真实 T 数据」，不显示 sample。
+  - 勾选「显示样例数据」后展示「今日 T 交易记录」和「B/S 点与盈亏统计」。
+  - 页面有「当前为做 T 模拟记录，不构成自动买卖指令」提示。
+- 未运行 `python run.py` 或任何 `run.py` 子命令。
+
+### 当前遗留问题
+
+- 今日没有真实 T 记录的主要原因仍是：T 脚本尚未接入 launchd 定时任务，且真实分钟数据源未完成稳定验证。
+- 今日候选没有进入买入确认的直接原因是：V1.6 计划层返回 `v16_plan_only_observe`。
+- `⭐ 我的自选` 快速识别功能可用，但已存在股票识别后按钮仍显示「加入自选池」，文案容易误解；后续可改成「已在观察池 / 更新为 active」。
+- AppTest 会提示 `st.components.v1.html` 未来弃用；当前仅用于导航切换自动回顶 JS，不影响运行，但后续应寻找更长期的替代方案。
+
+## 2026-06-01 Codex 自选池优先级修复
+
+### 背景
+
+用户明确要求「优先自选池选股」。原逻辑已经会把 active/watch 自选股并入候选评估池，并在排名截断后补回，但自选股仍可能在 `history_filter` 阶段被清掉，导致最终推荐没有优先体现自选池。
+
+### 已完成
+
+- 修改 `run.py` 中 `_keep_watchlist_after_rank()`：
+  - 不再因为 `ranked_df.empty` 直接返回。
+  - 即使历史过滤后为空，也允许从已通过前序安全条件的 `source_df` 中补回自选池股票。
+  - 日志改为更通用的「阶段补回自选池」。
+- 在 `filters.history_filter()` 之后新增一次自选池补回：
+  - `deep_filtered = _keep_watchlist_after_rank(deep_filtered, candidate_df, active_wl, logger, "history_filter")`
+- 修复自选池代码匹配细节：
+  - `wl_by_code` 统一 `zfill(6)`。
+  - `priority` 非法值默认按 3 处理，避免异常中断。
+
+### 安全边界
+
+- 自选池仍不是买入指令。
+- 自选股仍必须先进入基础安全过滤和候选评估池。
+- 自选股仍必须能拿到历史 K 线、能计算指标和打分。
+- 仍会经过 V1.6 明日计划层和 9:36 技术确认。
+- 未触发任何真实交易。
+- 未运行 `python run.py` 或任何 `run.py` 子命令。
+
+### 验收
+
+- `.venv/bin/python3 -m py_compile run.py`：通过。
+- mock 验证：
+  - 普通池剩 1 只时，自选池可被补回。
+  - 历史过滤结果为空时，自选池也可从候选评估池补回。
+
+### 下一步
+
+- 如需更强版本，可继续改为「自选池 P1/P2 严格占满前三，不足再由全市场补齐」，但那会进一步改变选股策略，应单独确认。
+
 ## 禁止事项
 
 详细规则见 `AI_RULES.md`。
