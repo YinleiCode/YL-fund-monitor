@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.zhuge.stock.tintraday</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/yinlei/Desktop/量化/stock_screener/scripts/run_t_intraday.sh</string>
+    </array>
+
+    <!-- 每 60 秒触发一次，wrapper 内部判断是否在交易时段（09:35-14:55，避开午休）
+         2026-06-01 引入：盘中 T 信号识别（akshare 1 分钟 K 线，延迟 1-2 分钟，模拟盘） -->
+    <key>StartInterval</key>
+    <integer>60</integer>
+
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>
