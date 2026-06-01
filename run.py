@@ -14,6 +14,7 @@ import os
 import sys
 from datetime import date
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 import yaml
@@ -216,6 +217,74 @@ def _enable_cli_simulate(logger: logging.Logger) -> None:
     logger.error("⚠️ [simulate] 模拟数据模式已由 --simulate 显式开启，不可用于真实验证")
 
 
+def _load_t_module_summary(report_date: str) -> Optional[dict]:
+    """读取做 T 模块当日摘要（信号数/B 点/S 点/累计盈亏）。
+
+    优先从 output/state/t_summary_{report_date}.json 读（如果存在）；
+    否则从 output/t_trade/t_trade_latest.csv 和 t_bs_log_*.csv 现场聚合一份。
+
+    返回 dict 或 None（无任何 T 模块数据）。
+
+    2026-06-01 引入：用于 --update-review 把 T 摘要并入合并复盘推送。
+    本函数不修改任何 T 模块状态字段，纯只读。
+    """
+    import csv as _csv
+    state_dir = Path(__file__).resolve().parent / "output" / "state"
+    cached = state_dir / f"t_summary_{report_date}.json"
+    if cached.exists():
+        try:
+            import json as _json
+            return _json.loads(cached.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    t_dir = Path(__file__).resolve().parent / "output" / "t_trade"
+    if not t_dir.exists():
+        return None
+
+    t_latest = t_dir / "t_trade_latest.csv"
+    bs_log   = t_dir / f"t_bs_log_{report_date}.csv"
+    if not t_latest.exists() and not bs_log.exists():
+        return None
+
+    signal_count = 0
+    pnl_total    = 0.0
+    if t_latest.exists():
+        try:
+            with t_latest.open("r", encoding="utf-8-sig") as f:
+                for r in _csv.DictReader(f):
+                    signal_count += 1
+                    rp = r.get("return_pct") or r.get("simulated_trade_return")
+                    try:
+                        pnl_total += float(rp) if rp else 0.0
+                    except (TypeError, ValueError):
+                        pass
+        except Exception:
+            pass
+
+    b_count = s_count = 0
+    if bs_log.exists():
+        try:
+            with bs_log.open("r", encoding="utf-8-sig") as f:
+                for r in _csv.DictReader(f):
+                    side = str(r.get("side", "")).strip().upper()
+                    if side == "B":
+                        b_count += 1
+                    elif side == "S":
+                        s_count += 1
+        except Exception:
+            pass
+
+    if signal_count == 0 and b_count == 0 and s_count == 0:
+        return None
+    return {
+        "signal_count": signal_count,
+        "b_count":      b_count,
+        "s_count":      s_count,
+        "pnl_total":    pnl_total,
+    }
+
+
 def _is_cli_simulate() -> bool:
     return (
         os.environ.get("SIMULATE_MODE", "").lower() == "true"
@@ -228,13 +297,14 @@ def main() -> None:
     import argparse
     parser = argparse.ArgumentParser(description="朱哥A股短线三票雷达 V1")
     parser.add_argument("--review-summary",  action="store_true", help="输出复盘统计")
-    parser.add_argument("--check-buy",       action="store_true", help="9:36检查模拟买入条件并推送")
-    parser.add_argument("--second-check",    action="store_true", help="10:00二次确认观察（仅记录，不买入）")
-    parser.add_argument("--update-review",   action="store_true", help="T+1收盘后自动补全回测数据")
+    parser.add_argument("--check-buy",       action="store_true", help="9:36检查模拟买入条件（合并 3+3 推送）")
+    parser.add_argument("--second-check",    action="store_true", help="10:00二次确认观察（仅记录，不再单独推送，结果并入 15:25 合并复盘）")
+    parser.add_argument("--update-review",   action="store_true", help="T+1收盘后自动补全回测数据（合并 3+3 复盘推送 + T 摘要）")
     parser.add_argument("--weekly-review",   action="store_true", help="生成本周复盘报告并推送")
     parser.add_argument("--monthly-review",  action="store_true", help="生成本月复盘报告并推送")
     parser.add_argument("--test-notify",     action="store_true", help="发送测试推送验证Server酱配置")
-    parser.add_argument("--theme-auto",      action="store_true", help="主题龙头模式（并行实验组）")
+    parser.add_argument("--theme-auto",      action="store_true", help="主题龙头模式（并行实验组，仅写 CSV，不再单独推送，合并到 morning-digest）")
+    parser.add_argument("--morning-digest",  action="store_true", help="早盘 3+3 合并推送（读 trade_review.csv 当日 full + theme_auto top3）")
     parser.add_argument("--simulate",         action="store_true", help="使用模拟数据（不连真实数据源）")
     args = parser.parse_args()
 
@@ -280,7 +350,8 @@ def main() -> None:
         _, report_date = fetcher.calc_dates()
         logger.info(f"[check_buy] report_date={report_date}")
         results = trade_review.check_buy(cfg)
-        title, body = notifier.format_check_buy_message(results, report_date)
+        # 2026-06-01 改：用合并 3+3 推送（按 mode 分组 main + leader），仍每天 1 条
+        title, body = notifier.format_combined_check_buy_message(results, report_date)
         print("\n" + title)
         print(body)
         if not debug:
@@ -298,12 +369,37 @@ def main() -> None:
         _, report_date = fetcher.calc_dates()
         logger.info(f"[second_check] report_date={report_date}（V1.4 实验性观察项，不计入正式收益）")
         results = trade_review.second_check(cfg)
+        # 2026-06-01 改：不再单独推送 10:00 second_check，结果合并到 15:25 复盘推送。
+        # second_check 仍然执行 + 写 CSV，仅省去微信推送（用户拍板决策点 5）。
         title, body = notifier.format_second_check_message(results, report_date)
         print("\n" + title)
         print(body)
-        # 即使无样本也推送一条简讯，便于确认任务已执行
-        if not debug:
-            notifier.send_to_serverchan(title, body, sendkey)
+        logger.info("[second_check] 已跳过单独推送，结果将并入 15:25 合并复盘推送")
+        # 把结果 dump 到 state 文件，供 --update-review 读取展示
+        try:
+            from pathlib import Path
+            import json as _json
+            state_dir = Path(__file__).resolve().parent / "output" / "state"
+            state_dir.mkdir(parents=True, exist_ok=True)
+            sc_summary = {
+                "total": len(results or []),
+                "passed": sum(1 for r in (results or []) if r.get("verdict") == "pass"),
+                "failed": sum(1 for r in (results or []) if r.get("verdict") != "pass"),
+                "details": [
+                    {
+                        "code": r.get("code", ""),
+                        "name": r.get("name", ""),
+                        "verdict": r.get("verdict", ""),
+                        "reason": r.get("reason", ""),
+                    }
+                    for r in (results or [])
+                ],
+            }
+            (state_dir / f"second_check_{report_date}.json").write_text(
+                _json.dumps(sc_summary, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+        except Exception as e:
+            logger.warning(f"[second_check] 写 state 缓存失败（不影响主流程）: {e}")
         import daily_report
         import excel_report
         daily_report.generate(report_date)
@@ -325,7 +421,27 @@ def main() -> None:
             f"[update_review] 更新{stats['updated']}条，跳过{stats['skipped']}条，失败{stats['failed']}条"
         )
         decision_log.write_review_decision(stats.get("rows", []), cfg)
-        title, body = notifier.format_update_review_message(stats, report_date)
+        # 2026-06-01 改：合并复盘推送（按 mode 分组 + 追加 10:00 second_check 摘要 + T 摘要）
+        sc_summary = None
+        t_summary = None
+        try:
+            from pathlib import Path
+            import json as _json
+            state_dir = Path(__file__).resolve().parent / "output" / "state"
+            sc_path = state_dir / f"second_check_{report_date}.json"
+            if sc_path.exists():
+                sc_summary = _json.loads(sc_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            logger.info(f"[update_review] 读 second_check state 失败: {e}（忽略，仅省略该摘要）")
+        try:
+            t_summary = _load_t_module_summary(report_date)
+        except Exception as e:
+            logger.info(f"[update_review] 读 T 模块 state 失败: {e}（忽略，仅省略该摘要）")
+        title, body = notifier.format_combined_review_message(
+            stats, report_date,
+            t_summary=t_summary,
+            second_check_summary=sc_summary,
+        )
         print("\n" + title)
         print(body)
         if not debug:
@@ -367,6 +483,61 @@ def main() -> None:
         else:
             logger.warning(f"[monthly_review] 生成失败: {summary['error']}")
         excel_report.generate_excel_report()
+        return
+
+    if args.morning_digest:
+        # 2026-06-01 引入：3+3 早盘合并推送
+        # 读 trade_review.csv 当日的 mode=full top3 + mode=theme_auto top3，
+        # 合并成一条微信推送，替代原来的 full + theme_auto 两条单独推送。
+        # 降级策略由 format_morning_digest_message 内部处理（缺哪边就标哪边异常）。
+        import data_fetcher as fetcher
+        import notifier
+        _, report_date = fetcher.calc_dates()
+        logger.info(f"[morning_digest] report_date={report_date}")
+
+        main_rows   = notifier._load_today_top_from_review(report_date, "full",       limit=3)
+        leader_rows = notifier._load_today_top_from_review(report_date, "theme_auto", limit=3)
+
+        logger.info(
+            f"[morning_digest] 读到 main={len(main_rows)} 行，"
+            f"leader={len(leader_rows)} 行"
+        )
+
+        # 两边都空：走告警通道（一日 1 次节流）
+        if not main_rows and not leader_rows:
+            def _fmt_d(d):
+                d = str(d).replace("-", "")
+                return f"{d[:4]}-{d[4:6]}-{d[6:8]}"
+            title = f"【朱哥短线雷达 V1.6｜{_fmt_d(report_date)}早盘策略链路异常】"
+            body  = (
+                "今日 full 与 theme_auto 两条选股链路均无结果。\n\n"
+                "可能原因：\n"
+                "- 数据源失败（行情接口 / 主题板块 API）\n"
+                "- 触发 V1.6 计划层 only_observe\n"
+                "- 主题强度全部为 0\n\n"
+                "请人工排查 logs/run_*.log 与 logs/run_theme_auto_*.log。\n"
+                "本提示一日仅发 1 次，已节流。"
+            )
+            print("\n" + title + "\n" + body)
+            if not debug:
+                notifier.send_alert_once_per_day(
+                    title, body, sendkey,
+                    alert_type="morning_strategy_chain_failed"
+                )
+            return
+
+        # 至少一边有数据：合并推送
+        status_flags = {
+            "full_ok":       bool(main_rows),
+            "theme_auto_ok": bool(leader_rows),
+        }
+        title, body = notifier.format_morning_digest_message(
+            main_rows, leader_rows, report_date, status_flags=status_flags
+        )
+        print("\n" + title)
+        print(body)
+        if not debug:
+            notifier.send_to_serverchan(title, body, sendkey)
         return
 
     if args.theme_auto:
@@ -420,16 +591,25 @@ def main() -> None:
                 f"spot_failed={spot_failed}"
             )
 
-            tag = "数据链路失败" if is_data_failure else "筛选失败"
-            title = f"【朱哥雷达｜{_fmt(report_date)}盘前 theme_auto 无推荐·{tag}】"
-            body  = no_result_msg
+            # 2026-06-01 改：theme_auto 无结果不再单独推送，缺失信息会在
+            # --morning-digest 中通过 "[龙头池数据异常]" 标签向用户暴露。
+            # 数据链路严重失败时改走 send_alert_once_per_day（一日 1 次告警）。
             if is_data_failure:
-                body += (
-                    "\n\n该提醒只代表数据通道异常，与主题策略本身无关；"
+                tag = "数据链路失败"
+                title = f"【朱哥雷达｜{_fmt(report_date)}盘前 theme_auto 无推荐·{tag}】"
+                body  = (
+                    no_result_msg
+                    + "\n\n该提醒只代表数据通道异常，与主题策略本身无关；"
                     "未写入 trade_review.csv。"
                 )
-            if not debug:
-                notifier.send_to_serverchan(title, body, sendkey)
+                if not debug:
+                    notifier.send_alert_once_per_day(
+                        title, body, sendkey, alert_type="theme_auto_datasource_failed"
+                    )
+            else:
+                logger.info(
+                    "[theme_auto] 筛选无结果，跳过单独推送，缺失信息将体现在 morning-digest 标签中"
+                )
             return
 
         title, body = notifier.format_theme_auto_message(
@@ -466,8 +646,10 @@ def main() -> None:
         print(body)
         print("=" * 50 + "\n")
 
-        if not debug:
-            notifier.send_to_serverchan(title, body, sendkey)
+        # 2026-06-01 改：theme_auto 不再单独推送微信，结果通过 --morning-digest
+        # 在 09:05 与 full 模式合并成 "早盘 3+3" 一次推送。
+        # 仍然保留生成 + 写 CSV + daily_report + excel，避免影响后续 9:36 / T+1 链路。
+        logger.info("[theme_auto] 已跳过单独推送，结果将并入 --morning-digest 早盘合并推送")
 
         _save_theme_auto_results(top3, market_data, theme_summary, data_date, report_date, body, cfg)
         if _is_cli_simulate():
@@ -773,11 +955,27 @@ def main() -> None:
 
     # ----------------------------------------------------------------
     # 步骤 9.5：发送到微信
+    # 2026-06-01 改：full 模式不再单独推送微信，结果通过 --morning-digest
+    # 在 09:05 与 theme_auto 合并成 "早盘 3+3" 一次推送。
+    # 数据源严重失败（is_stale / simulate）时仍推 1 条节流告警，确保用户知情。
     # ----------------------------------------------------------------
     if debug:
         logger.info("DEBUG_MODE=true，跳过实际推送")
+    elif is_stale:
+        # 缓存兜底场景：本来这条数据不会写 trade_review.csv，morning-digest 不会
+        # 在 CSV 里看到 full 结果。所以这里必须额外推 1 条节流告警，避免用户
+        # 当天完全没收到任何 full 模式的反馈。
+        alert_title = f"⚠️[缓存数据·仅供观察] {title}"
+        notifier.send_alert_once_per_day(
+            alert_title, body, sendkey,
+            alert_type="full_stale_cache",
+        )
+        logger.info("[full] is_stale 场景已推送节流告警，主流程不会写入 trade_review.csv")
+    elif _is_cli_simulate():
+        logger.info("[full] --simulate 模式，跳过推送（也不写 trade_review.csv）")
     else:
-        notifier.send_to_serverchan(title, body, sendkey)
+        # 正常场景：完全不推送，结果只写 trade_review.csv，等 --morning-digest 合并推送
+        logger.info("[full] 已跳过单独推送，结果将并入 --morning-digest 早盘合并推送")
 
     # ----------------------------------------------------------------
     # 步骤 10：保存结果到 output/
