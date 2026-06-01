@@ -262,6 +262,54 @@ P1 修复：`trade_review.check_buy()` 在实时行情缺失/价格无效/开盘
 - T 模块仍未接 launchd，未接真实 1 分钟数据源。
 - 自选池 priority=1 硬提到前三的口径需要你最终拍板（保留还是放宽到「只优先观察」）。
 
+## 2026-06-01 Claude（C 包）
+
+### 本次任务
+
+提交 C 包：`data/watchlist/custom_stock_pool.csv` 自选池从 3 只扩展到 13 只。用户主动维护的数据，已当面确认。
+
+### 修改文件
+
+- 无源码改动。
+- `AI_HANDOFF.md`：C 包标记为已提交，更新当前工作区。
+- `AI_CHANGELOG.md`：追加本条。
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- `run.py`：未改。
+- `trade_review.py`：未改。
+- `output/trade_review.csv`：未改。
+- `config/version_flags.yaml`：未改。
+- `launchd/*.plist`：未改。
+
+### 是否运行 python run.py
+
+没有。
+
+### 验收
+
+- 用户当面确认 13 只就是要保留的当前自选池。
+- 13 只全部 `priority=1, status=active`。
+- 与 B 包提交的自选池优先逻辑配合：这些股票会在 quick_filter 后并入候选评估池，并在排名截断后被补回。
+- 仍然要走全部安全门（quick_filter 基础安全、history_filter、scoring、V1.6、9:36 技术确认）才会被推荐为模拟买入候选。
+- 不绕过任何真实交易屏障（仍是观察系统，T 模块仍 simulate）。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：紧随 B 包 commit `6ce3187` 之后。具体 hash 见 `git log`。
+- status：dirty worktree 仅剩 A 包（`.streamlit/config.toml` + `dashboard_app.py` 3749 行前序 UI），等待用户视觉确认。
+
+### 遗留问题
+
+- A 包等待用户对 dashboard RADAR_TERMINAL 终端 UI 做最终视觉确认。
+- T 模块仍未接 launchd，未接真实 1 分钟数据源。
+- 自选池 priority=1 硬提到前三的口径需要你最终拍板（保留还是放宽到「只优先观察」）。
+
 ## 后续记录模板
 
 ```markdown

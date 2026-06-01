@@ -37,11 +37,11 @@ c033102 hide T signal samples by default
 ```text
 M  .streamlit/config.toml
 M  dashboard_app.py
-M  data/watchlist/custom_stock_pool.csv
 ```
 
 > 2026-06-01 P1 commit (`4fe0272`) 已落库：`trade_review.py` + `dashboard_app.py` P1 部分 + 两份 AI 文档。
-> 2026-06-01 B 包 commit 已落库：`run.py` + `theme_auto.py` 自选池优先 + theme_auto 三级 fallback。
+> 2026-06-01 B 包 commit (`6ce3187`) 已落库：`run.py` + `theme_auto.py` 自选池优先 + theme_auto 三级 fallback。
+> 2026-06-01 C 包 commit 已落库：`data/watchlist/custom_stock_pool.csv` 自选池从 3 只扩展到 13 只。
 
 这些改动来自前序任务，主要涉及：
 
@@ -126,24 +126,22 @@ polish radar terminal dashboard UI
 prioritize watchlist candidates and harden theme fallbacks
 ```
 
-### C. 自选池数据包
+### C. 自选池数据包 ✅ 已提交
 
 涉及文件：
 
 - `data/watchlist/custom_stock_pool.csv`
 
-当前状态：
+**状态：2026-06-01 已 commit 落库。**
 
-- 当前自选池是 13 只。
-- 用户已确认“现在 13 只”。
+落地内容：
 
-建议下一步：
+- 自选池从 3 只扩展到 13 只，全部 `priority=1, status=active`。
+- 前序 3 只保留：300476 胜宏科技 / 600522 中天科技 / 603256 宏和科技。
+- 新增 10 只覆盖光模块/CPO（300308 中际旭创、300502 新易盛）、PCB（002463 沪电股份）、智能制造/机器人（688017 绿的谐波、688160 步科股份、002008 大族激光）、汽车智能化（601689 拓普集团）、卫星互联网/电科系（688818 电科蓝天）、算力 IDC（002335 科华数据）、锗/稀有金属（002428 云南锗业）。
+- 用户已确认这 13 只就是当前自选池。
 
-1. 确认这 13 只是否就是用户要保留的当前自选池。
-2. 如果是用户主动维护的数据，可以单独提交。
-3. 如果只是本地临时数据，则不要提交，保留在工作区或让用户决定。
-
-建议提交信息：
+历史建议（已完成）：
 
 ```text
 update custom stock watchlist
