@@ -18,70 +18,131 @@
 ## 最新 10 个 Commit
 
 ```text
+d243b8c polish radar terminal dashboard UI (A package)   ← A 包 2026-06-01
+d0d8462 handoff: add active session state for restart continuity
+0cc5779 update custom stock watchlist to 13 names        ← C 包
+6ce3187 prioritize watchlist candidates and harden ...   ← B 包
+4fe0272 fix(check_buy): write back realtime data ...     ← P1
+8ed7261 document handoff plan for pending work
 6cd4939 add AI handoff and project rules docs
 71a807a show simulated T trade records in dashboard
 d8395b4 add simulated T trade tracker core
 315156c fix _score_dist_60d penalizing breakout stocks
-d46dd13 fix HTML injection in dashboard and add today hero section
-e15d236 migrate data_cache from pickle to JSON to avoid RCE risk
-c6580e8 prioritize custom stock pool candidates by tier
-e1d0e1f add watchlist feature with quick-add and auto name resolution
-b21a643 fix duplicate checkbox in T-signal page
-c033102 hide T signal samples by default
 ```
 
 ## 当前工作区
 
-当前工作区不是干净状态。已有未提交改动包括：
+**2026-06-01：所有 V1.6 dirty 改动都已 commit 落库。worktree 应该是 clean（除非有新文档更新）。**
 
 ```text
-M  .streamlit/config.toml
-M  dashboard_app.py
+P1   4fe0272 fix(check_buy): write back realtime data failure to dashboard
+B    6ce3187 prioritize watchlist candidates and harden theme fallbacks
+C    0cc5779 update custom stock watchlist to 13 names
+A    d243b8c polish radar terminal dashboard UI (A package)  ← 本日完成
 ```
 
-> 2026-06-01 P1 commit (`4fe0272`) 已落库：`trade_review.py` + `dashboard_app.py` P1 部分 + 两份 AI 文档。
-> 2026-06-01 B 包 commit (`6ce3187`) 已落库：`run.py` + `theme_auto.py` 自选池优先 + theme_auto 三级 fallback。
-> 2026-06-01 C 包 commit 已落库：`data/watchlist/custom_stock_pool.csv` 自选池从 3 只扩展到 13 只。
+这些改动覆盖：
 
-这些改动来自前序任务，主要涉及：
-
-- RADAR_TERMINAL 暗黑终端 dashboard UI 恢复和整理；
-- 我的自选页面 UI 优化；
-- 自选池当前 13 只；
-- 自选池优先进入候选评估池；
-- theme_auto 数据源 fallback 增强。
-
-后续模型不得误认为这些文件是本次交接文档任务产生的改动。
+- RADAR_TERMINAL 暗黑终端 dashboard UI 恢复和整理（A 包前序部分）；
+- 我的自选页面 UI 优化（A 包前序部分）；
+- 自选池当前 13 只（C 包）；
+- 自选池优先进入候选评估池（B 包）；
+- theme_auto 数据源 fallback 增强（B 包）；
+- check_buy 实时行情失败状态写回（P1）；
+- **V2 设计语言落地**（A 包本日新增，按 Stitch 7 张设计稿）。
 
 ## 遗留改动处理方案
 
-当前遗留改动应拆成 3 个独立处理包，不要混在一个提交里。
+**2026-06-01：所有遗留改动（P1 / A / B / C）都已提交落库。本节保留历史记录方便追溯。**
 
-### A. Dashboard / RADAR_TERMINAL UI 包
+### A. Dashboard / RADAR_TERMINAL UI 包 ✅ 已提交
 
 涉及文件：
 
 - `.streamlit/config.toml`
 - `dashboard_app.py`
 
-当前状态：
+**状态：2026-06-01 已 commit `d243b8c`。**
 
-- 正在恢复和整理 RADAR_TERMINAL 顶部横向导航暗黑终端界面。
-- 我的自选页面已做过 UI 优化，但仍需用户视觉确认。
-- 该包理论上只应影响前端展示和 dashboard 页面交互。
+落地内容：
 
-建议下一步：
+前序遗留部分：
 
-1. 运行 `python -m py_compile dashboard_app.py`。
-2. 用 Streamlit AppTest 做 dashboard non-crash。
-3. 手工看 `http://localhost:8501/` 或 `http://localhost:8502/`。
-4. 如果确认只影响前端，再单独提交。
+- RADAR_TERMINAL 顶部横向 10 Tab 暗黑终端界面。
+- `render_shell_topbar`：RADAR_TERMINAL 品牌 + 脉冲信号灯 + 实时时钟 + SYS_ONLINE。
+- 我的自选页 UI 整理：卡片网格 + 快速添加 + 优先级标签。
+- `STATUS_NOBUY_DATA_FAIL` 新状态分类（配合 P1）。
+- `HARD_DROP_REASONS` / `MAIN_REASON_PRIORITY` 加 `realtime_data_missing` /
+  `realtime_price_invalid` 中文映射。
+- `is_not_checked` / `row_status` 支持 `realtime_data_status` 区分。
+- `_v16_mf_layer_html` 显示具体失败原因。
 
-建议提交信息：
+V2 设计语言升级（2026-06-01 Stitch 同步）：
+
+- **设计 token**（全部「新增」非覆盖，向后兼容）：
+  `COLOR_MAGENTA_NEON #FF3D8A`（品红霓虹 警告/亏损）
+  `COLOR_WARN_YELLOW #FFB627`（黄色警示）
+  `COLOR_GLASS_BG / COLOR_GLASS_BG_HI / COLOR_GLASS_EDGE`（玻璃态）
+  `COLOR_DIVIDER`（分割线）
+- **字体堆栈**：`FONT_HEADLINE`（Space Grotesk）/ `FONT_BODY`（Inter）
+  / `FONT_MONO`（JetBrains Mono）
+- **组件升级**：
+  - `kpi_card` 圆角 2px → 12px + 趋势箭头 ▲▼ + 左侧 accent 条 + hover 上抬；
+    新参数 `trend` / `accent_bar` 是 keyword-only 且有默认值，
+    50+ 老调用点 100% 向后兼容。
+  - `render_page_header` 圆角 2px → 14px。
+- **新增组件函数**：
+  - `glass_card_html()` 通用玻璃态容器
+  - `chip_html()` 状态 chip（黑底 + 主题色描边 + monospace 大写）
+  - `kpi_hero_strip()` Hero 长条横排 5-6 列 KPI（Stitch 设计稿同款）
+- **全局 CSS V2 补丁**（main 注入末尾，**全 10 页自动收益**）：
+  - 玻璃态卡 hover `translateY(-2px)` + 电光青光晕
+  - Tab 选中电光青 outline + box-shadow + 文字发光
+  - 数据表 36px row + hover 电光青 inset 左边线
+  - `st.metric` V2 玻璃态 + 左侧 accent 条 + hover
+  - 主按钮反色风格（透明底 + 青文字 → hover 青底黑字）
+  - tabs/expander V2 玻璃态描边
+  - 字体堆栈全局统一
+
+历史建议（已完成）：
 
 ```text
 polish radar terminal dashboard UI
 ```
+
+#### A 包提交记录
+
+- commit hash: `d243b8c`（在 D0d8462 handoff session state 之后）。
+- 验证：`python -m py_compile dashboard_app.py` ✅ PASS。
+- 视觉参考：7 张 Stitch 设计稿 `/tmp/stitch_designs/01-07*.png`：
+  1. 今日总览（KPI Hero 5 卡 + 8 张股票卡 4×2 + 右侧栏 + LIVE_SIGNAL_STREAM）
+  2. ⭐ 我的自选（13 张自选卡 4×4 + 分类环形/7日战绩/推荐）
+  3. 买入确认（三列等宽 已确认绿/异常黄/不通过红 + KPI 6 + timeline）
+  4. T+1 复盘（KPI 6 + 明细卡 2×3 + PNL 热力图/命中率/卖出原因）
+  5. 未买入跟踪（KPI 5 + 18 行数据表 + 错过原因环形/TOP3）
+  6. 做T观察（SIMULATE 警示 + KPI 6 + T 信号卡 + SIMULATION ONLY 状态）
+  7. 周月复盘（KPI 6 大数字 + PNL 曲线 + 30 格热力图 + V1.6 三层归因）
+
+#### A 包待补 Stitch 设计稿（3/10）
+
+下次会话再补，**不阻塞 dashboard 落地**：
+
+- 候选复盘（参考 Stitch 设计语言：候选股生命周期 3×3 timeline 卡片）
+- 明日计划（参考：V1.6 三层分段全宽长卡）
+- 手动补跑（参考：命令网格 3×2 + 实时执行日志区域）
+
+Stitch 服务在 2026-06-01 后期 1 小时连续 timeout 12 次，
+对这 3 个项目限流。下次会话需要时再 retry。
+
+待补项目 IDs：
+
+- `projects/16245954795165166812`（候选复盘）
+- `projects/7856275440330438578`（明日计划）
+- `projects/2572244624392293286`（手动补跑）
+- `projects/12805597988387654895`（候选复盘 V2 备用）
+
+设计系统 asset ID（所有 Stitch 项目共用）：
+`assets/7610678417319925520` 「RADAR_TERMINAL V2 · Neon Trading Console」
 
 ### B. 自选池优先 / theme_auto fallback 逻辑包 ✅ 已提交
 
@@ -293,27 +354,48 @@ T 模块不接券商，不自动下单，不写入 `output/trade_review.csv`。
 6. 如果继续修 dashboard，优先只改 `dashboard_app.py` 和 `.streamlit/config.toml`。
 7. 每次任务结束必须更新 `AI_HANDOFF.md` 和 `AI_CHANGELOG.md`。
 
-## 当前活跃会话状态（2026-06-01，会话可能因重启中断）
-
-如果你是接手的新模型 / 新会话，下面是上一次会话的完整状态。
+## 当前活跃会话状态（2026-06-01）
 
 ### 已完成（本日已 commit 落库）
 
 1. P1 修复 `4fe0272`：`trade_review.check_buy()` 实时行情失败状态写回 + dashboard 区分「实时行情缺失 / 实时价格无效」与「尚未运行」+ `STATUS_NOBUY_DATA_FAIL` 顶层标签。详见「2026-06-01 P1 修复补充」节。
 2. B 包 `6ce3187`：`run.py` 自选池优先入候选池 + 排名截断后补回 + `theme_auto.py` 三级 fallback（EM 概念 → EM 行业 → THS 行业 → 缓存）+ 成分股 EM 概念→EM 行业 fallback + `degraded_watchlist` 降级标记 + 跳过 trade_review.csv 写入。18/18 monkeypatch PASS。详见 B 节。
 3. C 包 `0cc5779`：自选池从 3 只扩展到 13 只。详见 C 节。
+4. **A 包 `d243b8c`（本会话）**：`.streamlit/config.toml` light→dark RADAR_TERMINAL +
+   `dashboard_app.py` 前序遗留 UI 整理 + V2 设计语言升级。详见 A 节。
 
-### 待办（A 包）
+### A 包 V2 升级要点（本会话核心成果）
 
-**A 包**：`.streamlit/config.toml`（13 行）+ `dashboard_app.py`（3749 行 UI 改动）。前序遗留的 RADAR_TERMINAL 暗黑终端 dashboard 整理 + 我的自选页面 UI 优化。
+按用户「时尚炫酷潮流 + 不留白 + 风格统一 + 空间利用充分」需求，
+通过 Stitch MCP 生成 7 张参考设计稿，提炼出统一设计语言并落地代码：
 
-A 包阻塞在「需要用户视觉确认」。用户已表达要用 **Stitch MCP** 来优化 UI（用户已接入 Stitch MCP server，但上一次会话工具列表里还没看到它，需要重启会话才能加载）。
+**设计参考**（保存在 `/tmp/stitch_designs/`）：
 
-### 重启后立刻该做的
+- 7 张已生成：今日总览 / 我的自选 / 买入确认 / T+1 复盘 / 未买入跟踪 / 做T观察 / 周月复盘
+- 3 张待补：候选复盘 / 明日计划 / 手动补跑
 
-1. 列工具命名空间，确认 Stitch MCP 是否已加载（找 `mcp__stitch__*` 或类似前缀）。
-2. 如果加载成功：和用户对齐 UI 优化目标（哪几个页面、哪种风格），调用 Stitch 生成设计稿，再把设计稿落地到 `dashboard_app.py` 和 `.streamlit/config.toml`。
-3. 如果还是没加载：让用户 `/mcp` 看状态，或检查 `~/.config/claude-code/mcp.json` 的 Stitch 配置。
+**代码落地**：
+
+- 设计 token: `COLOR_MAGENTA_NEON`, `COLOR_WARN_YELLOW`, `COLOR_GLASS_*`
+- 字体堆栈: `FONT_HEADLINE` (Space Grotesk) / `FONT_BODY` (Inter) / `FONT_MONO` (JetBrains Mono)
+- 组件升级: `kpi_card` 12px 圆角 + 趋势箭头 + accent 条 + hover；`render_page_header` 14px
+- 新增组件: `glass_card_html`, `chip_html`, `kpi_hero_strip`
+- 全局 CSS 补丁: 卡 hover 上抬, Tab 电光青光晕, 数据表 36px row, st.metric 玻璃态,
+  主按钮反色, tabs/expander 玻璃态, 字体堆栈统一
+
+### 重启后下一步
+
+1. 用户视觉验收 V2 效果：`streamlit run dashboard_app.py` 看 10 个页面。
+2. 如果方向 OK：补 3 张缺失 Stitch 设计稿 + V2.1 按页面 layout 重构（按 Stitch 12-col 网格）。
+3. 如果方向需要调：列出具体调整点，再迭代 V2.x。
+
+### Stitch MCP 状态
+
+- ✅ 已加载（`mcp__stitch__*` 全可用）
+- 设计系统 asset ID: `assets/7610678417319925520`
+- 已生成 7 张稿（项目 `14258134049390400909` + `3055147383678225214` + `8664187696220948756` + `9942816340452486281`）
+- 待补 3 张项目 ID 见 A 节
+- Stitch 服务在本会话后期 1 小时连续 timeout，对待补 3 个项目限流
 
 ### 用户偏好（与协作约定）
 
@@ -329,25 +411,26 @@ A 包阻塞在「需要用户视觉确认」。用户已表达要用 **Stitch MC
 - 自选池 `priority=1` 是否硬提到前三（强优先）还是只优先观察（弱优先）。
 - T 模块何时接 launchd（保持 simulate 前提下）。
 - T 模块真实 1 分钟数据源接入方案。
-- A 包 UI 优化的最终方向（等 Stitch 配合）。
+- ~~A 包 UI 优化的最终方向（等 Stitch 配合）。~~（V2 落地，等用户视觉验收）
+- **V2.1 是否按 Stitch 设计稿做页面 layout 重构**（12-col 网格 + KPI Hero + 右侧栏）。
+  V2 已经升级了 token / 卡片 / 全局 CSS，但页面 layout 框架还是旧的两列布局。
 
-### 当前 git 状态（重启时为 dirty）
+### 当前 git 状态（A 包提交后）
 
 ```
 分支：restore/radar-terminal-keep-t
-最近 5 个 commit：
-  0cc5779 update custom stock watchlist to 13 names    ← C 包
-  6ce3187 prioritize watchlist candidates ...          ← B 包
-  4fe0272 fix(check_buy): write back realtime data ... ← P1
+最近 6 个 commit：
+  d243b8c polish radar terminal dashboard UI (A package) ← A 包 本会话
+  d0d8462 handoff: add active session state ...
+  0cc5779 update custom stock watchlist to 13 names      ← C 包
+  6ce3187 prioritize watchlist candidates ...            ← B 包
+  4fe0272 fix(check_buy): write back realtime data ...   ← P1
   8ed7261 document handoff plan for pending work
-  6cd4939 add AI handoff and project rules docs
 
-dirty worktree (仅 A 包)：
-  M .streamlit/config.toml      13 行
-  M dashboard_app.py          3749 行
+worktree 状态：clean（除非本次会话还有 AI 文档追加）
 ```
 
-如果接手的新会话需要重做安全验证，确认上面 git log 和这两个 dirty 文件没变即可。
+V1.6 dirty worktree 4 个包（P1 / A / B / C）至此全部提交落库。
 
 ## 禁止事项
 
