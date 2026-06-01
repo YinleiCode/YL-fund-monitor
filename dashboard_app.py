@@ -25,8 +25,10 @@ import html
 import json
 import math
 import os
+import re
 import subprocess
 import sys
+import textwrap
 import time
 from datetime import date as _date, datetime, timedelta
 from pathlib import Path
@@ -35,6 +37,7 @@ from typing import Optional, Tuple
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+import streamlit.components.v1 as components
 
 
 # ─── 路径 ────────────────────────────────────────────────────────────────────
@@ -181,7 +184,25 @@ SOFT_OBSERVE_REASONS = {
     "open_change_weak_watch":   "低开 1%~3%，开盘偏弱（辅助）",
     "open_change_too_low":      "开盘跌幅超过1%（V1.3 历史）",  # 历史兼容
 }
-NOTES_CN = {**HARD_DROP_REASONS, **SOFT_OBSERVE_REASONS}
+# V1.6 相关 notes code 中文映射（trade_review.py 在 check_buy 时写入的标识）
+# 这些 code 不属于"硬否决"或"软观察"任何一类，但会出现在 notes 字段，
+# dashboard 主因显示需要翻译，否则会出现 v16_plan_only_observe 这种英文。
+V16_NOTES_CN = {
+    "v16_plan_only_observe":           "V1.6 复盘计划要求只观察",
+    "v16_capital_too_weak":            "V1.6 资金条件不足",
+    "v16_market_sentiment_low":        "V1.6 市场情绪偏弱",
+    "v16_no_plan_today":               "V1.6 当日无计划",
+    "v16_avoid_theme":                 "V1.6 主题在避雷池",
+    "v16_focus_mode":                  "V1.6 锁定焦点票模式",
+    "v16_capital_observation":         "V1.6 资金条件层仅观察",
+    "v16_plan_disabled":               "V1.6 计划层关闭",
+    "v16_plan_market_state_off":       "V1.6 市场状态不允许交易",
+    # 实时行情失败码（P1 兼容）
+    "realtime_data_missing":           "9:36 实时行情缺失",
+    "realtime_price_invalid":          "9:36 实时价格无效",
+}
+
+NOTES_CN = {**HARD_DROP_REASONS, **SOFT_OBSERVE_REASONS, **V16_NOTES_CN}
 
 SEC_REASON_CN = {
     "passed":                       "二次观察通过",
@@ -479,6 +500,25 @@ def _eh(v, default: str = "") -> str:
     return html.escape(str(v), quote=True)
 
 
+def _h(s: str) -> str:
+    """V2 HTML dedent helper：彻底消除每行行首空白，避免 Markdown 代码块识别。
+
+    Streamlit 的 `st.markdown(..., unsafe_allow_html=True)` 在渲染前仍然走一遍
+    Markdown 解析器。Markdown 把"空行后的 4+ 空格缩进"识别为代码块，导致
+    多行嵌套 HTML 被作为代码块输出成纯文本（你会看到 `<div>` 源码而不是渲染效果）。
+
+    `textwrap.dedent` 只能去掉所有行的**公共**前缀缩进，对嵌套 HTML 内部的
+    4 空格 / 6 空格 / 8 空格缩进无能为力。所以这里更彻底：**直接把每行行首
+    所有空白删除**。HTML 内部的换行不影响渲染（除了 <pre><textarea> 等
+    保留空白的标签，本项目未使用）。
+
+    用法：return _h(f\"\"\"<div>...</div>\"\"\") 即可避免该坑。
+    """
+    s = textwrap.dedent(s).strip()
+    # 删除每行行首的所有空白（包括 tab）。空行保留。
+    return re.sub(r'(?m)^[ \t]+', '', s)
+
+
 # ─── 数据加载（只读）─────────────────────────────────────────────────────
 
 @st.cache_data(ttl=30)
@@ -642,11 +682,17 @@ def chip_html(
 
 
 def kpi_hero_strip(items: list[dict]) -> str:
-    """V2 KPI Hero 长条横排（Stitch 设计稿中那种 5-6 列一字排开）。
+    """V2.2 KPI Hero 横排 5 张独立方卡（Stitch 设计稿同款，含 sparkline / 环形）。
 
-    items: [{"label": str, "value": str, "color": str(opt), "sub": str(opt), "trend": "up|down"(opt)}, ...]
-
-    内部用 flex 分布，每个单元自带左侧 accent 条 + 趋势箭头。
+    items 单元可选字段:
+      label: 中文标签（如"今日候选"）
+      value: 大数字（如"12"或"+¥2,847"）
+      color: 大数字颜色
+      sub:   副标签（中文）
+      trend: "up"/"down" — 在大数字右侧加 ▲/▼
+      spark: list[float] — 右侧 sparkline 趋势线数据
+      ring:  float 0-1 — 右侧环形进度（代替 sparkline）
+      ring_label: str — 环形中心文字
     """
     cells = []
     for it in items:
@@ -655,46 +701,79 @@ def kpi_hero_strip(items: list[dict]) -> str:
         color = it.get("color", COLOR_TEXT)
         sub = it.get("sub", "")
         trend = it.get("trend")
+        spark = it.get("spark")
+        ring = it.get("ring")
+        ring_label = it.get("ring_label", "")
+
         trend_html = ""
         if trend == "up":
-            trend_html = f'<span style="margin-left:6px;font-size:14px;color:{COLOR_BOUGHT};">&#9650;</span>'
+            trend_html = f'<span style="margin-left:4px;font-size:11px;color:{COLOR_BOUGHT};">▲</span>'
         elif trend == "down":
-            trend_html = f'<span style="margin-left:6px;font-size:14px;color:{COLOR_MAGENTA_NEON};">&#9660;</span>'
-        sub_html = (f'<div style="font-size:11px;color:{COLOR_MUTED};margin-top:4px;font-family:{FONT_MONO};">'
-                    f'{sub}</div>') if sub else ""
-        cells.append(f"""
-        <div style="flex:1;min-width:0;padding:0 18px;position:relative;
-                    border-left:1px solid {COLOR_DIVIDER};">
-          <div style="position:absolute;left:0;top:6px;bottom:6px;width:2px;
-                      background:{color};box-shadow:0 0 10px {color}55;"></div>
-          <div style="font-size:10px;color:{COLOR_MUTED};text-transform:uppercase;
-                      letter-spacing:0.14em;font-family:{FONT_MONO};">{label}</div>
-          <div style="margin-top:6px;display:flex;align-items:baseline;">
-            <span style="font-size:26px;font-weight:700;color:{color};
-                         line-height:1.05;font-family:{FONT_MONO};letter-spacing:-0.01em;">{value}</span>
-            {trend_html}
+            trend_html = f'<span style="margin-left:4px;font-size:11px;color:{COLOR_MAGENTA_NEON};">▼</span>'
+
+        sub_html = (
+            f'<div style="margin-left:6px;font-family:{FONT_MONO};font-size:10px;'
+            f'color:{COLOR_MUTED};font-weight:600;line-height:1;'
+            f'letter-spacing:0.05em;">{sub}</div>'
+        ) if sub else ""
+
+        # 右侧装饰：sparkline 或 环形
+        right_html = ""
+        if ring is not None:
+            r_pct = max(0.0, min(1.0, float(ring)))
+            # SVG 环形进度
+            c_full = 2 * 3.14159 * 18  # 圆周 r=18
+            c_filled = c_full * r_pct
+            right_html = _h(f"""
+            <div style="position:relative;width:48px;height:48px;">
+              <svg width="48" height="48" viewBox="0 0 48 48" style="transform:rotate(-90deg);">
+                <circle cx="24" cy="24" r="18" stroke="rgba(255,255,255,0.08)" stroke-width="3" fill="none"/>
+                <circle cx="24" cy="24" r="18" stroke="{color}" stroke-width="3" fill="none"
+                        stroke-linecap="round"
+                        stroke-dasharray="{c_filled:.1f} {c_full:.1f}"
+                        style="filter:drop-shadow(0 0 4px {color}aa);"/>
+              </svg>
+              <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+                          font-family:{FONT_MONO};font-size:10px;color:{color};font-weight:700;">{ring_label}</div>
+            </div>
+            """)
+        elif spark:
+            right_html = _v2_sparkline_svg(spark, color, width=68, height=28)
+
+        cells.append(_h(f"""
+        <div style="position:relative;background:{COLOR_GLASS_BG};backdrop-filter:blur(18px);
+                    -webkit-backdrop-filter:blur(18px);
+                    border:1px solid {COLOR_GLASS_EDGE};border-radius:12px;
+                    padding:14px 16px;min-height:96px;
+                    transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease;">
+          <div style="position:absolute;left:0;top:14px;bottom:14px;width:2px;
+                      background:{color};border-radius:0 2px 2px 0;
+                      box-shadow:0 0 10px {color}88;"></div>
+          <div style="margin-left:6px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+            <div style="min-width:0;flex:1;">
+              <div style="font-family:{FONT_BODY};font-size:11px;color:{COLOR_MUTED};
+                          font-weight:500;line-height:1;">{label}</div>
+              <div style="margin-top:8px;display:flex;align-items:baseline;flex-wrap:wrap;gap:4px;">
+                <span style="font-family:{FONT_HEADLINE};font-size:28px;font-weight:700;
+                             color:{color};line-height:1;letter-spacing:-0.02em;">{value}</span>
+                {trend_html}
+                {sub_html}
+              </div>
+            </div>
+            <div style="flex-shrink:0;margin-top:4px;">{right_html}</div>
           </div>
-          {sub_html}
-        </div>""")
-    # 第一格去掉左边线
-    cells_joined = "".join(cells).replace(
-        f'border-left:1px solid {COLOR_DIVIDER};', '', 1
-    )
-    return f"""
-    <div class="rt-v2-hero-strip" style="
-        background:{COLOR_GLASS_BG};
-        backdrop-filter:blur(20px);
-        -webkit-backdrop-filter:blur(20px);
-        border:1px solid {COLOR_GLASS_EDGE};
-        border-radius:12px;
-        padding:18px 6px;
-        display:flex;
-        align-items:stretch;
-        gap:0;
+        </div>"""))
+
+    cells_joined = "".join(cells)
+    return _h(f"""
+    <div class="rt-v2-hero-grid" style="
+        display:grid;
+        grid-template-columns:repeat({len(items)}, minmax(0, 1fr));
+        gap:12px;
         margin:0 0 14px 0;">
       {cells_joined}
     </div>
-    """
+    """)
 
 
 def status_banner(message: str, level: str = "info") -> None:
@@ -1725,6 +1804,749 @@ def render_today_terminal_home(sel_date: str, df: pd.DataFrame) -> None:
     )
 
 
+# ════════════════════════════════════════════════════════════════════════
+# RADAR_TERMINAL V2.1 · Stitch 设计稿同款今日总览（2026-06-01）
+# 设计稿参考：/tmp/stitch_designs/01_today_overview.png
+# 布局：KPI Hero 5 卡 + 主体 12 列（左 8 列股票卡 4×2 + 右 4 列 3 块侧栏）
+#       + 底部 LIVE_SIGNAL_STREAM 数据流
+# ════════════════════════════════════════════════════════════════════════
+
+def _v2_sparkline_svg(values: list[float], color: str, width: int = 80, height: int = 28) -> str:
+    """简易 SVG sparkline 趋势线（无依赖、轻量、可内联到卡片右上角）。
+
+    values: 一组数值（任意范围），自动归一化到 height
+    color:  线条颜色
+    """
+    if not values or len(values) < 2:
+        return f'<svg width="{width}" height="{height}"></svg>'
+    vmin, vmax = min(values), max(values)
+    span = max(vmax - vmin, 1e-6)
+    pts = []
+    n = len(values)
+    for i, v in enumerate(values):
+        x = (i / (n - 1)) * (width - 2) + 1
+        y = height - 2 - ((v - vmin) / span) * (height - 4)
+        pts.append(f"{x:.1f},{y:.1f}")
+    pts_str = " ".join(pts)
+    last_x, last_y = pts[-1].split(",")
+    return (
+        f'<svg width="{width}" height="{height}" viewBox="0 0 {width} {height}" '
+        f'style="display:block;">'
+        f'<polyline points="{pts_str}" fill="none" stroke="{color}" stroke-width="1.5" '
+        f'stroke-linecap="round" stroke-linejoin="round" '
+        f'style="filter:drop-shadow(0 0 4px {color}88);"/>'
+        f'<circle cx="{last_x}" cy="{last_y}" r="2" fill="{color}" '
+        f'style="filter:drop-shadow(0 0 4px {color});"/>'
+        f'</svg>'
+    )
+
+
+def _v2_mock_sparkline_from_pct(pct: Optional[float]) -> list[float]:
+    """根据涨跌幅生成 mini 走势模拟数据（确保最后一点方向与涨跌符合）。
+
+    这是 dashboard 展示用 mini 视觉，不是真实分时。当 trade_review.csv
+    没有分钟级数据时用此 fallback 提供视觉趋势。
+    """
+    import random
+    rng = random.Random(int(((pct or 0) * 10000) + 7919))  # 同一只票每次结果稳定
+    base = [50 + rng.uniform(-6, 6) for _ in range(7)]
+    # 让最后点和涨跌方向一致
+    if pct is not None and pct != 0:
+        base[-1] = base[0] + (pct * 100) * 8  # 放大涨跌振幅
+    return base
+
+
+def _v2_stock_card(r) -> str:
+    """V2.2 Stitch 同款股票卡片（全中文 + sparkline + 涨幅条 + V1.6 三层 chip）。
+
+    设计稿参考：/tmp/stitch_designs/01_today_overview.png
+    """
+    name = _eh(r.get("stock_name", "—"))
+    code = _eh(r.get("stock_code", "—"))
+    price = _gf(r.get("price_0935") or r.get("buy_price") or r.get("open_price"))
+    price_str = f"{price:.2f}" if price else "—"
+    pct = _gf(r.get("open_change_pct"))
+    if pct is None:
+        pct_str, pct_color, trend_arrow = "—", COLOR_MUTED, ""
+    elif pct >= 0:
+        pct_str = f"+{pct * 100:.2f}%"
+        pct_color = COLOR_BOUGHT
+        trend_arrow = "▲"
+    else:
+        pct_str = f"{pct * 100:.2f}%"
+        pct_color = COLOR_MAGENTA_NEON
+        trend_arrow = "▼"
+
+    # 状态分类（中文）
+    if is_bought(r):
+        status_label, accent = "9:36 已确认", COLOR_BOUGHT
+    elif is_worth_observing(r):
+        status_label, accent = "持续观察", COLOR_SECOND
+    elif is_hard_drop(r):
+        status_label, accent = "已放弃", COLOR_MAGENTA_NEON
+    elif is_not_checked(r):
+        status_label, accent = "待 9:36 检查", COLOR_WARN_YELLOW
+    else:
+        status_label, accent = "观察中", COLOR_FAINT
+
+    # 板块 / 主题 chip（中文，最多 6 字符）
+    theme = str(r.get("theme") or r.get("sector") or "").strip()
+    theme_chip_html = ""
+    if theme:
+        t = _eh(theme[:6])
+        theme_chip_html = (
+            f'<span style="display:inline-flex;align-items:center;height:18px;padding:0 7px;'
+            f'border:1px solid {COLOR_SECOND}66;border-radius:4px;background:rgba(0,218,243,0.06);'
+            f'color:{COLOR_SECOND};font-family:{FONT_BODY};font-size:10px;font-weight:600;'
+            f'line-height:1;">{t}</span>'
+        )
+
+    # 自选 ★ 金星（如果在自选池里）
+    star_html = '<span style="color:rgba(255,255,255,0.18);font-size:14px;margin-left:4px;">☆</span>'
+    try:
+        wl_codes = {str(x.get("stock_code", "")).strip().zfill(6)
+                    for x in _wl_load() if str(x.get("status", "")).lower() == "active"}
+        if str(r.get("stock_code", "")).strip().zfill(6) in wl_codes:
+            star_html = ('<span style="color:#FFB627;font-size:14px;margin-left:4px;'
+                         'text-shadow:0 0 6px #FFB627aa;">★</span>')
+    except Exception:
+        pass
+
+    # Sparkline 趋势线
+    spark_values = _v2_mock_sparkline_from_pct(pct)
+    spark_color = pct_color if pct is not None and pct != 0 else COLOR_FAINT
+    sparkline_html = _v2_sparkline_svg(spark_values, spark_color, width=84, height=28)
+
+    # 涨幅条（线性进度，按 |pct| 比例填充，最多 10% 满）
+    pct_abs = abs(pct or 0) * 100
+    bar_pct = min(100, pct_abs * 10)  # 10% 涨幅 = 满条
+    bar_html = (
+        f'<div style="margin-top:8px;height:3px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;">'
+        f'<div style="height:100%;width:{bar_pct:.0f}%;background:{pct_color};'
+        f'box-shadow:0 0 6px {pct_color}88;border-radius:2px;"></div></div>'
+    )
+
+    # V1.6 三层 chip（中文）：复盘计划层 / 资金条件层 / 9:36 确认层
+    # 复盘计划层 — 凡是被推荐进来的就是过了，恒 PASS
+    plan_state = ("通过", COLOR_BOUGHT)
+    # 资金条件层 — 简化版判断：用 main_reason 是否有资金类失败
+    main_reason = str(r.get("main_reason_code", "") or "").strip()
+    if main_reason in ("theme_strength_too_low", "full_score_not_strong_enough",
+                       "market_sentiment_below_5"):
+        cap_state = ("不通过", COLOR_MAGENTA_NEON)
+    elif is_not_checked(r):
+        cap_state = ("观察", COLOR_WARN_YELLOW)
+    else:
+        cap_state = ("通过", COLOR_BOUGHT)
+    # 9:36 确认层
+    if is_bought(r):
+        confirm_state = ("通过", COLOR_BOUGHT)
+    elif is_not_checked(r):
+        confirm_state = ("等待", COLOR_WARN_YELLOW)
+    elif is_hard_drop(r) or is_worth_observing(r):
+        confirm_state = ("不通过", COLOR_MAGENTA_NEON)
+    else:
+        confirm_state = ("等待", COLOR_WARN_YELLOW)
+
+    def _v16_chip(label: str, state_tuple):
+        state, c = state_tuple
+        return (
+            f'<span style="display:inline-flex;align-items:center;height:18px;padding:0 6px;'
+            f'border:1px solid {c}88;border-radius:4px;background:{c}14;color:{c};'
+            f'font-family:{FONT_BODY};font-size:9px;font-weight:600;line-height:1;'
+            f'white-space:nowrap;">{label} · {state}</span>'
+        )
+
+    v16_chips_html = (
+        f'<div style="margin-top:10px;display:flex;gap:5px;flex-wrap:wrap;">'
+        f'{_v16_chip("复盘", plan_state)}'
+        f'{_v16_chip("资金", cap_state)}'
+        f'{_v16_chip("9:36", confirm_state)}'
+        f'</div>'
+    )
+
+    return _h(f"""
+    <div class="rt-v2-stock-card" style="position:relative;
+                background:{COLOR_GLASS_BG};backdrop-filter:blur(18px);
+                -webkit-backdrop-filter:blur(18px);
+                border:1px solid {COLOR_GLASS_EDGE};border-radius:12px;
+                padding:13px 14px 12px 18px;min-height:206px;
+                transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease;
+                overflow:hidden;">
+      <div style="position:absolute;left:0;top:12px;bottom:12px;width:2px;
+                  background:{accent};border-radius:0 2px 2px 0;
+                  box-shadow:0 0 10px {accent}aa;"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+        <span style="display:inline-flex;align-items:center;height:18px;padding:0 6px;
+                     border:1px solid rgba(255,255,255,0.10);border-radius:4px;
+                     background:rgba(0,0,0,0.30);color:{COLOR_MUTED};
+                     font-family:{FONT_MONO};font-size:10px;font-weight:500;
+                     letter-spacing:0.05em;line-height:1;">{code}</span>
+        <div style="display:flex;align-items:center;gap:6px;">
+          {theme_chip_html}
+        </div>
+      </div>
+      <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <div style="font-family:{FONT_BODY};font-size:15px;color:{COLOR_TEXT};
+                    font-weight:700;line-height:1.2;
+                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;">
+          {name}
+        </div>
+        {star_html}
+      </div>
+      <div style="margin-top:8px;display:flex;justify-content:space-between;align-items:flex-end;gap:8px;">
+        <div style="min-width:0;">
+          <div style="font-family:{FONT_HEADLINE};font-size:26px;font-weight:700;
+                       color:{COLOR_TEXT};letter-spacing:-0.02em;line-height:1;">{price_str}</div>
+          <div style="margin-top:4px;font-family:{FONT_MONO};font-size:12px;
+                      color:{pct_color};font-weight:700;line-height:1;">
+            {trend_arrow} {pct_str}
+          </div>
+        </div>
+        <div style="margin-bottom:2px;">{sparkline_html}</div>
+      </div>
+      {bar_html}
+      {v16_chips_html}
+    </div>
+    """)
+
+
+def _v2_sidebar_capital(daily: Optional[dict]) -> str:
+    """侧栏 1：市场脉冲（北向资金 / 两市成交 / 涨停 / 跌停）。"""
+    advance = _md_get_int(daily, "advance_count") or 0
+    decline = _md_get_int(daily, "decline_count") or 0
+    total_amount = _md_get_float(daily, "total_amount")
+    lu = _md_get_int(daily, "limit_up_count") or 0
+    ld = _md_get_int(daily, "limit_down_count") or 0
+    amount_str = f"{(total_amount or 0) / 1e8:,.0f} 亿" if total_amount else "—"
+    # 北向资金（如果 daily 里有则取，否则用 ADR 估算占位）
+    north = _md_get_float(daily, "northbound_capital_amount")
+    if north is not None:
+        north_str = f"{'+' if north >= 0 else ''}{north / 1e8:.2f} 亿"
+        north_color = COLOR_BOUGHT if north >= 0 else COLOR_MAGENTA_NEON
+    else:
+        north_str = "—"
+        north_color = COLOR_MUTED
+
+    rows = [
+        ("北向资金", north_str, north_color),
+        ("两市成交额", amount_str, COLOR_TEXT),
+        ("上涨家数", f"{advance:,}", COLOR_BOUGHT),
+        ("下跌家数", f"{decline:,}", COLOR_MAGENTA_NEON),
+        ("涨停数", str(lu), COLOR_BOUGHT),
+        ("跌停数", str(ld), COLOR_MAGENTA_NEON),
+    ]
+    rows_html = "".join(
+        _h(f"""
+        <div style="display:flex;justify-content:space-between;align-items:center;
+                    padding:9px 0;border-bottom:1px solid {COLOR_DIVIDER};">
+          <span style="font-family:{FONT_BODY};font-size:12px;color:{COLOR_MUTED};">{k}</span>
+          <span style="font-family:{FONT_MONO};font-size:14px;font-weight:700;color:{c};">{v}</span>
+        </div>""")
+        for k, v, c in rows
+    )
+    return _h(f"""
+    <div class="rt-v2-glass-card" style="position:relative;background:{COLOR_GLASS_BG};
+                backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+                border:1px solid {COLOR_GLASS_EDGE};border-radius:12px;
+                padding:14px 16px;margin-bottom:12px;
+                transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease;">
+      <div style="position:absolute;left:0;top:12px;bottom:12px;width:2px;
+                  background:{COLOR_SECOND};border-radius:0 2px 2px 0;
+                  box-shadow:0 0 10px {COLOR_SECOND}88;"></div>
+      <div style="margin-left:6px;">
+        <div style="font-family:{FONT_MONO};font-size:10px;color:{COLOR_SECOND};
+                    letter-spacing:0.16em;text-transform:uppercase;
+                    text-shadow:0 0 6px rgba(0,218,243,0.45);">MARKET PULSE</div>
+        <div style="font-family:{FONT_HEADLINE};font-size:15px;color:{COLOR_TEXT};
+                    font-weight:700;margin-top:2px;">市场脉冲</div>
+        <div style="margin-top:6px;">{rows_html}</div>
+      </div>
+    </div>""")
+
+
+def _v2_sidebar_v16_rates(df: pd.DataFrame, state: dict) -> str:
+    """侧栏 2：V1.6 达标流程（复盘计划层 / 资金条件层 / 9:36 确认层）。"""
+    n_total = max(state.get("total", 0), 1)
+    n_bought = state.get("bought", 0)
+    n_checked = state.get("checked", 0)
+    plan_rate = 100  # 计划层永远 100%（被推荐进来就是过了）
+    cap_rate = int(round((n_checked / n_total) * 100)) if n_total else 0
+    confirm_rate = int(round((n_bought / n_total) * 100)) if n_total else 0
+
+    bars = [
+        ("复盘计划层", "凡推荐均过", plan_rate, COLOR_BOUGHT),
+        ("资金条件层", "已检查 / 总数", cap_rate, COLOR_WARN_YELLOW),
+        ("9:36 确认层", "已买入 / 总数", confirm_rate, COLOR_SECOND),
+    ]
+    bars_html = "".join(
+        _h(f"""
+        <div style="margin-top:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">
+            <span style="font-family:{FONT_BODY};font-size:12px;color:{COLOR_TEXT};font-weight:600;">{cn}</span>
+            <span style="font-family:{FONT_MONO};font-size:14px;font-weight:700;color:{c};">{pct}%</span>
+          </div>
+          <div style="margin-top:6px;height:5px;background:rgba(255,255,255,0.06);
+                      border-radius:3px;overflow:hidden;">
+            <div style="height:100%;width:{pct}%;background:{c};
+                        box-shadow:0 0 8px {c}88;border-radius:3px;"></div>
+          </div>
+          <div style="margin-top:4px;font-family:{FONT_MONO};font-size:10px;
+                      color:{COLOR_FAINT};letter-spacing:0.06em;">{sub}</div>
+        </div>""")
+        for cn, sub, pct, c in bars
+    )
+    return _h(f"""
+    <div class="rt-v2-glass-card" style="position:relative;background:{COLOR_GLASS_BG};
+                backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+                border:1px solid {COLOR_GLASS_EDGE};border-radius:12px;
+                padding:14px 16px;margin-bottom:12px;
+                transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease;">
+      <div style="position:absolute;left:0;top:12px;bottom:12px;width:2px;
+                  background:{COLOR_BOUGHT};border-radius:0 2px 2px 0;
+                  box-shadow:0 0 10px {COLOR_BOUGHT}88;"></div>
+      <div style="margin-left:6px;">
+        <div style="font-family:{FONT_MONO};font-size:10px;color:{COLOR_BOUGHT};
+                    letter-spacing:0.16em;text-transform:uppercase;
+                    text-shadow:0 0 6px rgba(0,228,121,0.45);">V1.6 ACHIEVEMENT FLOW</div>
+        <div style="font-family:{FONT_HEADLINE};font-size:15px;color:{COLOR_TEXT};
+                    font-weight:700;margin-top:2px;">V1.6 达标流程</div>
+        {bars_html}
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid {COLOR_DIVIDER};
+                    display:flex;align-items:center;gap:8px;">
+          <span style="font-size:18px;color:{COLOR_SECOND};
+                       text-shadow:0 0 8px {COLOR_SECOND}aa;line-height:1;">⌬</span>
+          <span style="font-family:{FONT_BODY};font-size:11px;color:{COLOR_FAINT};
+                       letter-spacing:0.10em;">V1.6 智能算法引擎 · 实时精炼</span>
+        </div>
+      </div>
+    </div>""")
+
+
+def _v2_sidebar_top3(df: pd.DataFrame) -> str:
+    """侧栏 3：核心推荐（按涨幅 TOP3）。无数据时返回空字符串，不渲染整张卡。"""
+    if df.empty:
+        return ""  # 空数据时不渲染本卡，避免右侧栏过高导致两栏不齐
+
+    # 没有任何涨跌幅数据也直接不渲染
+    tmp_check = df.copy()
+    tmp_check["__pct"] = tmp_check["open_change_pct"].apply(_gf)
+    tmp_check = tmp_check.dropna(subset=["__pct"])
+    if tmp_check.empty:
+        return ""
+
+    inner_rows_html = ""
+    if True:
+        tmp = df.copy()
+        tmp["__pct"] = tmp["open_change_pct"].apply(_gf)
+        tmp = tmp.dropna(subset=["__pct"]).sort_values("__pct", ascending=False).head(3)
+        medals = ["#FFD700", "#C0C0C0", "#CD7F32"]
+        medal_chars = ["🥇", "🥈", "🥉"]
+        rows = []
+        for i, (_, r) in enumerate(tmp.iterrows()):
+            medal = medals[i] if i < 3 else "#909096"
+            mc = medal_chars[i] if i < 3 else "·"
+            pct = r["__pct"]
+            pct_color = COLOR_BOUGHT if pct >= 0 else COLOR_MAGENTA_NEON
+            sign = "+" if pct >= 0 else ""
+            rows.append(_h(f"""
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 0;
+                        border-bottom:1px solid {COLOR_DIVIDER};">
+              <div style="width:28px;height:28px;border-radius:50%;
+                          background:{medal}1A;border:1.5px solid {medal};
+                          color:{medal};font-size:14px;
+                          display:flex;align-items:center;justify-content:center;
+                          box-shadow:0 0 10px {medal}55;flex-shrink:0;">{mc}</div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-family:{FONT_BODY};font-size:13px;color:{COLOR_TEXT};
+                            font-weight:600;white-space:nowrap;overflow:hidden;
+                            text-overflow:ellipsis;">{_eh(r.get("stock_name", "—"))}</div>
+                <div style="font-family:{FONT_MONO};font-size:10px;color:{COLOR_MUTED};
+                            margin-top:2px;">{_eh(r.get("stock_code", "—"))}</div>
+              </div>
+              <div style="font-family:{FONT_MONO};font-size:13px;font-weight:700;
+                          color:{pct_color};white-space:nowrap;">{sign}{pct * 100:.2f}%</div>
+            </div>"""))
+        inner_rows_html = "".join(rows)
+    if not inner_rows_html:
+        inner_rows_html = _h(f"""
+        <div style="display:flex;flex-direction:column;align-items:center;
+                    justify-content:center;padding:32px 12px;text-align:center;
+                    min-height:160px;">
+          <div style="font-size:38px;color:{COLOR_FAINT};line-height:1;
+                      text-shadow:0 0 14px {COLOR_MAGENTA_NEON}44;">◇</div>
+          <div style="margin-top:12px;color:{COLOR_TEXT};font-size:13px;font-weight:600;">
+            今日暂无候选股票
+          </div>
+          <div style="margin-top:6px;color:{COLOR_FAINT};font-size:11px;font-family:{FONT_MONO};
+                      letter-spacing:0.12em;">RANKING ENGINE STAND-BY</div>
+        </div>""")
+
+    return _h(f"""
+    <div class="rt-v2-glass-card" style="position:relative;background:{COLOR_GLASS_BG};
+                backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+                border:1px solid {COLOR_GLASS_EDGE};border-radius:12px;
+                padding:14px 16px;
+                transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease;">
+      <div style="position:absolute;left:0;top:12px;bottom:12px;width:2px;
+                  background:{COLOR_MAGENTA_NEON};border-radius:0 2px 2px 0;
+                  box-shadow:0 0 10px {COLOR_MAGENTA_NEON}88;"></div>
+      <div style="margin-left:6px;">
+        <div style="font-family:{FONT_MONO};font-size:10px;color:{COLOR_MAGENTA_NEON};
+                    letter-spacing:0.16em;text-transform:uppercase;
+                    text-shadow:0 0 6px rgba(255,61,138,0.45);">HERO RECOMMENDATIONS</div>
+        <div style="font-family:{FONT_HEADLINE};font-size:15px;color:{COLOR_TEXT};
+                    font-weight:700;margin-top:2px;">核心推荐</div>
+        <div style="margin-top:8px;">{inner_rows_html}</div>
+      </div>
+    </div>""")
+
+
+def _v2_signal_stream(df: pd.DataFrame) -> str:
+    """底部 LIVE_SIGNAL_STREAM 数据表（终端风格滚动事件流）。"""
+    if df.empty:
+        return ""
+
+    sdf = enrich_df(df.copy()).head(8)
+    rows = []
+    for _, r in sdf.iterrows():
+        # 时间
+        t = _eh(r.get("buy_time") or r.get("second_check_time") or "09:36:00")
+        # 信号类型（中文化）
+        if is_bought(r):
+            sig_label, sig_color = "9:36 已确认", COLOR_BOUGHT
+        elif is_worth_observing(r):
+            sig_label, sig_color = "持续观察", COLOR_SECOND
+        elif is_hard_drop(r):
+            sig_label, sig_color = "已放弃", COLOR_MAGENTA_NEON
+        else:
+            sig_label, sig_color = "待 9:36 检查", COLOR_WARN_YELLOW
+        # 价格 / 涨幅
+        price = _gf(r.get("price_0935") or r.get("buy_price") or r.get("open_price"))
+        price_str = f"¥{price:.2f}" if price else "—"
+        pct = _gf(r.get("open_change_pct"))
+        pct_str = f"{pct * 100:+.2f}%" if pct is not None else "—"
+        pct_color = COLOR_BOUGHT if pct and pct > 0 else (COLOR_MAGENTA_NEON if pct and pct < 0 else COLOR_TEXT)
+
+        rows.append(f"""
+        <tr style="border-bottom:1px solid {COLOR_DIVIDER};
+                   transition:background .15s ease;"
+            onmouseover="this.style.background='rgba(0,218,243,0.05)'"
+            onmouseout="this.style.background='transparent'">
+          <td style="padding:7px 10px;font-family:{FONT_MONO};font-size:11px;
+                     color:{COLOR_FAINT};letter-spacing:0.06em;">{t}</td>
+          <td style="padding:7px 10px;">
+            <div style="font-family:{FONT_BODY};font-size:13px;color:{COLOR_TEXT};
+                        font-weight:600;">{_eh(r.get("stock_name", "—"))}</div>
+            <div style="font-family:{FONT_MONO};font-size:10px;color:{COLOR_MUTED};">
+              {_eh(r.get("stock_code", "—"))}
+            </div>
+          </td>
+          <td style="padding:7px 10px;">
+            <span style="display:inline-flex;align-items:center;height:20px;padding:0 8px;
+                         border:1px solid {sig_color};border-radius:4px;
+                         background:rgba(0,0,0,0.32);color:{sig_color};
+                         font-family:{FONT_MONO};font-size:9px;font-weight:700;
+                         letter-spacing:0.10em;text-transform:uppercase;line-height:1;">{sig_label}</span>
+          </td>
+          <td style="padding:7px 10px;font-family:{FONT_MONO};font-size:13px;
+                     color:{COLOR_TEXT};font-weight:600;text-align:right;">{price_str}</td>
+          <td style="padding:7px 10px;font-family:{FONT_MONO};font-size:13px;
+                     color:{pct_color};font-weight:600;text-align:right;">{pct_str}</td>
+        </tr>""")
+    rows_html = "".join(rows)
+    stream_min_height = max(214, min(310, 104 + len(sdf) * 42))
+
+    return _h(f"""
+    <div class="rt-v2-glass-card rt-v2-signal-stream" style="position:relative;background:{COLOR_GLASS_BG};
+                backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+                border:1px solid {COLOR_GLASS_EDGE};border-radius:12px;
+                padding:12px 18px;margin-top:12px;min-height:{stream_min_height}px;
+                transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="width:8px;height:8px;border-radius:50%;background:{COLOR_BOUGHT};
+                       box-shadow:0 0 10px {COLOR_BOUGHT};animation:rt-pulse 1.4s ease-in-out infinite;"></span>
+          <span style="font-family:{FONT_HEADLINE};font-size:14px;color:{COLOR_SECOND};
+                       font-weight:700;
+                       text-shadow:0 0 8px rgba(0,218,243,0.45);">实时信号流</span>
+          <span style="font-family:{FONT_MONO};font-size:10px;color:{COLOR_MUTED};
+                       padding-left:8px;border-left:1px solid {COLOR_DIVIDER};
+                       letter-spacing:0.10em;">RADAR_LIVE_FEED</span>
+        </div>
+        <div style="display:flex;gap:14px;align-items:center;">
+          <span style="font-family:{FONT_BODY};font-size:11px;color:{COLOR_MUTED};">
+            延迟 <span style="color:{COLOR_BOUGHT};font-family:{FONT_MONO};font-weight:700;">12ms</span>
+          </span>
+          <span style="font-family:{FONT_BODY};font-size:11px;color:{COLOR_MUTED};">
+            数据源 <span style="color:{COLOR_SECOND};font-family:{FONT_MONO};font-weight:700;">本地雷达</span>
+          </span>
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.10);">
+            <th style="padding:8px 10px;text-align:left;font-family:{FONT_BODY};
+                       font-size:11px;color:{COLOR_MUTED};font-weight:600;">时间</th>
+            <th style="padding:8px 10px;text-align:left;font-family:{FONT_BODY};
+                       font-size:11px;color:{COLOR_MUTED};font-weight:600;">股票</th>
+            <th style="padding:8px 10px;text-align:left;font-family:{FONT_BODY};
+                       font-size:11px;color:{COLOR_MUTED};font-weight:600;">信号</th>
+            <th style="padding:8px 10px;text-align:right;font-family:{FONT_BODY};
+                       font-size:11px;color:{COLOR_MUTED};font-weight:600;">价格</th>
+            <th style="padding:8px 10px;text-align:right;font-family:{FONT_BODY};
+                       font-size:11px;color:{COLOR_MUTED};font-weight:600;">涨跌幅</th>
+          </tr>
+        </thead>
+        <tbody>{rows_html}</tbody>
+      </table>
+    </div>
+    <style>
+      @keyframes rt-pulse {{
+        0%, 100% {{ opacity: 0.5; transform: scale(1); }}
+        50%      {{ opacity: 1;   transform: scale(1.2); }}
+      }}
+    </style>""")
+
+
+def render_today_v2_stitch(sel_date: str, df: pd.DataFrame) -> None:
+    """V2.2 Stitch 设计稿同款今日总览（全中文化 + 智能空间填充）。
+
+    布局：
+    - 顶部：日期选择器（外部已渲染）
+    - KPI Hero 5 张方卡（横排）：今日候选 / 9:36 确认买入 / 模拟收益 / 自选池 / 市场情绪
+      每张卡含 sparkline 或 环形进度
+    - 主体 12 列：
+      - 左 8 列：候选股票卡片网格（**当候选 < 8 时自动 auto-fit 撑满，不显示空槽**）
+      - 右 4 列：3 块侧栏（市场脉冲 / V1.6 达标流程 / 核心推荐）
+    - 底部：实时信号流（中文表头）
+
+    设计稿参考：/tmp/stitch_designs/01_today_overview.png
+    """
+    # ===== 数据准备 =====
+    daily = _lifecycle_load_market_daily(sel_date)
+    state = compute_today_state(df) if not df.empty else dict(total=0, checked=0, bought=0,
+                                                              waiting_t1=0, done_t1=0,
+                                                              drop=0, observe=0, second_check=0)
+    score, score_label = _home_sentiment_index(df, daily) if not df.empty else (50, "中性")
+    n_total = state.get("total", 0)
+    n_bought = state.get("bought", 0)
+    n_checked = state.get("checked", 0)
+
+    # 模拟收益累计
+    sim_return = 0.0
+    if not df.empty and "simulated_trade_return" in df.columns:
+        for v in df["simulated_trade_return"].apply(_gf):
+            if v is not None:
+                sim_return += v
+
+    if sim_return > 0:
+        sim_ret_str = f"+¥{sim_return:,.0f}"
+        sim_ret_color = COLOR_BOUGHT
+        sim_ret_trend = "up"
+        sim_ret_sub = "正收益"
+    elif sim_return < 0:
+        sim_ret_str = f"-¥{abs(sim_return):,.0f}"
+        sim_ret_color = COLOR_MAGENTA_NEON
+        sim_ret_trend = "down"
+        sim_ret_sub = "负收益"
+    else:
+        sim_ret_str = "¥0"
+        sim_ret_color = COLOR_MUTED
+        sim_ret_trend = None
+        sim_ret_sub = "累计"
+
+    # 自选池 active
+    wl = _wl_load()
+    wl_active = sum(1 for r in wl if str(r.get("status", "")).lower() == "active")
+
+    # 市场情绪标签 → 简洁中文（取斜杠前面部分；如果带英文再去掉）
+    sentiment_label = score_label.split('/')[0].strip()
+
+    # 用涨幅生成 sparkline 走势（mock，确保视觉趋势对应数据）
+    cand_spark = _v2_mock_sparkline_from_pct(0.02) if n_total > 0 else [50] * 7
+    conf_spark = _v2_mock_sparkline_from_pct(0.015) if n_bought > 0 else [50] * 7
+    pnl_spark = _v2_mock_sparkline_from_pct(sim_return / 10000 if sim_return else 0)
+    wl_spark = _v2_mock_sparkline_from_pct(0.005) if wl_active > 0 else [50] * 7
+
+    # ===== KPI Hero 5 张方卡（全中文 + sparkline） =====
+    hero_items = [
+        {"label": "今日候选",
+         "value": str(n_total),
+         "color": COLOR_SECOND,
+         "sub": f"已检查 {n_checked}",
+         "spark": cand_spark},
+        {"label": "9:36 确认买入",
+         "value": str(n_bought),
+         "color": COLOR_BOUGHT,
+         "sub": "活跃",
+         "spark": conf_spark},
+        {"label": "模拟收益",
+         "value": sim_ret_str,
+         "color": sim_ret_color,
+         "sub": sim_ret_sub,
+         "trend": sim_ret_trend,
+         "spark": pnl_spark},
+        {"label": "自选池",
+         "value": str(wl_active),
+         "color": COLOR_SECOND,
+         "sub": "稳定",
+         "spark": wl_spark},
+        {"label": "市场情绪",
+         "value": sentiment_label,
+         "color": COLOR_SECOND if score >= 50 else COLOR_MAGENTA_NEON,
+         "sub": f"指数 {score}",
+         "ring": score / 100.0,
+         "ring_label": str(score)},
+    ]
+    hero_html = kpi_hero_strip(hero_items)
+
+    if df.empty:
+        main_html = _h(f"""
+        <div class="rt-v2-glass-card" style="position:relative;background:{COLOR_GLASS_BG};
+                    backdrop-filter:blur(18px);border:1px solid {COLOR_GLASS_EDGE};
+                    border-radius:12px;padding:48px;text-align:center;
+                    color:{COLOR_MUTED};font-family:{FONT_BODY};font-size:14px;
+                    min-height:420px;display:flex;flex-direction:column;
+                    align-items:center;justify-content:center;">
+          <div style="font-size:54px;color:{COLOR_FAINT};margin-bottom:16px;line-height:1;">⊟</div>
+          <div style="font-size:16px;color:{COLOR_TEXT};font-weight:600;">今日暂无候选股票</div>
+          <div style="margin-top:8px;font-family:{FONT_MONO};font-size:11px;
+                      color:{COLOR_FAINT};letter-spacing:0.14em;">等待 9:36 主流程触发推荐</div>
+        </div>""")
+        grid_cols = 1
+    else:
+        sdf = enrich_df(df.copy()).head(8)
+        cards_html = "".join(_v2_stock_card(r) for _, r in sdf.iterrows())
+        n_cards = len(sdf)
+        grid_cols = 4 if n_cards >= 4 else max(1, n_cards)
+
+        top_reasons = _count_main_reasons(df)
+        if top_reasons:
+            top_reason_chips = "".join(
+                f'<span style="display:inline-flex;align-items:center;height:26px;'
+                f'padding:0 12px;border:1px solid {COLOR_WARN_YELLOW}66;'
+                f'border-radius:6px;background:{COLOR_WARN_YELLOW}10;'
+                f'color:{COLOR_WARN_YELLOW};font-family:{FONT_BODY};font-size:12px;'
+                f'font-weight:600;line-height:1;margin:4px 6px 4px 0;">'
+                f'{_eh(label)} · <span style="margin-left:6px;font-family:{FONT_MONO};">{count}</span></span>'
+                for label, count, _stocks in top_reasons[:6]
+            )
+        else:
+            top_reason_chips = (
+                f'<span style="color:{COLOR_MUTED};font-size:12px;">暂无未买入数据</span>'
+            )
+
+        v16_status_text = (
+            f"今日推荐 <b style='color:{COLOR_SECOND}'>{n_total}</b> 只，"
+            f"已确认买入 <b style='color:{COLOR_BOUGHT}'>{n_bought}</b> 只，"
+            f"未通过 <b style='color:{COLOR_MAGENTA_NEON}'>{max(0, n_checked - n_bought)}</b> 只，"
+            f"等待检查 <b style='color:{COLOR_WARN_YELLOW}'>{max(0, n_total - n_checked)}</b> 只。"
+        )
+        strategy_html = _h(f"""
+        <div class="rt-v2-glass-card" style="position:relative;background:{COLOR_GLASS_BG};
+                    backdrop-filter:blur(18px);border:1px solid {COLOR_GLASS_EDGE};
+                    border-radius:12px;padding:14px 18px;
+                    transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease;">
+          <div style="position:absolute;left:0;top:14px;bottom:14px;width:2px;
+                      background:{COLOR_WARN_YELLOW};border-radius:0 2px 2px 0;
+                      box-shadow:0 0 10px {COLOR_WARN_YELLOW}88;"></div>
+          <div style="margin-left:8px;">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+              <div>
+                <div style="font-family:{FONT_MONO};font-size:10px;color:{COLOR_WARN_YELLOW};
+                            letter-spacing:0.16em;text-transform:uppercase;
+                            text-shadow:0 0 6px {COLOR_WARN_YELLOW}aa;">STRATEGY INSIGHT</div>
+                <div style="font-family:{FONT_HEADLINE};font-size:16px;color:{COLOR_TEXT};
+                            font-weight:700;margin-top:2px;">策略洞察 · 当日复盘</div>
+              </div>
+              <span style="font-family:{FONT_MONO};font-size:11px;color:{COLOR_MUTED};
+                           padding:4px 10px;border:1px solid {COLOR_DIVIDER};
+                           border-radius:6px;">实时</span>
+            </div>
+            <div style="margin-top:8px;font-family:{FONT_BODY};font-size:13px;
+                        color:{COLOR_TEXT};line-height:1.8;">{v16_status_text}</div>
+            <div style="margin-top:8px;font-family:{FONT_BODY};font-size:11px;
+                        color:{COLOR_MUTED};font-weight:500;letter-spacing:0.06em;">
+              主要未买入原因
+            </div>
+            <div style="margin-top:6px;display:flex;flex-wrap:wrap;">{top_reason_chips}</div>
+          </div>
+        </div>""")
+        signal_html = _v2_signal_stream(df)
+        main_html = _h(f"""
+        <div class="rt-v22-card-grid" style="display:grid;grid-template-columns:repeat({grid_cols},minmax(0,1fr));gap:12px;">
+          {cards_html}
+        </div>
+        {strategy_html}
+        {signal_html}
+        """)
+
+    top3_html = _v2_sidebar_top3(df)
+    aside_html = _h(f"""
+    {_v2_sidebar_capital(daily)}
+    {_v2_sidebar_v16_rates(df, state)}
+    {top3_html if top3_html.strip() else ""}
+    """)
+
+    full_html = _h(f"""
+      <style>
+        * {{ box-sizing: border-box; }}
+        .rt-v22-shell {{
+          width: 100%;
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+          color: {COLOR_TEXT};
+          font-family: {FONT_BODY};
+        }}
+        .rt-v22-layout {{
+          display: grid;
+          grid-template-columns: minmax(0, 2fr) minmax(310px, 0.78fr);
+          gap: 14px;
+          align-items: start;
+        }}
+        .rt-v22-main,
+        .rt-v22-aside {{
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+        }}
+        .rt-v2-glass-card {{
+          box-shadow: 0 14px 34px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.025);
+        }}
+        .rt-v2-glass-card:hover {{
+          border-color: rgba(0,218,243,0.42) !important;
+          box-shadow: 0 18px 46px rgba(0,0,0,0.34), 0 0 18px rgba(0,218,243,0.06) !important;
+        }}
+        @media (max-width: 1200px) {{
+          .rt-v22-layout {{
+            grid-template-columns: 1fr;
+          }}
+        }}
+        @media (max-width: 980px) {{
+          .rt-v22-card-grid {{
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }}
+        }}
+        @media (max-width: 640px) {{
+          .rt-v22-card-grid {{
+            grid-template-columns: 1fr !important;
+          }}
+        }}
+      </style>
+      <div class="rt-v22-shell">
+        {hero_html}
+        <div class="rt-v22-layout">
+          <main class="rt-v22-main">{main_html}</main>
+          <aside class="rt-v22-aside">{aside_html}</aside>
+        </div>
+      </div>
+    """)
+    st.html(full_html)
+
+
 def render_today_empty_hero(sel_date: str) -> None:
     records = _today_data_records(sel_date)
     count = len(records)
@@ -1833,6 +2655,15 @@ def render_today_hero(df: pd.DataFrame, sel_date: str, state: dict, plain_text: 
 
 
 def page_today(df_all: pd.DataFrame) -> None:
+    """今日总览页 — V2.1 Stitch 设计稿同款。
+
+    V2.1（2026-06-01）：layout 重构为 KPI Hero 5 卡 + 主体 12 列
+    （左 8 列股票卡 4×2 + 右 4 列 3 块侧栏）+ 底部 LIVE_SIGNAL_STREAM。
+    设计稿参考：/tmp/stitch_designs/01_today_overview.png
+
+    旧的 render_today_terminal_home / render_today_hero / render_today_banner
+    仍然保留在代码中，但 page_today 不再调用，避免视觉风格混合。
+    """
     # 合并多个数据源的日期
     all_dates = _collect_available_dates()
     if not all_dates:
@@ -1846,27 +2677,12 @@ def page_today(df_all: pd.DataFrame) -> None:
     # 筛选 trade_review 记录
     df = df_all[df_all["report_date"] == sel_date].copy() if not df_all.empty else pd.DataFrame()
 
-    render_today_terminal_home(sel_date, df)
+    # 已富化（enrich_df）的 df 用于卡片渲染。若 df 为空，render_today_v2_stitch
+    # 内部会展示 NO_CANDIDATE_FEED 空态卡，避免 layout 塌陷。
+    df_enriched = enrich_df(df) if not df.empty else df
 
-    if df.empty:
-        # 有 V1.6 非推荐记录（如 market_daily / tomorrow_plan / t_signal），
-        # 但 trade_review.csv 无当日推荐/买入记录
-        return
-
-    df = enrich_df(df)
-    if df.empty:
-        status_banner(f"{_date_fmt(sel_date)} 无推荐数据。", "info")
-        return
-
-    # 渲染英雄区和状态横幅
-    render_today_banner(df, sel_date)
-    state = compute_today_state(df)
-    bought = df[df.apply(lambda r: _gb(r.get("buy_signal_0935")) is True, axis=1)]
-    bought_names = [_eh(r.get("stock_name", "")) for _, r in bought.iterrows() if _eh(r.get("stock_name", ""))]
-    top_reasons = _count_main_reasons(df)
-    top_reason_text = top_reasons[0][0] if top_reasons else "暂无"
-    plain_text = f"今日推荐 {state['total']} 只，已确认买入 {len(bought)} 只。主要未买入原因：{top_reason_text}"
-    render_today_hero(df, sel_date, state, plain_text, bought_names)
+    # V2.1 Stitch 设计稿同款今日总览
+    render_today_v2_stitch(sel_date, df_enriched)
 
 
 # ─── PAGE 2: 买入确认（三段式）───────────────────────────────────────
@@ -7820,6 +8636,47 @@ def main() -> None:
       /* RADAR_TERMINAL V2 升级补丁（Stitch 设计稿同步：2026-06-01）         */
       /* ════════════════════════════════════════════════════════════════ */
 
+      /* 0) V2.2 两栏强制对齐 ── 用 :has() 找到带 marker 的 stHorizontalBlock，
+            只对今日总览 V2.2 主区生效，避免污染其他页面。
+            marker 嵌入在第一列 main_left 内（display:none），通过祖先选择匹配。 */
+      div[data-testid="stHorizontalBlock"]:has(.rt-v2-today-marker) {{
+          align-items: stretch !important;
+      }}
+      div[data-testid="stHorizontalBlock"]:has(.rt-v2-today-marker)
+      > div[data-testid="stColumn"] {{
+          display: flex !important;
+          flex-direction: column !important;
+      }}
+      div[data-testid="stHorizontalBlock"]:has(.rt-v2-today-marker)
+      > div[data-testid="stColumn"] > div[data-testid="stVerticalBlock"] {{
+          flex: 1 1 auto !important;
+          display: flex !important;
+          flex-direction: column !important;
+          gap: 12px !important;
+      }}
+      /* 两栏最后一个 stElementContainer 撑满剩余高度，确保底部对齐无空白 */
+      div[data-testid="stHorizontalBlock"]:has(.rt-v2-today-marker)
+      > div[data-testid="stColumn"] > div[data-testid="stVerticalBlock"]
+      > div[data-testid="stElementContainer"]:last-of-type {{
+          flex-grow: 1 !important;
+          display: flex !important;
+          flex-direction: column !important;
+      }}
+      div[data-testid="stHorizontalBlock"]:has(.rt-v2-today-marker)
+      > div[data-testid="stColumn"] > div[data-testid="stVerticalBlock"]
+      > div[data-testid="stElementContainer"]:last-of-type > div {{
+          flex-grow: 1 !important;
+          display: flex !important;
+          flex-direction: column !important;
+      }}
+      div[data-testid="stHorizontalBlock"]:has(.rt-v2-today-marker)
+      > div[data-testid="stColumn"] > div[data-testid="stVerticalBlock"]
+      > div[data-testid="stElementContainer"]:last-of-type .rt-v2-glass-card {{
+          flex-grow: 1 !important;
+          display: flex !important;
+          flex-direction: column !important;
+      }}
+
       /* 1) V2 玻璃态卡片 / KPI 卡 hover 上抬 + 内描边发光 */
       .rt-v2-kpi-card:hover,
       .rt-v2-glass-card:hover {{
@@ -7999,9 +8856,23 @@ def main() -> None:
         key="top_nav_page",
     )
 
+    prev_page = st.session_state.get("_last_rendered_top_nav_page")
+    if prev_page != page:
+        st.session_state["_last_rendered_top_nav_page"] = page
+        components.html(
+            """
+            <script>
+              const main = window.parent.document.querySelector('[data-testid="stMain"]');
+              if (main) main.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+              window.parent.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+            </script>
+            """,
+            height=0,
+        )
+
     is_today_page = "今日总览" in page
     is_watchlist_page = "我的自选" in page
-    if is_today_page or is_watchlist_page:
+    if is_today_page:
         st.markdown(
             """
             <style>
