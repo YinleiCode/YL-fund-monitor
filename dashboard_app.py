@@ -134,6 +134,7 @@ STATUS_BOUGHT_WAIT  = "已买入｜等待T+1复盘"
 STATUS_BOUGHT_LIMIT = "已买入｜涨停未成交"
 STATUS_NOBUY_DONE   = "未买入｜T+1已观察"
 STATUS_NOBUY_WAIT   = "未买入｜T+1待跟踪"
+STATUS_NOBUY_DATA_FAIL = "未买入｜行情失败"
 STATUS_NOT_CHECKED  = "未检查｜等待9:36确认"
 
 
@@ -142,6 +143,9 @@ HARD_DROP_REASONS = {
     "market_sentiment_below_5":        "大盘情绪不足5分",
     "theme_strength_too_low":          "主题强度不足",
     "full_score_not_strong_enough":    "全A分数/人气/技术不够强",
+    "realtime_data_missing":           "9:36 实时行情缺失",
+    "realtime_price_invalid":          "9:36 实时价格无效",
+    "9:36实时行情缺失":                "9:36 实时行情缺失",
     "open_change_too_high":            "高开过多（>+4%）",
     "open_change_too_low_hard":        "低开超过3%，明显弱开",
     "unable_to_buy_limit_up":          "一字涨停买不进",
@@ -174,6 +178,9 @@ MAIN_REASON_PRIORITY = [
     ("market_sentiment_below_5",        "大盘情绪不足"),
     ("theme_strength_too_low",          "主题强度不足"),
     ("full_score_not_strong_enough",    "全A强度不足"),
+    ("realtime_data_missing",           "实时行情缺失"),
+    ("realtime_price_invalid",          "实时价格无效"),
+    ("9:36实时行情缺失",                "实时行情缺失"),
     ("unable_to_buy_limit_up",          "一字涨停买不进"),
     ("possible_limit_up_unable_to_buy", "疑似一字涨停"),
     # ② 开盘异常
@@ -228,6 +235,10 @@ def is_bought(row) -> bool:
 
 def is_not_checked(row) -> bool:
     """9:36 尚未跑。"""
+    if str(row.get("realtime_data_status", "") or "").strip():
+        return False
+    if str(row.get("fail_reason", "") or "").strip():
+        return False
     return _gf(row.get("price_0935")) is None and _gf(row.get("open_price")) is None
 
 
@@ -313,6 +324,9 @@ def row_status(row: pd.Series) -> str:
     unable   = _gb(row.get("unable_to_buy"))
     has_open = _gf(row.get("open_price")) is not None
     has_t1   = is_t1_done(row)
+    rt_status = str(row.get("realtime_data_status", "") or "").strip()
+    if rt_status in {"missing", "invalid"}:
+        return STATUS_NOBUY_DATA_FAIL
     if not has_open:
         return STATUS_NOT_CHECKED
     if bs is True and unable is True:
@@ -328,6 +342,7 @@ def status_color(status: str) -> str:
     if status == STATUS_BOUGHT_LIMIT: return COLOR_MUTED
     if status == STATUS_NOBUY_DONE:   return COLOR_NO_BUY
     if status == STATUS_NOBUY_WAIT:   return COLOR_NO_BUY
+    if status == STATUS_NOBUY_DATA_FAIL: return COLOR_MUTED
     if status == STATUS_NOT_CHECKED:  return COLOR_MUTED
     return COLOR_MUTED
 
@@ -641,7 +656,13 @@ def _v16_mf_layer_html(row) -> str:
     money_source = _eh(_money_source_cn(row.get("v15_money_source")), "暂无")
     money_reason = _eh(_display_value(row.get("v15_money_reason")), "暂无")
     buy_signal = _gb(row.get("buy_signal_0935"))
-    if is_not_checked(row):
+    rt_status = str(row.get("realtime_data_status", "") or "").strip()
+    fail_reason = str(row.get("fail_reason", "") or "").strip()
+    if rt_status == "missing" or fail_reason == "realtime_data_missing":
+        tech_status = "9:36 实时行情缺失，未触发买入"
+    elif rt_status == "invalid" or fail_reason == "realtime_price_invalid":
+        tech_status = "9:36 实时价格无效，未触发买入"
+    elif is_not_checked(row):
         tech_status = "9:36 技术确认尚未运行"
     elif buy_signal is True:
         tech_status = "9:36 技术确认通过，进入模拟买入记录"

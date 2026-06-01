@@ -199,15 +199,78 @@ T 模块不接券商，不自动下单，不写入 `output/trade_review.csv`。
 - T 样例默认隐藏，勾选后显示。
 - dashboard HTML injection 修复。
 - today hero section。
+- `check_buy()` 实时行情失败状态写回（P1，2026-06-01）：`trade_review.csv` 新增 `realtime_data_status` 和 `fail_reason` 两列；行情缺失/价格无效时写回 `buy_signal_0935=false` 并标 `realtime_data_missing` / `realtime_price_invalid`；dashboard 不再显示「9:36 N/A」而是显示具体失败原因。
 
 ## 当前风险点
 
 - 2026-06-01 没有 T 记录，因为 T 脚本还没有接入 launchd 定时任务。
-- 9:36 数据出现 N/A，需要排查实时数据源。
+- ~~9:36 数据出现 N/A，需要排查实时数据源。~~（2026-06-01 已修：`check_buy()` 失败状态已写回，dashboard 会区分「实时行情缺失/实时价格无效」与真正「尚未运行」）
 - dashboard RADAR_TERMINAL 前端界面正在恢复整理。
 - 自选池当前是“优先”，不是“只从自选池选”。
 - theme_auto 的数据源 fallback 已在前序未提交改动中增强，但尚未通过真实主流程运行验证。
 - 当前工作区已有未提交改动，后续提交必须拆清楚，不要混入无关文件。
+- `row_status()` 在 `realtime_data_status ∈ {missing, invalid}` 时返回 `STATUS_NOBUY_WAIT = "未买入｜T+1待跟踪"`。卡片内 V1.6 详细面板会显示正确的失败原因，但顶层状态标签语义不准（无买入则无 T+1）。后续可考虑新增 `STATUS_NOBUY_DATA_FAIL`。
+
+## 2026-06-01 代码逻辑审查补充
+
+本轮只读审查了选股、9:36 买入确认、T+1 卖出/复盘、T 信号、T 交易记录和 launchd 调度。
+
+确认正常：
+
+- 未发现自动下单逻辑。
+- 未发现券商连接逻辑。
+- T 模块字段仍保持 `execution_mode=simulate`、`can_execute_live=False`、`order_status=not_submitted`、`broker_status=not_connected`。
+- `trade_review.py` 的 T+1 卖出是模拟卖出记录，写 `simulated_sell_price` / `simulated_trade_return`，不是实盘卖出。
+- `scripts/build_t_trade_tracker.py` 只写 `output/t_trade/*`，不写 `output/trade_review.csv`。
+
+重点问题：
+
+- ~~`trade_review.check_buy()` 在实时行情缺失或价格无效时，只把错误放进返回结果，不写回 `trade_review.csv`。这会导致 dashboard 继续显示 9:36 N/A，无法知道是“没跑”还是“数据源失败”。建议写入 `buy_signal_0935=false`、`notes=realtime_data_missing` 或 `realtime_price_invalid`。~~ **（2026-06-01 已修，见下方「P1 修复补充」）**
+- T 模块还没有接入 launchd。当前 launchd 只有 pick / themeauto / checkbuy / secondcheck / update / summary，没有 `build_t_signal_observer.py` 和 `build_t_trade_tracker.py`，所以 2026-06-01 没有真实 T 记录是链路未调度，不代表当天没有 T 机会。
+- T 信号观察脚本当前第一版需要 `--input-minute-csv` 和显式 `--codes`，还没有真实 1 分钟行情源接入。即使接 launchd，也需要先设计真实分钟数据输入。
+- `build_t_trade_tracker.py` 如果没有后续分钟数据，会把通过的 T 信号写成 `data_missing`；这是安全的，但还不是完整实时跟踪。
+- 自选池优先逻辑现在较强：`run.py` 会把自选股补进候选评估池，且 priority=1 在最终排序硬提到最前。需要确认这是否符合用户口径；如果只是“优先观察”，建议保留安全过滤和分数下限，避免弱票因自选池直接挤进前三。
+- `theme_auto.py` 会把自选池股票加入主题观察池。若部分主题成分股成功、部分失败，自选池股票可能以 top_theme 参与正式 theme_auto 推荐，需要继续明确“自选池观察”是否应写入正式 `trade_review.csv`。
+- `append_rows()` 是幂等追加，已有同日同代码同 mode 记录不会刷新 V1.6 plan 标签。因此如果 `tomorrow_plan_latest.csv` 后续被人工确认/更新，旧 `trade_review.csv` 行不会自动同步。
+- 主买入/卖出目前没有独立事件流水表，只有 `trade_review.csv` 行字段记录 `buy_signal_0935`、`buy_price`、`simulated_sell_price` 等。T 模块有独立 B/S 点日志。
+
+## 2026-06-01 P1 修复补充：check_buy 实时行情失败写回
+
+落地范围：
+
+- `trade_review.py`：
+  - `COLUMNS` 表头新增 `realtime_data_status` 和 `fail_reason` 两列。
+  - 新增 `_append_note()` 辅助函数，分号拼接 `notes` 且自动去重。
+  - `check_buy()` 在两个失败分支都写回 csv 行：
+    - `rt is None` → `buy_signal_0935=false`、`realtime_data_status=missing`、`fail_reason=realtime_data_missing`、`notes` 追加「9:36实时行情缺失」、清空 `buy_price/adjusted_buy_price/stop_price`。
+    - 价格非 finite 或 ≤0 → `realtime_data_status=invalid`、`fail_reason=realtime_price_invalid`、同上清空买入相关字段。
+  - 成功通过的分支会写 `realtime_data_status=ok` 并清空 `fail_reason`。
+  - 两个失败分支都补了 `updated += 1`，保证写回会 flush 到 csv。
+- `dashboard_app.py`：
+  - `HARD_DROP_REASONS` / `MAIN_REASON_PRIORITY` 增加 `realtime_data_missing` / `realtime_price_invalid` 中文映射。
+  - `is_not_checked()`：当 `realtime_data_status` 或 `fail_reason` 非空时返回 False，不再误判为「尚未运行」。
+  - `_v16_mf_layer_html()`：根据 `realtime_data_status` 显示「9:36 实时行情缺失，未触发买入」或「9:36 实时价格无效，未触发买入」。
+  - `row_status()`：当 `realtime_data_status ∈ {missing, invalid}` 时返回 `STATUS_NOBUY_WAIT`。
+
+边界与安全：
+
+- 未运行 `python run.py` 或任何子命令。
+- 未修改 `output/trade_review.csv` 历史数据，只动 schema 与写入逻辑。
+- 未引入自动下单、券商连接逻辑；T 模块字段未动。
+- 修改了禁改文件 `trade_review.py`，理由是解决 P1 dashboard 9:36 N/A 无法区分失败原因的问题，符合 AI_RULES 第 3 条「先说明再改」流程。
+
+验证：
+
+- `python -m py_compile trade_review.py dashboard_app.py` 通过。
+- Mock 验证：实时行情缺失、实时价格无效、开盘涨幅无法计算三种情况，写回字段均符合预期。
+- Dashboard helper 验证：
+  - `is_not_checked(missing)=False`、`is_not_checked(invalid)=False`、`is_not_checked(not_checked)=True`。
+  - `_v16_mf_layer_html` 三种情况文本正确（「9:36 实时行情缺失」/「9:36 实时价格无效」/「9:36 技术确认尚未运行」）。
+
+遗留尾巴：
+
+- `row_status()` 在 missing/invalid 情况下返回 `STATUS_NOBUY_WAIT = "未买入｜T+1待跟踪"`，语义不太准。卡片内详情面板已显示正确原因，但顶层标签建议后续新增 `STATUS_NOBUY_DATA_FAIL` 类别。
+- 本轮 P1 改动嵌在 `dashboard_app.py` 3770 行大 diff 里（绝大部分是前序遗留 UI 改动），若要单独提交 P1 包，需要 `git add -p` 挑 hunk。
 
 ## 下一步建议
 
@@ -219,8 +282,10 @@ T 模块不接券商，不自动下单，不写入 `output/trade_review.csv`。
    - 成分股接口 fallback；
    - 自选池降级观察。
 3. 如果继续修 T 模块，优先设计 launchd 定时任务，但必须保持 simulate。
-4. 如果继续修 dashboard，优先只改 `dashboard_app.py` 和 `.streamlit/config.toml`。
-5. 每次任务结束必须更新 `AI_HANDOFF.md` 和 `AI_CHANGELOG.md`。
+4. ~~优先修 `trade_review.check_buy()` 的实时行情失败写回，解决 dashboard 9:36 N/A 无法区分失败原因的问题。~~ **（2026-06-01 已修，见「2026-06-01 P1 修复补充」节）**
+5. 可选：新增 `STATUS_NOBUY_DATA_FAIL` 让 row_status 在实时行情失败时的顶层标签语义对齐。
+6. 如果继续修 dashboard，优先只改 `dashboard_app.py` 和 `.streamlit/config.toml`。
+7. 每次任务结束必须更新 `AI_HANDOFF.md` 和 `AI_CHANGELOG.md`。
 
 ## 禁止事项
 

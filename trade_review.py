@@ -63,7 +63,7 @@ COLUMNS = [
     # 手动可选
     "open_change_pct", "intraday_avg_line_pass", "first_5min_amount_ratio",
     "sector_strength", "price_1000", "broke_yesterday_low",
-    "unable_to_buy", "unable_to_buy_reason", "notes",
+    "unable_to_buy", "unable_to_buy_reason", "realtime_data_status", "fail_reason", "notes",
     # 10:00 二次确认观察（V1.4 实验性观察项，不计入正式收益）
     "second_check_time", "second_check_passed", "second_check_reason",
     "second_check_observe_price",
@@ -546,6 +546,17 @@ def _gb(v) -> Optional[bool]:
     if s in ("false", "0", "no"):
         return False
     return None
+
+
+def _append_note(existing, note: str) -> str:
+    """Append a semicolon-separated note without duplicating existing content."""
+    note = str(note or "").strip()
+    if not note:
+        return str(existing or "").strip()
+    parts = [p.strip() for p in str(existing or "").split(";") if p.strip()]
+    if note not in parts:
+        parts.append(note)
+    return ";".join(parts)
 
 
 def _pct(ratio: Optional[float]) -> str:
@@ -1074,9 +1085,26 @@ def check_buy(cfg: dict) -> list:
         rt = rt_map.get(code)
         if rt is None:
             logger.warning(f"[check_buy] {code} 实时行情缺失")
-            results.append({"code": code, "name": name, "error": True,
-                            "reason": "实时行情获取失败",
-                            "effective_version": "V1.4" if v14_on else "V1.3"})
+            df.at[idx, "buy_signal_0935"] = "false"
+            df.at[idx, "buy_price"] = ""
+            df.at[idx, "adjusted_buy_price"] = ""
+            df.at[idx, "stop_price"] = ""
+            df.at[idx, "realtime_data_status"] = "missing"
+            df.at[idx, "fail_reason"] = "realtime_data_missing"
+            df.at[idx, "notes"] = _append_note(row.get("notes", ""), "9:36实时行情缺失")
+            updated += 1
+            results.append({
+                "code": code,
+                "name": name,
+                "error": True,
+                "reason": "realtime_data_missing",
+                "realtime_data_status": "missing",
+                "buy_signal": False,
+                "fail_reasons": ["realtime_data_missing"],
+                "hard_fail_reasons": ["realtime_data_missing"],
+                "soft_fail_reasons": [],
+                "effective_version": "V1.4" if v14_on else "V1.3",
+            })
             continue
 
         open_p     = float(rt["open"])
@@ -1084,11 +1112,31 @@ def check_buy(cfg: dict) -> list:
         cur_price  = float(rt["close"])
         vol_lots   = float(rt.get("volume", 0))
 
-        if prev_close <= 0 or open_p <= 0 or cur_price <= 0:
+        if (
+            (not math.isfinite(prev_close)) or (not math.isfinite(open_p)) or (not math.isfinite(cur_price))
+            or prev_close <= 0 or open_p <= 0 or cur_price <= 0
+        ):
             logger.warning(f"[check_buy] {code} 价格数据无效（停牌或尚未开盘）")
-            results.append({"code": code, "name": name, "error": True,
-                            "reason": "价格数据无效，可能停牌或未开盘",
-                            "effective_version": "V1.4" if v14_on else "V1.3"})
+            df.at[idx, "buy_signal_0935"] = "false"
+            df.at[idx, "buy_price"] = ""
+            df.at[idx, "adjusted_buy_price"] = ""
+            df.at[idx, "stop_price"] = ""
+            df.at[idx, "realtime_data_status"] = "invalid"
+            df.at[idx, "fail_reason"] = "realtime_price_invalid"
+            df.at[idx, "notes"] = _append_note(row.get("notes", ""), "realtime_price_invalid")
+            updated += 1
+            results.append({
+                "code": code,
+                "name": name,
+                "error": True,
+                "reason": "realtime_price_invalid",
+                "realtime_data_status": "invalid",
+                "buy_signal": False,
+                "fail_reasons": ["realtime_price_invalid"],
+                "hard_fail_reasons": ["realtime_price_invalid"],
+                "soft_fail_reasons": [],
+                "effective_version": "V1.4" if v14_on else "V1.3",
+            })
             continue
 
         open_chg = (open_p / prev_close - 1) * 100
@@ -1164,6 +1212,8 @@ def check_buy(cfg: dict) -> list:
         _set("open_price",      str(round(open_p,    3)))
         _set("open_change_pct", str(round(open_chg,  2)))
         _set("price_0935",      str(round(cur_price, 3)))
+        df.at[idx, "realtime_data_status"] = "ok"
+        df.at[idx, "fail_reason"] = ""
         df.at[idx, "buy_signal_0935"] = "true" if buy_signal else "false"
         df.at[idx, "buy_price"]       = str(round(cur_price, 3)) if buy_signal else ""
 

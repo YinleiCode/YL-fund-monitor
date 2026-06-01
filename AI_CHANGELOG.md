@@ -101,6 +101,110 @@ Codex
 - `run.py` 和 `theme_auto.py` 的业务逻辑改动尚未真实主流程运行验证，禁止擅自运行 `python run.py`。
 - dashboard UI 仍需用户最终视觉确认。
 
+## 2026-06-01 Codex
+
+### 本次任务
+
+只读审查选股、买入确认、T+1 卖出/复盘、T 信号、T 交易记录和调度链路，判断当前代码逻辑是否存在风险或缺口。
+
+### 修改文件
+
+- `AI_HANDOFF.md`
+- `AI_CHANGELOG.md`
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- `run.py`：本次任务只读审查，未改。
+- `trade_review.py`：只读审查，未改。
+- `output/trade_review.csv`：只读查看，未改。
+- `config/version_flags.yaml`：只读查看，未改。
+- `launchd/*.plist`：只读查看，未改。
+
+### 是否运行 python run.py
+
+没有。
+
+### 验收
+
+- `python -m py_compile run.py theme_auto.py trade_review.py scripts/build_t_signal_observer.py scripts/build_t_trade_tracker.py` 通过。
+- 确认未发现自动下单或券商连接逻辑。
+- 确认 T 模块仍是 simulate。
+- 确认 2026-06-01 没有 T 记录的主要原因是 T 脚本未接入 launchd，且尚未接真实 1 分钟数据源。
+- 发现 `check_buy()` 实时行情失败时不写回失败状态，容易导致 dashboard 9:36 N/A。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：未提交。
+- status：仍有前序未提交改动；本次新增交接记录未提交。
+
+### 遗留问题
+
+- 优先修 `trade_review.check_buy()` 实时行情缺失/价格无效写回。
+- 设计 T 信号和 T 交易 tracker 的真实分钟数据输入与 launchd 调度。
+- 决定自选池 priority=1 是否允许硬提到前三，还是只做优先观察。
+
+## 2026-06-01 Codex
+
+### 本次任务
+
+P1 修复：`trade_review.check_buy()` 在实时行情缺失/价格无效/开盘涨幅无法计算时，写回失败状态到 `trade_review.csv`，dashboard 不再把这些情况显示成「尚未运行 / N/A」，改为显示具体失败原因（实时行情缺失 / 实时价格无效）。
+
+### 修改文件
+
+- `trade_review.py`
+  - 表头新增 `realtime_data_status`、`fail_reason` 两列。
+  - 新增 `_append_note()` 辅助函数（分号拼接 + 去重）。
+  - `check_buy()` 两个失败分支补写 csv 行：`buy_signal_0935=false`、`realtime_data_status=missing/invalid`、`fail_reason=realtime_data_missing/realtime_price_invalid`、`notes` 追加描述，并清空 `buy_price/adjusted_buy_price/stop_price`。失败分支补 `updated += 1`。
+  - 价格有效性检查改为 `math.isfinite + > 0`，更严格。
+  - 成功通过分支写 `realtime_data_status=ok` 并清空 `fail_reason`。
+- `dashboard_app.py`
+  - `HARD_DROP_REASONS` / `MAIN_REASON_PRIORITY` 新增 `realtime_data_missing` / `realtime_price_invalid` 中文映射。
+  - `is_not_checked()`：当 `realtime_data_status` 或 `fail_reason` 非空时返回 False。
+  - `_v16_mf_layer_html()`：根据 `realtime_data_status` 显示「9:36 实时行情缺失，未触发买入」或「9:36 实时价格无效，未触发买入」。
+  - `row_status()`：`realtime_data_status ∈ {missing, invalid}` 时返回 `STATUS_NOBUY_WAIT`。
+- `AI_HANDOFF.md`、`AI_CHANGELOG.md`：补充本轮修复记录。
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- `run.py`：本次任务未改（diff 中的 152 行是前序遗留改动）。
+- `trade_review.py`：**本次修改**。理由：解决 P1 dashboard 9:36 N/A 无法区分失败原因。已说明影响链路、风险、验证方式；不引入真实交易；不改 csv 历史数据；仅扩展 schema 与写入失败状态。符合 AI_RULES 第 3 条「先说明再改」流程。
+- `output/trade_review.csv`：未改历史数据。
+- `config/version_flags.yaml`：未改。
+- `launchd/*.plist`：未改。
+
+### 是否运行 python run.py
+
+没有。
+
+### 验收
+
+- `python -m py_compile trade_review.py dashboard_app.py` 通过。
+- Mock 验证三种情况（实时行情缺失 / 实时价格无效 / 开盘涨幅无法计算）写回字段均符合预期。
+- Dashboard helper 验证：
+  - `is_not_checked(missing) = False`、`is_not_checked(invalid) = False`、`is_not_checked(not_checked) = True`。
+  - `_v16_mf_layer_html` 三种情况文本正确。
+- 确认未引入自动下单、券商连接逻辑；T 模块字段未动。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：未提交。本轮 P1 改动嵌在 `dashboard_app.py` 3770 行大 diff 中，绝大部分是前序遗留 UI 改动；若要单独提交 P1 包，需要 `git add -p` 挑 hunk。
+- status：工作区仍 dirty，含前序遗留改动 + 本轮 P1 修复 + 本轮文档更新。
+
+### 遗留问题
+
+- `row_status()` 在 missing/invalid 情况下返回 `STATUS_NOBUY_WAIT = "未买入｜T+1待跟踪"`，语义不太准（无买入则无 T+1）。卡片内详情面板已显示正确原因，但顶层标签建议后续新增 `STATUS_NOBUY_DATA_FAIL`。
+- P1 修复 commit 拆分尚未执行。建议 `git add -p` 把 `trade_review.py` 全收 + `dashboard_app.py` 只挑 P1 相关 5 段 hunk + 两份 AI 文档，单独提交。
+
 ## 后续记录模板
 
 ```markdown
