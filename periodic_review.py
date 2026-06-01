@@ -162,6 +162,22 @@ def _current_month_range():
     return start.strftime("%Y%m%d"), today.strftime("%Y%m%d"), label, title
 
 
+def _last_month_range():
+    """Returns (start_yyyymmdd, end_yyyymmdd, 'YYYY-MM', '月复盘｜YYYY年MM月')。
+
+    用于每月 1 号 17:00 自动跑上月完整月报（本月当天数据不够，1 号当天
+    跑「本月」会得到空区间，所以新装载的 launchd monthlyreview.plist
+    走「上月」口径）。
+    """
+    today = _date.today()
+    last_day_of_prev = today.replace(day=1) - timedelta(days=1)
+    start = last_day_of_prev.replace(day=1)
+    end   = last_day_of_prev
+    label = start.strftime("%Y-%m")
+    title = f"月复盘｜{start.year}年{start.month:02d}月"
+    return start.strftime("%Y%m%d"), end.strftime("%Y%m%d"), label, title
+
+
 def _read_period_df(start_str: str, end_str: str) -> pd.DataFrame:
     if not CSV_PATH.exists():
         return pd.DataFrame()
@@ -1017,19 +1033,28 @@ def weekly_review(cfg: dict) -> dict:
         return {"error": str(e), "period_type": "weekly"}
 
 
-def monthly_review(cfg: dict) -> dict:
-    """生成本月复盘报告，返回 summary dict 供微信推送使用。失败静默。"""
+def monthly_review(cfg: dict, last_month: bool = False) -> dict:
+    """生成本月或上月复盘报告，返回 summary dict 供微信推送使用。失败静默。
+
+    Args:
+      last_month: True 表示统计上月数据（用于每月 1 号 17:00 自动跑上月月报）。
+                  False（默认）保持向后兼容（手动跑时统计本月当前已积累的数据）。
+    """
     try:
-        return _run_review(cfg, period_type="monthly")
+        return _run_review(cfg, period_type="monthly", last_month=last_month)
     except Exception as e:
         logger.warning(f"[monthly_review] 生成失败: {e}", exc_info=True)
         return {"error": str(e), "period_type": "monthly"}
 
 
-def _run_review(cfg: dict, period_type: str) -> dict:
+def _run_review(cfg: dict, period_type: str, last_month: bool = False) -> dict:
     if period_type == "weekly":
         start_str, end_str, period_label, period_title = _current_week_range()
         out_path = OUTPUT_DIR / f"周复盘报告_{period_label}.md"
+    elif last_month:
+        # 上月口径：用于每月 1 号 17:00 自动月复盘
+        start_str, end_str, period_label, period_title = _last_month_range()
+        out_path = OUTPUT_DIR / f"月复盘报告_{period_label}.md"
     else:
         start_str, end_str, period_label, period_title = _current_month_range()
         out_path = OUTPUT_DIR / f"月复盘报告_{period_label}.md"

@@ -302,6 +302,7 @@ def main() -> None:
     parser.add_argument("--update-review",   action="store_true", help="T+1收盘后自动补全回测数据（合并 3+3 复盘推送 + T 摘要）")
     parser.add_argument("--weekly-review",   action="store_true", help="生成本周复盘报告并推送")
     parser.add_argument("--monthly-review",  action="store_true", help="生成本月复盘报告并推送")
+    parser.add_argument("--last-month",      action="store_true", help="配合 --monthly-review：统计上月数据（每月 1 号自动月复盘用）")
     parser.add_argument("--test-notify",     action="store_true", help="发送测试推送验证Server酱配置")
     parser.add_argument("--theme-auto",      action="store_true", help="主题龙头模式（并行实验组，仅写 CSV，不再单独推送，合并到 morning-digest）")
     parser.add_argument("--morning-digest",  action="store_true", help="早盘 3+3 合并推送（读 trade_review.csv 当日 full + theme_auto top3）")
@@ -472,8 +473,10 @@ def main() -> None:
         import periodic_review
         import notifier
         import excel_report
-        logger.info("[monthly_review] 开始生成本月复盘报告")
-        summary = periodic_review.monthly_review(cfg)
+        use_last = bool(getattr(args, "last_month", False))
+        scope_label = "上月" if use_last else "本月"
+        logger.info(f"[monthly_review] 开始生成{scope_label}复盘报告（last_month={use_last}）")
+        summary = periodic_review.monthly_review(cfg, last_month=use_last)
         if "error" not in summary:
             title, body = notifier.format_monthly_review_message(summary)
             print("\n" + title)
