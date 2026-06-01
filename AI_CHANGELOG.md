@@ -205,6 +205,63 @@ P1 修复：`trade_review.check_buy()` 在实时行情缺失/价格无效/开盘
 - `row_status()` 在 missing/invalid 情况下返回 `STATUS_NOBUY_WAIT = "未买入｜T+1待跟踪"`，语义不太准（无买入则无 T+1）。卡片内详情面板已显示正确原因，但顶层标签建议后续新增 `STATUS_NOBUY_DATA_FAIL`。
 - P1 修复 commit 拆分尚未执行。建议 `git add -p` 把 `trade_review.py` 全收 + `dashboard_app.py` 只挑 P1 相关 5 段 hunk + 两份 AI 文档，单独提交。
 
+## 2026-06-01 Claude（B 包）
+
+### 本次任务
+
+提交 B 包：`run.py` 自选池优先进入候选评估池 + `theme_auto.py` 三级 fallback（EM 概念 → EM 行业 → THS 行业 → 磁盘缓存）+ 成分股 EM 概念→EM 行业 fallback + 全失败时自选池降级观察（确保不写正式 trade_review.csv）。
+
+### 修改文件
+
+- 无新增源码改动。本轮目的是用 monkeypatch 验证前序遗留的 `run.py` / `theme_auto.py` 改动，验收通过后提交。
+- `AI_HANDOFF.md`：B 包标记为已提交，更新当前工作区、风险点、落地细节、验证清单。
+- `AI_CHANGELOG.md`：追加本条。
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- `run.py`：**本次提交**。理由：
+  - 为什么必须改：把自选池股票从「只是 priority 排序硬提到前」扩展到「在候选评估池入口就并入」+「排名截断后补回」，避免自选股被 `top_n` 完全挤掉；同时把 `theme_auto.degraded_watchlist` 接入 main()，避免不完整观察污染正式 `trade_review.csv`。
+  - 影响链路：粗筛后候选池构造 + `rank_and_select` 两个阶段的截断补回 + theme_auto 结果写 trade_review.csv 的开关。
+  - 风险：自选股理论上可能让弱票绕过 quick_filter 进入评估。
+  - 缓解：`_merge_watchlist_candidates` 已加基础安全过滤（非 ST、非停牌、价格达标、非跌停、非一字涨停），且自选股仍要过历史过滤/打分/V1.6/9:36 全部安全门。
+  - 验证不触发真实交易：T5b 测试确认 `trade_review.append_rows` 在 `degraded_watchlist=True` 时被 elif 分支跳过。
+- `trade_review.py`：未改。
+- `output/trade_review.csv`：未改。
+- `config/version_flags.yaml`：未改。
+- `launchd/*.plist`：未改。
+
+### 是否运行 python run.py
+
+没有。
+
+### 验收
+
+- `python -m py_compile run.py theme_auto.py` 通过。
+- 18 个 monkeypatch 全部 PASS：
+  - T1 (5)：自选池并入候选池含基础安全拦截、标记字段。
+  - T2 (2)：排名截断后补回 + `_watchlist_kept_after_rank` 标记。
+  - T3 (3) + T3b (1)：EM 概念失败 → EM 行业 fallback 工作；EM 概念成功时不过度调用 industry。
+  - T4 (2)：EM 板块全失败 → THS 行业 fallback 工作。
+  - T5a (4)：`degraded_watchlist` 触发条件 + `get_run_status()` 暴露 + run.py 含跳过分支与告警文案。
+  - T5b (1)：**`trade_review.append_rows` 在 `elif degraded_watchlist:` 分支被跳过**（核心安全）。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：紧随 P1 commit `4fe0272` 之后。具体 hash 见 `git log`。
+- status：dirty worktree 剩 A 包（`.streamlit/config.toml` + `dashboard_app.py` 前序 UI）和 C 包（`data/watchlist/custom_stock_pool.csv`）。
+
+### 遗留问题
+
+- A 包等待用户做 dashboard 视觉确认。
+- C 包等待用户确认 13 只自选池是否就是要保留的最新版本。
+- T 模块仍未接 launchd，未接真实 1 分钟数据源。
+- 自选池 priority=1 硬提到前三的口径需要你最终拍板（保留还是放宽到「只优先观察」）。
+
 ## 后续记录模板
 
 ```markdown

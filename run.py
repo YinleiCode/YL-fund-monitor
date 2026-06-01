@@ -68,6 +68,136 @@ def load_watchlist() -> tuple:
         return [], []
 
 
+def _merge_watchlist_candidates(
+    filtered_df: pd.DataFrame,
+    spot_df: pd.DataFrame,
+    active_watchlist: list,
+    cfg: dict,
+    logger: logging.Logger,
+) -> pd.DataFrame:
+    """
+    自选池第一优先：把 active/watch 自选股并入候选评估池。
+
+    注意这里只做"进入评估池"，不等于买入：
+    后续仍会经过历史过滤、打分、V1.6 明日计划、9:36 技术确认。
+    为避免明显危险样本进入推荐，仅保留基础安全条件：
+    非 ST、非停牌、价格达标、非跌停、非一字涨停。
+    """
+    logger = logger or logging.getLogger("run")
+    if active_watchlist is None or spot_df.empty:
+        return filtered_df
+    if isinstance(active_watchlist, pd.DataFrame):
+        if active_watchlist.empty:
+            return filtered_df
+        watchlist_rows = active_watchlist.to_dict("records")
+    else:
+        if not active_watchlist:
+            return filtered_df
+        watchlist_rows = active_watchlist
+
+    existing = set(filtered_df["code"].astype(str).str.zfill(6)) if "code" in filtered_df.columns else set()
+    wl_codes = {
+        str(r.get("stock_code", "")).strip().zfill(6)
+        for r in watchlist_rows
+        if str(r.get("stock_code", "")).strip()
+    }
+    if not wl_codes:
+        return filtered_df
+
+    spot = spot_df.copy()
+    spot["code"] = spot["code"].astype(str).str.zfill(6)
+    sc = cfg.get("screening", {}) if isinstance(cfg, dict) else {}
+
+    def _limit_ratio(code: str) -> float:
+        code = str(code).zfill(6)
+        if code.startswith(("300", "301", "688")):
+            return 0.20
+        if code.startswith(("4", "8")):
+            return 0.30
+        return 0.10
+
+    def _basic_safe(row) -> bool:
+        name = str(row.get("name", ""))
+        if "ST" in name:
+            return False
+        try:
+            amount = float(row.get("amount", 0) or 0)
+            close = float(row.get("close", 0) or 0)
+            chg = float(row.get("change_pct", 0) or 0)
+            high = float(row.get("high", 0) or 0)
+            low = float(row.get("low", 0) or 0)
+        except Exception:
+            return False
+        if amount <= 0 or close < float(sc.get("min_price", 3)):
+            return False
+        ratio = _limit_ratio(row.get("code", ""))
+        if chg <= -(ratio * 100 - 0.1):
+            return False
+        if chg >= ratio * 100 - 0.2 and abs(high - low) < 0.01:
+            return False
+        return True
+
+    wl_rows = spot[spot["code"].isin(wl_codes) & ~spot["code"].isin(existing)].copy()
+    if wl_rows.empty:
+        logger.info("[watchlist] 自选池股票已在候选池内或行情中未命中，无需并入")
+        return filtered_df
+
+    safe_mask = wl_rows.apply(_basic_safe, axis=1)
+    safe_rows = wl_rows[safe_mask].copy()
+    blocked = len(wl_rows) - len(safe_rows)
+    if not safe_rows.empty:
+        safe_rows["_watchlist_forced_candidate"] = True
+        merged = pd.concat([filtered_df, safe_rows], ignore_index=True)
+        merged = merged.drop_duplicates(subset=["code"], keep="first").reset_index(drop=True)
+        logger.info(
+            f"[watchlist] 自选池优先并入候选评估池 {len(safe_rows)} 只"
+            f"（基础安全拦截 {blocked} 只；后续仍走历史过滤/评分/V1.6/9:36）"
+        )
+        return merged
+
+    logger.info(f"[watchlist] 自选池命中 {len(wl_rows)} 只，但均未通过基础安全条件")
+    return filtered_df
+
+
+def _keep_watchlist_after_rank(
+    ranked_df: pd.DataFrame,
+    source_df: pd.DataFrame,
+    active_watchlist: list,
+    logger: logging.Logger,
+    stage: str,
+) -> pd.DataFrame:
+    """排名截断后再次把已通过前序过滤的自选股补回，避免被 top_n 挤掉。"""
+    logger = logger or logging.getLogger("run")
+    if ranked_df.empty or source_df.empty or active_watchlist is None:
+        return ranked_df
+    if isinstance(active_watchlist, pd.DataFrame):
+        if active_watchlist.empty:
+            return ranked_df
+        watchlist_rows = active_watchlist.to_dict("records")
+    else:
+        if not active_watchlist:
+            return ranked_df
+        watchlist_rows = active_watchlist
+    wl_codes = {
+        str(r.get("stock_code", "")).strip().zfill(6)
+        for r in watchlist_rows
+        if str(r.get("stock_code", "")).strip()
+    }
+    if not wl_codes or "code" not in source_df.columns:
+        return ranked_df
+    current = set(ranked_df["code"].astype(str).str.zfill(6))
+    src = source_df.copy()
+    src["code"] = src["code"].astype(str).str.zfill(6)
+    extras = src[src["code"].isin(wl_codes) & ~src["code"].isin(current)].copy()
+    if extras.empty:
+        return ranked_df
+    extras["_watchlist_kept_after_rank"] = stage
+    merged = pd.concat([ranked_df, extras], ignore_index=True)
+    merged = merged.drop_duplicates(subset=["code"], keep="first").reset_index(drop=True)
+    logger.info(f"[watchlist] {stage} 排名截断后补回自选池 {len(extras)} 只")
+    return merged
+
+
 def _clear_simulate_env() -> None:
     """Production default: never inherit a stale simulate environment."""
     for k in ("SIMULATE_MODE", "SIMULATE_MODE_SOURCE", "ZHUGE_EXPLICIT_SIMULATE", "ZHUGE_SIMULATE_DATA"):
@@ -306,9 +436,18 @@ def main() -> None:
         import data_fetcher as _fetcher
         spot_prov = _fetcher.get_run_provenance()
         spot_stale = bool(spot_prov.get("is_stale_cache"))
+        theme_status = _theme.get_run_status()
+        degraded_watchlist = bool(theme_status.get("degraded_watchlist"))
         if _is_cli_simulate():
             title = f"⚠️[模拟数据·不可用于真实验证] {title}"
             body = "⚠️ **模拟数据，不可用于真实验证；不会写入正式 trade_review.csv。**\n\n---\n\n" + body
+        elif degraded_watchlist:
+            title = f"⚠️[自选池降级观察·不参与买入] {title}"
+            body = (
+                "⚠️ **主题成分股链路失败，本次使用自选池降级生成观察名单。"
+                "该结果不代表完整主题龙头，不写入正式 trade_review.csv，"
+                "也不参与 9:36 模拟买入。**\n\n---\n\n" + body
+            )
         elif spot_stale:
             stale_date = spot_prov.get("stale_cache_date")
             title = f"⚠️[缓存数据·仅供观察] {title}"
@@ -329,6 +468,10 @@ def main() -> None:
         _save_theme_auto_results(top3, market_data, theme_summary, data_date, report_date, body, cfg)
         if _is_cli_simulate():
             logger.warning("[trade_review] 未写入 trade_review.csv（--simulate 显式模拟模式）")
+        elif degraded_watchlist:
+            logger.warning(
+                "[trade_review] 未写入 trade_review.csv（theme_auto 自选池降级观察）"
+            )
         elif spot_stale:
             logger.warning(
                 "[trade_review] 未写入 trade_review.csv（theme_auto spot=cache_stale）"
@@ -411,6 +554,8 @@ def main() -> None:
     # ----------------------------------------------------------------
     logger.info("【步骤2-3】硬排除 + 粗筛")
     filtered_df = filters.quick_filter(spot_df, cfg)
+    active_wl, _ = load_watchlist()
+    filtered_df = _merge_watchlist_candidates(filtered_df, spot_df, active_wl, cfg, logger)
     if filtered_df.empty:
         # 粗筛后无候选 —— 任务完成，今日策略无票。exit 0，避免 supervisor 反复补跑。
         logger.warning(
@@ -425,6 +570,9 @@ def main() -> None:
     logger.info("【步骤4】综合排序，取候选池")
     top_n_hist = cfg["screening"]["top_n_for_history"]
     candidate_df = filters.rank_and_select(filtered_df, top_n=top_n_hist)
+    candidate_df = _keep_watchlist_after_rank(
+        candidate_df, filtered_df, active_wl, logger, "history_candidate"
+    )
     logger.info(f"候选池: {len(candidate_df)} 只")
 
     # ----------------------------------------------------------------
@@ -453,6 +601,9 @@ def main() -> None:
     # 再次排序，取前 top_n_final
     top_n_final = cfg["screening"]["top_n_final"]
     scored_pool = filters.rank_and_select(deep_filtered, top_n=top_n_final)
+    scored_pool = _keep_watchlist_after_rank(
+        scored_pool, deep_filtered, active_wl, logger, "scored_pool"
+    )
     logger.info(f"打分候选池: {len(scored_pool)} 只")
 
     # ----------------------------------------------------------------
@@ -500,7 +651,6 @@ def main() -> None:
     #   Tier 3: 普通候选               → 第三
     #   Tier 4: priority=3（仅标记，不强提权）
     #   每层内部按 full_score 降序
-    active_wl, _ = load_watchlist()
     wl_by_code = {r["stock_code"]: r for r in active_wl}
     for item in results:
         code = item["code"]

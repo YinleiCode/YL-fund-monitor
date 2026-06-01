@@ -38,9 +38,10 @@ c033102 hide T signal samples by default
 M  .streamlit/config.toml
 M  dashboard_app.py
 M  data/watchlist/custom_stock_pool.csv
-M  run.py
-M  theme_auto.py
 ```
+
+> 2026-06-01 P1 commit (`4fe0272`) 已落库：`trade_review.py` + `dashboard_app.py` P1 部分 + 两份 AI 文档。
+> 2026-06-01 B 包 commit 已落库：`run.py` + `theme_auto.py` 自选池优先 + theme_auto 三级 fallback。
 
 这些改动来自前序任务，主要涉及：
 
@@ -82,37 +83,44 @@ M  theme_auto.py
 polish radar terminal dashboard UI
 ```
 
-### B. 自选池优先 / theme_auto fallback 逻辑包
+### B. 自选池优先 / theme_auto fallback 逻辑包 ✅ 已提交
 
 涉及文件：
 
 - `run.py`
 - `theme_auto.py`
 
-当前状态：
+**状态：2026-06-01 已 commit 落库（见本节末的「B 包提交记录」）。**
 
-- `run.py` 已加入自选池优先进入候选评估池逻辑。
-- 排名截断后会补回已通过前序过滤的自选股，避免被 `top_n` 挤掉。
-- `theme_auto.py` 已加入 THS 行业汇总 fallback。
-- `theme_auto.py` 成分股获取已从只试 EM 概念，增强为 EM 概念成分股 → EM 行业成分股 → 磁盘缓存 → 自选池观察降级。
-- 自选池降级观察不应写入正式 `trade_review.csv`，也不应参与真实买入。
+落地内容：
 
-重要边界：
+- `run.py`：
+  - 新增 `_merge_watchlist_candidates()`：自选池股票在 quick_filter 后并入候选评估池，仅施加基础安全过滤（非 ST、非停牌、价格达标、非跌停、非一字涨停）；后续仍走历史过滤/打分/V1.6/9:36，不绕过任何安全门。
+  - 新增 `_keep_watchlist_after_rank()`：在 `rank_and_select` 截断后补回已通过前序过滤的自选股，避免被 `top_n` 挤掉。`history_candidate` 和 `scored_pool` 两个阶段都调用。
+  - `main()` 加入 `degraded_watchlist` 检测：当 theme_auto 报告该状态时，告警标题加「[自选池降级观察·不参与买入]」，body 加显著警告，**且跳过 `trade_review.append_rows`**（line 471 elif 分支）。
+- `theme_auto.py`：
+  - `_run_status` 新增 `degraded_watchlist` 字段。
+  - 新增 `load_watchlist()`：从 `data/watchlist/custom_stock_pool.csv` 加载 active/watch 自选股。
+  - 新增 `_fetch_ths_industry_boards()`：THS 行业板块汇总 fallback，amount 单位由「亿」换算为「元」对齐强度计算口径；`data_quality="partial"`。
+  - `_get_board_df()`：链路升级为 EM 概念 → EM 行业 → THS 行业 → 磁盘缓存。
+  - `_fetch_board_constituents()`：成分股链路升级为 EM 概念成分股 → EM 行业成分股，单接口失败不影响整体。
+  - `run_theme_auto()`：把自选池股票 setdefault 进 `code_themes` / `code_boards`；当所有成分股链路全失败且有自选股时，置 `degraded_watchlist=True` 并 warning。
+  - 候选股为空的三种情况（数据链路失败 / 部分失败 / 真无候选）都明确 return 空。
 
-- 这是选股候选来源和数据源 fallback 逻辑，不是自动买入逻辑。
-- 不允许运行 `python run.py` 或 `python run.py --theme-auto` 做验证，除非用户单独授权。
-- 必须确认没有写 `output/trade_review.csv`。
+#### B 包提交记录
 
-建议下一步：
+- commit hash: 见 `git log --oneline` 紧随 P1 commit `4fe0272` 之后。
+- monkeypatch 验证 18/18 PASS，覆盖：
+  1. 自选池并入候选池（5 项含基础安全拦截、标记字段）
+  2. 排名截断后补回（2 项）
+  3. EM 概念失败 → EM 行业 fallback（3 项）
+  4. EM 概念成功时不调用 industry（1 项，反向断言避免过度调用）
+  5. EM 板块全失败 → THS fallback（2 项）
+  6. degraded_watchlist 触发条件（2 项）
+  7. **run.py main() 中 `trade_review.append_rows` 写入受 `elif degraded_watchlist:` 保护**（2 项关键安全）
+  8. `get_run_status()` 暴露 degraded_watchlist（1 项）
 
-1. 运行 `python -m py_compile run.py theme_auto.py`。
-2. 用 monkeypatch / 小样例验证自选池并入候选池。
-3. 用 monkeypatch 验证 EM 概念失败时会走 EM 行业成分股。
-4. 用 monkeypatch 验证 EM 板块失败时会走 THS 行业汇总。
-5. 确认不触发 `trade_review.csv` 写入。
-6. 验收通过后单独提交。
-
-建议提交信息：
+历史建议（已完成）：
 
 ```text
 prioritize watchlist candidates and harden theme fallbacks
@@ -207,7 +215,7 @@ T 模块不接券商，不自动下单，不写入 `output/trade_review.csv`。
 - ~~9:36 数据出现 N/A，需要排查实时数据源。~~（2026-06-01 已修：`check_buy()` 失败状态已写回，dashboard 会区分「实时行情缺失/实时价格无效」与真正「尚未运行」）
 - dashboard RADAR_TERMINAL 前端界面正在恢复整理。
 - 自选池当前是“优先”，不是“只从自选池选”。
-- theme_auto 的数据源 fallback 已在前序未提交改动中增强，但尚未通过真实主流程运行验证。
+- ~~theme_auto 的数据源 fallback 已在前序未提交改动中增强，但尚未通过真实主流程运行验证。~~（2026-06-01 已通过 monkeypatch 18/18 验证并提交，详见 B 包记录。真实主流程运行验证仍需等用户手动触发，但安全屏障已经验证：自选池降级时 trade_review.csv 不写入）
 - 当前工作区已有未提交改动，后续提交必须拆清楚，不要混入无关文件。
 - `row_status()` 在 `realtime_data_status ∈ {missing, invalid}` 时返回 `STATUS_NOBUY_WAIT = "未买入｜T+1待跟踪"`。卡片内 V1.6 详细面板会显示正确的失败原因，但顶层状态标签语义不准（无买入则无 T+1）。后续可考虑新增 `STATUS_NOBUY_DATA_FAIL`。
 

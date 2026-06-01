@@ -33,6 +33,7 @@ _run_status: Dict[str, object] = {
     "constituent_failed":  0,    # 完全失败
     "constituent_used_stale": False,  # 是否使用了过期缓存
     "spot_failed":         False,
+    "degraded_watchlist":  False,
     "errors":              [],
 }
 
@@ -50,8 +51,51 @@ def _reset_run_status() -> None:
         "constituent_failed":  0,
         "constituent_used_stale": False,
         "spot_failed":         False,
+        "degraded_watchlist":  False,
         "errors":              [],
     })
+
+
+def load_watchlist() -> Tuple[List[dict], List[dict]]:
+    """
+    加载自选股票池。theme_auto 使用它作为成分股链路失败时的观察型降级池。
+    返回 (active/watch rows, all rows)。读取失败不影响主流程。
+    """
+    wl_path = BASE_DIR / "data" / "watchlist" / "custom_stock_pool.csv"
+    if not wl_path.exists():
+        return [], []
+    try:
+        import csv
+        with open(wl_path, encoding="utf-8-sig", newline="") as f:
+            rows = list(csv.DictReader(f))
+        active = [r for r in rows if str(r.get("status", "")).strip() in ("active", "watch")]
+        return active, rows
+    except Exception as e:
+        logger.warning(f"[theme_auto] 自选池加载失败: {e}")
+        return [], []
+
+
+def _keep_watchlist_after_rank(
+    ranked_df: pd.DataFrame,
+    source_df: pd.DataFrame,
+    wl_codes: List[str],
+    stage: str,
+) -> pd.DataFrame:
+    """theme_auto 排名截断后保留已通过前序过滤的自选股。"""
+    if ranked_df.empty or source_df.empty or not wl_codes or "code" not in source_df.columns:
+        return ranked_df
+    wl_set = {str(c).zfill(6) for c in wl_codes if c}
+    current = set(ranked_df["code"].astype(str).str.zfill(6))
+    src = source_df.copy()
+    src["code"] = src["code"].astype(str).str.zfill(6)
+    extras = src[src["code"].isin(wl_set) & ~src["code"].isin(current)].copy()
+    if extras.empty:
+        return ranked_df
+    extras["_watchlist_kept_after_rank"] = stage
+    merged = pd.concat([ranked_df, extras], ignore_index=True)
+    merged = merged.drop_duplicates(subset=["code"], keep="first").reset_index(drop=True)
+    logger.info(f"[theme_auto] {stage} 排名截断后补回自选池 {len(extras)} 只")
+    return merged
 
 
 # ─────────────────── 板块行情磁盘缓存 ────────────────────────────
@@ -140,11 +184,50 @@ def _fetch_industry_boards() -> Optional[pd.DataFrame]:
         return None
 
 
+def _fetch_ths_industry_boards() -> Optional[pd.DataFrame]:
+    """
+    同花顺行业板块汇总 fallback。
+
+    这个接口不提供概念板块，也不直接提供成分股明细；它的作用是：
+    在 EM 概念/行业板块行情都失败时，至少让主题强度和行业方向不断链。
+    后续成分股仍会继续尝试 EM 行业/概念成分股接口，失败则走缓存/自选池观察降级。
+    """
+    try:
+        import akshare as ak
+        df = ak.stock_board_industry_summary_ths()
+        if df is None or df.empty:
+            logger.warning("[theme_auto] THS 行业板块 fallback 返回空")
+            return None
+        col_map = {
+            "板块": "name",
+            "涨跌幅": "pct_chg",
+            "总成交额": "amount",
+            "上涨家数": "up_count",
+            "下跌家数": "down_count",
+        }
+        df = df.rename(columns=col_map)
+        for col in ["pct_chg", "amount", "up_count", "down_count"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+        if "amount" in df.columns:
+            # THS 行业汇总的总成交额单位是"亿"，统一转为元，兼容强度计算口径。
+            df["amount"] = df["amount"] * 1e8
+        df["source"] = "ths_industry_summary"
+        df["data_quality"] = "partial"
+        logger.warning(f"[theme_auto] EM 板块接口失败，fallback THS 行业板块: {len(df)} 个")
+        return df
+    except Exception as e:
+        logger.warning(f"[theme_auto] THS 行业板块 fallback 失败: {e}")
+        return None
+
+
 def _get_board_df() -> pd.DataFrame:
-    """先尝试概念板块，失败用行业板块，再失败用磁盘缓存，最后返回空 DataFrame。"""
+    """先尝试 EM 概念，再 EM 行业，再 THS 行业，最后磁盘缓存。"""
     df = _fetch_concept_boards()
     if df is None or df.empty:
         df = _fetch_industry_boards()
+    if df is None or df.empty:
+        df = _fetch_ths_industry_boards()
     if df is not None and not df.empty:
         _save_board_df(df)
         return df
@@ -291,9 +374,9 @@ def _ensure_disk_components_loaded() -> None:
 
 def _fetch_board_constituents(board_name: str) -> List[str]:
     """
-    获取单个概念板块成分股：
+    获取单个板块成分股：
       1. 进程内缓存
-      2. 实时 API
+      2. 实时 API（EM 概念成分股 → EM 行业成分股）
       3. 磁盘 cache/theme_components_YYYYMMDD.json
     任何 API 失败都会用 WARNING 级别记录，便于排查。
     """
@@ -304,17 +387,30 @@ def _fetch_board_constituents(board_name: str) -> List[str]:
     api_err: Optional[str] = None
     try:
         import akshare as ak
-        df = ak.stock_board_concept_cons_em(symbol=board_name)
-        if df is not None and not df.empty and "代码" in df.columns:
-            codes = [str(c).zfill(6) for c in df["代码"].dropna().tolist()]
-            if codes:
-                _board_cache[board_name] = codes
-                _run_status["constituent_ok_api"] = int(_run_status["constituent_ok_api"]) + 1
-                time.sleep(0.3)   # 避免接口限流
-                return codes
-            api_err = "API 返回空成分股列表"
-        else:
-            api_err = "API 返回空 DataFrame 或缺少『代码』列"
+        api_errors = []
+        api_calls = [
+            ("EM概念成分股", ak.stock_board_concept_cons_em),
+            ("EM行业成分股", ak.stock_board_industry_cons_em),
+        ]
+        for api_name, api_func in api_calls:
+            try:
+                df = api_func(symbol=board_name)
+                if df is not None and not df.empty and "代码" in df.columns:
+                    codes = [str(c).zfill(6) for c in df["代码"].dropna().tolist()]
+                    if codes:
+                        _board_cache[board_name] = codes
+                        _run_status["constituent_ok_api"] = int(_run_status["constituent_ok_api"]) + 1
+                        logger.info(
+                            f"[theme_auto] 板块「{board_name}」{api_name} 获取 {len(codes)} 只"
+                        )
+                        time.sleep(0.3)   # 避免接口限流
+                        return codes
+                    api_errors.append(f"{api_name}: API 返回空成分股列表")
+                else:
+                    api_errors.append(f"{api_name}: API 返回空 DataFrame 或缺少『代码』列")
+            except Exception as e:
+                api_errors.append(f"{api_name}: {type(e).__name__}: {e}")
+        api_err = "；".join(api_errors) if api_errors else "API 未返回有效结果"
     except Exception as e:
         api_err = f"{type(e).__name__}: {e}"
 
@@ -471,26 +567,53 @@ def run_theme_auto(cfg: dict) -> tuple:
 
     # ── 候选股收集 ────────────────────────────────────────────────
     code_themes, code_boards = collect_theme_stocks(theme_boards)
+    active_wl, _ = load_watchlist()
+    wl_codes = [
+        str(r.get("stock_code", "")).strip().zfill(6)
+        for r in active_wl
+        if str(r.get("stock_code", "")).strip()
+    ]
+
+    # 自选池第一优先：即使主题成分股链路正常，也把自选股并入主题观察评估池。
+    # 这只是进入观察评估，不绕过后续 quick_filter/history_filter/评分/V1.6/9:36。
+    for code in wl_codes:
+        code_themes.setdefault(code, [top_theme])
+        if "自选池观察" not in code_themes[code]:
+            code_themes[code].append("自选池观察")
+        code_boards.setdefault(code, [])
+        if "custom_stock_pool" not in code_boards[code]:
+            code_boards[code].append("custom_stock_pool")
+
     all_codes = list(code_themes.keys())
+    total_constituents = int(_run_status["constituent_total"])
+    failed_constituents = int(_run_status["constituent_failed"])
+    if total_constituents > 0 and failed_constituents == total_constituents and wl_codes:
+        _run_status["degraded_watchlist"] = True
+        logger.warning(
+            "[theme_auto] 主题成分股链路全部失败，已降级并入自选池观察评估："
+            f"{len(wl_codes)} 只。该结果仅供观察，不代表完整主题龙头。"
+        )
     if not all_codes:
         # 区分"成分股数据失败"和"主题真的没匹配到候选"
-        total  = int(_run_status["constituent_total"])
-        failed = int(_run_status["constituent_failed"])
+        total  = total_constituents
+        failed = failed_constituents
         if total > 0 and failed == total:
             logger.error(
                 "[theme_auto] 主题已识别，但板块成分股 API 全部失败、"
                 "磁盘缓存也无数据，无法生成候选 —— 这是数据链路失败，"
                 "不是策略筛选失败"
             )
+            return [], {}, theme_summary, data_date, report_date
         elif total > 0 and failed > 0:
             logger.warning(
                 f"[theme_auto] 主题已识别，但 {failed}/{total} 个板块"
                 f"成分股获取失败，剩余板块也未匹配到任何代码 —— "
                 f"疑似数据链路失败"
             )
+            return [], {}, theme_summary, data_date, report_date
         else:
             logger.warning("[theme_auto] 未收集到任何候选股")
-        return [], {}, theme_summary, data_date, report_date
+            return [], {}, theme_summary, data_date, report_date
 
     logger.info(f"[theme_auto] 候选股（去重后）: {len(all_codes)} 只")
 
@@ -526,6 +649,9 @@ def run_theme_auto(cfg: dict) -> tuple:
 
     top_n_hist = cfg["screening"].get("top_n_for_history", 100)
     candidate_df = filters.rank_and_select(filtered, top_n=min(top_n_hist, len(filtered)))
+    candidate_df = _keep_watchlist_after_rank(
+        candidate_df, filtered, wl_codes, "history_candidate"
+    )
 
     # ── 历史K线 + 精筛 ────────────────────────────────────────────
     hist_map = fetcher.fetch_batch_history(
@@ -539,6 +665,9 @@ def run_theme_auto(cfg: dict) -> tuple:
     top_n_final = cfg["screening"].get("top_n_final", 50)
     scored_pool = filters.rank_and_select(
         deep_filtered, top_n=min(top_n_final, len(deep_filtered))
+    )
+    scored_pool = _keep_watchlist_after_rank(
+        scored_pool, deep_filtered, wl_codes, "scored_pool"
     )
 
     # ── 打分 + theme_bonus ────────────────────────────────────────
