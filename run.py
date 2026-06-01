@@ -166,9 +166,9 @@ def _keep_watchlist_after_rank(
     logger: logging.Logger,
     stage: str,
 ) -> pd.DataFrame:
-    """排名截断后再次把已通过前序过滤的自选股补回，避免被 top_n 挤掉。"""
+    """把已通过前序安全条件的自选股补回，避免被排序/历史过滤阶段挤掉。"""
     logger = logger or logging.getLogger("run")
-    if ranked_df.empty or source_df.empty or active_watchlist is None:
+    if source_df.empty or active_watchlist is None:
         return ranked_df
     if isinstance(active_watchlist, pd.DataFrame):
         if active_watchlist.empty:
@@ -185,7 +185,11 @@ def _keep_watchlist_after_rank(
     }
     if not wl_codes or "code" not in source_df.columns:
         return ranked_df
-    current = set(ranked_df["code"].astype(str).str.zfill(6))
+    current = (
+        set(ranked_df["code"].astype(str).str.zfill(6))
+        if "code" in ranked_df.columns and not ranked_df.empty
+        else set()
+    )
     src = source_df.copy()
     src["code"] = src["code"].astype(str).str.zfill(6)
     extras = src[src["code"].isin(wl_codes) & ~src["code"].isin(current)].copy()
@@ -194,7 +198,7 @@ def _keep_watchlist_after_rank(
     extras["_watchlist_kept_after_rank"] = stage
     merged = pd.concat([ranked_df, extras], ignore_index=True)
     merged = merged.drop_duplicates(subset=["code"], keep="first").reset_index(drop=True)
-    logger.info(f"[watchlist] {stage} 排名截断后补回自选池 {len(extras)} 只")
+    logger.info(f"[watchlist] {stage} 阶段补回自选池 {len(extras)} 只")
     return merged
 
 
@@ -589,6 +593,9 @@ def main() -> None:
     # ----------------------------------------------------------------
     logger.info("【步骤6】历史过滤")
     deep_filtered = filters.history_filter(candidate_df, hist_map, cfg)
+    deep_filtered = _keep_watchlist_after_rank(
+        deep_filtered, candidate_df, active_wl, logger, "history_filter"
+    )
 
     if deep_filtered.empty:
         # 历史过滤后无候选 —— 任务完成，今日策略无票。exit 0。
@@ -651,13 +658,20 @@ def main() -> None:
     #   Tier 3: 普通候选               → 第三
     #   Tier 4: priority=3（仅标记，不强提权）
     #   每层内部按 full_score 降序
-    wl_by_code = {r["stock_code"]: r for r in active_wl}
+    wl_by_code = {
+        str(r.get("stock_code", "")).strip().zfill(6): r
+        for r in active_wl
+        if str(r.get("stock_code", "")).strip()
+    }
     for item in results:
-        code = item["code"]
+        code = str(item["code"]).zfill(6)
         priority = 0  # 显式初始化，避免普通候选沿用上一轮
         wl = wl_by_code.get(code)
         if wl:
-            priority = int(str(wl.get("priority", "3")).strip())
+            try:
+                priority = int(str(wl.get("priority", "3")).strip())
+            except (TypeError, ValueError):
+                priority = 3
             item["is_custom_pool"] = True
             item["custom_pool_priority"] = priority
             item["custom_pool_theme"] = wl.get("theme", "")
