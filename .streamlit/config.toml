@@ -1,5 +1,4 @@
-# 朱哥短线雷达 · 本地复盘看板 — 项目级主题
-# 强制启用奶油色浅主题，避免用户系统暗色偏好下出现白色块刺眼的问题。
+# 朱哥短线雷达 · RADAR_TERMINAL — 深蓝·电光青·霓虹绿主题
 
 [browser]
 gatherUsageStats = false
@@ -10,9 +9,9 @@ runOnSave = false
 port = 8501
 
 [theme]
-base = "light"
-primaryColor = "#9A6700"              # 主色调（黄褐 — 与品牌一致）
-backgroundColor = "#F5EFE3"           # 页面主底 — 奶油
-secondaryBackgroundColor = "#EFE3CF"  # 次级底（sidebar）
-textColor = "#2B2118"                 # 主文字 — 深咖
+base = "dark"
+primaryColor = "#00DAF3"                     # 主色调 — 电光青
+backgroundColor = "#0A0E17"                  # 页面主底 — 深蓝黑
+secondaryBackgroundColor = "#0F141B"         # 次级底（sidebar）
+textColor = "#DEE2EC"                        # 主文字 — 冷白
 font = "sans serif"

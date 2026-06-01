@@ -61,63 +61,87 @@ T_SIGNAL_DIR     = OUTPUT_DIR / "t_signal"
 T_SIGNAL_LATEST  = T_SIGNAL_DIR / "t_signal_latest.csv"
 T_TRADE_DIR      = OUTPUT_DIR / "t_trade"
 T_TRADE_LATEST   = T_TRADE_DIR / "t_trade_latest.csv"
+WATCHLIST_PATH   = BASE_DIR / "data" / "watchlist" / "custom_stock_pool.csv"
 
-# ─── 颜色（V1.6 奶油色主题：避免大面积纯白，统一温和质感）────────────────
-# 页面级 → .streamlit/config.toml 控制 backgroundColor=#F5EFE3
-# 组件级 → 下面这些常量统一替换原 #FFFFFF / #F3F4F6 / #F8FAFC / #F0F7FF 等
+# ─── 颜色（RADAR_TERMINAL：深蓝黑·电光青·霓虹绿·玻璃态磨砂）──────────────
+# 参考 Material You dark palette — surface #0F141B, tertiary #00DAF3, secondary-fixed-dim #00E479
 
-# 主背景 / 卡片
-COLOR_BG          = "#F5EFE3"   # 页面主底（与 config.toml backgroundColor 对齐）
-COLOR_CARD        = "#F7F1E6"   # 标准卡片底（替代原白色 #FFFFFF）
-COLOR_CARD_ALT    = "#F3E8D8"   # 次级卡片底（区块/折叠底，比 CARD 深一档）
-COLOR_CARD_DEEP   = "#EFE3CF"   # 最深奶油（强调 / 结论卡）
+# 主背景 / 卡片（玻璃态）
+COLOR_BG          = "#0A0E17"          # 页面主底 — 深蓝黑
+COLOR_CARD        = "#0F141B"          # 表面卡片 — surface
+COLOR_CARD_ALT    = "#1B2027"          # 次级卡片 — surface-container
+COLOR_CARD_DEEP   = "#090F15"          # 最深底 — surface-container-lowest
 
-# 边框 / 描边
-COLOR_BORDER      = "#D8C8B0"   # 浅咖描边（替代原 #E1E4E8）
-COLOR_BORDER_SOFT = "#E6D9C2"   # 内描边
+# 边框 / 描边（半透明白，玻璃态）
+COLOR_BORDER      = "rgba(255,255,255,0.08)"
+COLOR_BORDER_SOFT = "rgba(255,255,255,0.05)"
+COLOR_BORDER_GLOW = "rgba(0,218,243,0.14)"    # 青蓝发光边
 
 # 文字
-COLOR_TEXT        = "#2B2118"   # 主文字 — 深咖
-COLOR_MUTED       = "#7A6B5A"   # 次文字 — 中咖
-COLOR_FAINT       = "#A89683"   # 极淡（caption / 提示）
+COLOR_TEXT        = "#DEE2EC"          # 主文字 — on-surface
+COLOR_MUTED       = "#C6C6CC"          # 次文字 — on-surface-variant
+COLOR_FAINT       = "#909096"          # 极淡 — outline
 
-# 状态语义色（沉稳化，与奶油底搭配舒服）
-COLOR_BOUGHT      = "#1F883D"   # 已买入 — 绿（保留）
-COLOR_WAIT_T1     = "#9A6700"   # 等待 T+1 — 黄褐
-COLOR_SECOND      = "#0969DA"   # 二次观察 — 蓝（保留）
-COLOR_NO_BUY      = "#6B5D4F"   # 未买入 — 中咖灰（融入主题，不再灰色生硬）
-COLOR_DROP        = "#8B7355"   # 直接放弃 — 偏咖
-COLOR_ERROR       = "#B91C1C"   # 错误 — 沉稳砖红（不刺眼）
+# 状态语义色
+COLOR_BOUGHT      = "#00E479"          # 已买入 — 霓虹绿 (secondary-fixed-dim)
+COLOR_WAIT_T1     = "#00DAF3"          # 等待 T+1 — 电光青 (tertiary)
+COLOR_SECOND      = "#00DAF3"          # 二次观察/链接 — 电光青
+COLOR_NO_BUY      = "#909096"          # 未买入 — 极淡灰
+COLOR_DROP        = "#FFB4AB"          # 直接放弃 — 柔玫瑰 (error)
+COLOR_ERROR       = "#FFB4AB"          # 错误 — 柔玫瑰
 
-# 状态横幅淡背景（替代原 #E7F1FF / #E6F4EA / #FFF8E5 / #FFEBE9，与奶油主题协调）
-COLOR_BANNER_INFO    = "#E8E1D2"   # 暖米（info）
-COLOR_BANNER_SUCCESS = "#E2E8D2"   # 暖橄榄（success）
-COLOR_BANNER_WARN    = "#EFE3CF"   # 浅奶（warning）
-COLOR_BANNER_ERROR   = "#EFD5D2"   # 浅红米（error）
+# 状态横幅背景（玻璃态透明）
+COLOR_BANNER_INFO    = "rgba(0,218,243,0.06)"
+COLOR_BANNER_SUCCESS = "rgba(0,228,121,0.06)"
+COLOR_BANNER_WARN    = "rgba(255,180,171,0.06)"
+COLOR_BANNER_ERROR   = "rgba(255,180,171,0.10)"
 
 # 模式标识色
-COLOR_FULL        = "#6E40C9"   # full — 紫（保留）
-COLOR_THEME       = "#0969DA"   # theme_auto — 蓝（保留）
+COLOR_FULL        = "#00DAF3"          # full — 电光青
+COLOR_THEME       = "#00E479"          # theme_auto — 霓虹绿
 
-# Plotly 图表统一样式 helper —— 让所有图表的 plot/paper 背景都用奶油底，
-# 网格用浅咖灰、字体用深咖，避免白底刺眼。
-def _plotly_cream_layout(**extra) -> dict:
-    """返回 plotly fig.update_layout 默认参数（奶油底）。"""
+# 辅助透明色（Glass / Neon Glow / Grid）
+ACCENT_GOLD_BG    = "rgba(0,228,121,0.10)"    # 霓虹绿底
+ACCENT_GOLD_LINE  = "rgba(0,228,121,0.20)"    # 霓虹绿线
+ACCENT_BLUE_BG    = "rgba(0,218,243,0.10)"    # 电光青底
+ACCENT_BLUE_LINE  = "rgba(0,218,243,0.20)"    # 电光青线
+ACCENT_GLOW       = "rgba(0,218,243,0.12)"    # 青蓝柔光
+ACCENT_GRID       = "rgba(0,218,243,0.04)"    # 终端网格点
+
+# ─── V2 设计 token（Stitch 设计稿同步：2026-06-01）────────────────────────
+# 这一组新增 token 用于按 Stitch 设计语言升级 dashboard 视觉密度与潮流感。
+# 不修改已有 COLOR_* 值，避免破坏已有页面色彩契约。
+COLOR_MAGENTA_NEON   = "#FF3D8A"             # 品红霓虹 — 强警告/亏损/破坏性按钮
+COLOR_WARN_YELLOW    = "#FFB627"             # 黄色警示 — 中性观察/待跟踪/SIMULATE 模式
+COLOR_GLASS_BG       = "rgba(20,28,40,0.65)" # 玻璃态卡片主底
+COLOR_GLASS_BG_HI    = "rgba(28,38,54,0.72)" # 玻璃态 hover 加亮
+COLOR_GLASS_EDGE     = "rgba(255,255,255,0.06)"  # 玻璃态 1px 描边
+COLOR_DIVIDER        = "rgba(255,255,255,0.06)"  # 分割线
+
+# V2 字体堆栈（Space Grotesk 头条字 / Inter 正文 / JetBrains Mono 数据）
+FONT_HEADLINE = "'Space Grotesk', 'Hanken Grotesk', 'Inter', 'PingFang SC', sans-serif"
+FONT_BODY     = "'Inter', 'PingFang SC', 'Helvetica Neue', system-ui, sans-serif"
+FONT_MONO     = "'JetBrains Mono', 'SFMono-Regular', 'Consolas', 'Menlo', monospace"
+
+# Plotly 图表统一样式 helper —— RADAR_TERMINAL 深蓝黑·电光青·霓虹绿
+def _plotly_terminal_layout(**extra) -> dict:
+    """返回 plotly fig.update_layout 默认参数（RADAR_TERMINAL 主题）。"""
     base = dict(
         plot_bgcolor=COLOR_CARD,
         paper_bgcolor=COLOR_CARD,
-        font=dict(color=COLOR_TEXT, family="sans-serif"),
+        font=dict(color=COLOR_TEXT, family="'JetBrains Mono', 'SFMono-Regular', 'Consolas', monospace"),
         xaxis=dict(
             gridcolor=COLOR_BORDER_SOFT, linecolor=COLOR_BORDER,
             tickfont=dict(color=COLOR_TEXT), title_font=dict(color=COLOR_TEXT),
-            zerolinecolor=COLOR_BORDER,
+            zerolinecolor="rgba(0,218,243,0.08)",
         ),
         yaxis=dict(
             gridcolor=COLOR_BORDER_SOFT, linecolor=COLOR_BORDER,
             tickfont=dict(color=COLOR_TEXT), title_font=dict(color=COLOR_TEXT),
-            zerolinecolor=COLOR_BORDER,
+            zerolinecolor="rgba(0,218,243,0.08)",
         ),
         margin=dict(l=0, r=0, t=10, b=10),
+        colorway=["#00DAF3", "#00E479", "#FFB4AB", "#C6C6CC", "#909096", "#4FC3F7", "#81C784"],
     )
     # 用户传入的会覆盖默认
     for k, v in extra.items():
@@ -449,7 +473,7 @@ def _num_str(v, digits: int = 2, na: str = "—") -> str:
 
 
 def _eh(v, default: str = "") -> str:
-    """Escape text before injecting it into unsafe HTML fragments."""
+    """Escape text before injecting it into HTML fragments."""
     if v is None:
         return default
     return html.escape(str(v), quote=True)
@@ -524,19 +548,151 @@ def enrich_df(df: pd.DataFrame) -> pd.DataFrame:
 
 # ─── UI 组件 ──────────────────────────────────────────────────────────────
 
-def kpi_card(label: str, value, color: str = COLOR_TEXT, sub: str = "") -> str:
-    sub_html = (f'<div style="font-size:12px;color:{COLOR_MUTED};margin-top:4px;">'
+def kpi_card(
+    label: str,
+    value,
+    color: str = COLOR_TEXT,
+    sub: str = "",
+    *,
+    trend: Optional[str] = None,   # "up" | "down" | None — 显示 ▲ / ▼
+    accent_bar: bool = True,        # 左侧 2px 电光青/品红条
+) -> str:
+    """V2 升级 KPI 卡片：玻璃态 + 12px 圆角 + 左侧 accent 条 + 趋势箭头 + hover 上抬。
+
+    Stitch RADAR_TERMINAL V2 设计稿同步（2026-06-01）。
+    向后兼容：trend/accent_bar 是新参数且都有默认值，老调用点不受影响。
+    """
+    sub_html = (f'<div style="font-size:12px;color:{COLOR_MUTED};margin-top:6px;font-family:{FONT_MONO};">'
                 f'{sub}</div>') if sub else ""
+    trend_html = ""
+    if trend == "up":
+        trend_html = (f'<span style="margin-left:8px;font-size:18px;color:{COLOR_BOUGHT};'
+                      f'vertical-align:middle;">&#9650;</span>')
+    elif trend == "down":
+        trend_html = (f'<span style="margin-left:8px;font-size:18px;color:{COLOR_MAGENTA_NEON};'
+                      f'vertical-align:middle;">&#9660;</span>')
+    accent = (f'<div style="position:absolute;left:0;top:14px;bottom:14px;width:2px;'
+              f'background:{color};border-radius:0 2px 2px 0;box-shadow:0 0 12px {color}66;"></div>'
+              if accent_bar else '')
     return f"""
-    <div style="
-        background:{COLOR_CARD};
-        border:1px solid {COLOR_BORDER};
-        border-radius:10px;
-        padding:18px 20px;
-        height:100%;">
-      <div style="font-size:13px;color:{COLOR_MUTED};">{label}</div>
-      <div style="font-size:28px;font-weight:600;color:{color};margin-top:6px;">{value}</div>
+    <div class="rt-v2-kpi-card" style="
+        position:relative;
+        background:{COLOR_GLASS_BG};
+        backdrop-filter:blur(20px);
+        -webkit-backdrop-filter:blur(20px);
+        border:1px solid {COLOR_GLASS_EDGE};
+        border-radius:12px;
+        padding:14px 18px 14px 22px;
+        height:100%;
+        transition:transform .18s ease, border-color .18s ease, box-shadow .18s ease;">
+      {accent}
+      <div style="font-size:10px;color:{COLOR_MUTED};text-transform:uppercase;letter-spacing:0.14em;font-family:{FONT_MONO};">{label}</div>
+      <div style="margin-top:8px;display:flex;align-items:baseline;">
+        <span style="font-size:30px;font-weight:700;color:{color};line-height:1.1;font-family:{FONT_MONO};letter-spacing:-0.01em;">{value}</span>
+        {trend_html}
+      </div>
       {sub_html}
+    </div>
+    """
+
+
+def glass_card_html(
+    inner: str,
+    *,
+    padding: str = "14px 16px",
+    radius: str = "12px",
+    accent: Optional[str] = None,      # 左侧 2px accent 条颜色
+    extra_style: str = "",
+) -> str:
+    """V2 通用玻璃态卡片容器。配合 st.markdown(..., unsafe_allow_html=True) 渲染。"""
+    acc = (f'<div style="position:absolute;left:0;top:14px;bottom:14px;width:2px;'
+           f'background:{accent};border-radius:0 2px 2px 0;box-shadow:0 0 10px {accent}55;"></div>'
+           if accent else '')
+    pad = padding
+    return f"""
+    <div class="rt-v2-glass-card" style="
+        position:relative;
+        background:{COLOR_GLASS_BG};
+        backdrop-filter:blur(18px);
+        -webkit-backdrop-filter:blur(18px);
+        border:1px solid {COLOR_GLASS_EDGE};
+        border-radius:{radius};
+        padding:{pad};
+        {extra_style}">
+      {acc}
+      {inner}
+    </div>
+    """
+
+
+def chip_html(
+    text: str,
+    *,
+    color: str = COLOR_SECOND,
+    bg: Optional[str] = None,
+    monospace: bool = True,
+) -> str:
+    """V2 状态 chip：黑底 + 主题色描边 + 主题色文字，全大写 monospace。"""
+    bg_color = bg if bg else "rgba(0,0,0,0.32)"
+    family = FONT_MONO if monospace else FONT_BODY
+    return (f'<span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;'
+            f'border:1px solid {color};border-radius:6px;background:{bg_color};color:{color};'
+            f'font-family:{family};font-size:10px;font-weight:600;letter-spacing:0.12em;'
+            f'text-transform:uppercase;line-height:1;">{text}</span>')
+
+
+def kpi_hero_strip(items: list[dict]) -> str:
+    """V2 KPI Hero 长条横排（Stitch 设计稿中那种 5-6 列一字排开）。
+
+    items: [{"label": str, "value": str, "color": str(opt), "sub": str(opt), "trend": "up|down"(opt)}, ...]
+
+    内部用 flex 分布，每个单元自带左侧 accent 条 + 趋势箭头。
+    """
+    cells = []
+    for it in items:
+        label = it.get("label", "")
+        value = it.get("value", "")
+        color = it.get("color", COLOR_TEXT)
+        sub = it.get("sub", "")
+        trend = it.get("trend")
+        trend_html = ""
+        if trend == "up":
+            trend_html = f'<span style="margin-left:6px;font-size:14px;color:{COLOR_BOUGHT};">&#9650;</span>'
+        elif trend == "down":
+            trend_html = f'<span style="margin-left:6px;font-size:14px;color:{COLOR_MAGENTA_NEON};">&#9660;</span>'
+        sub_html = (f'<div style="font-size:11px;color:{COLOR_MUTED};margin-top:4px;font-family:{FONT_MONO};">'
+                    f'{sub}</div>') if sub else ""
+        cells.append(f"""
+        <div style="flex:1;min-width:0;padding:0 18px;position:relative;
+                    border-left:1px solid {COLOR_DIVIDER};">
+          <div style="position:absolute;left:0;top:6px;bottom:6px;width:2px;
+                      background:{color};box-shadow:0 0 10px {color}55;"></div>
+          <div style="font-size:10px;color:{COLOR_MUTED};text-transform:uppercase;
+                      letter-spacing:0.14em;font-family:{FONT_MONO};">{label}</div>
+          <div style="margin-top:6px;display:flex;align-items:baseline;">
+            <span style="font-size:26px;font-weight:700;color:{color};
+                         line-height:1.05;font-family:{FONT_MONO};letter-spacing:-0.01em;">{value}</span>
+            {trend_html}
+          </div>
+          {sub_html}
+        </div>""")
+    # 第一格去掉左边线
+    cells_joined = "".join(cells).replace(
+        f'border-left:1px solid {COLOR_DIVIDER};', '', 1
+    )
+    return f"""
+    <div class="rt-v2-hero-strip" style="
+        background:{COLOR_GLASS_BG};
+        backdrop-filter:blur(20px);
+        -webkit-backdrop-filter:blur(20px);
+        border:1px solid {COLOR_GLASS_EDGE};
+        border-radius:12px;
+        padding:18px 6px;
+        display:flex;
+        align-items:stretch;
+        gap:0;
+        margin:0 0 14px 0;">
+      {cells_joined}
     </div>
     """
 
@@ -555,17 +711,105 @@ def status_banner(message: str, level: str = "info") -> None:
         <div style="
             background:{bg};
             border-left:4px solid {fg};
-            color:{fg};
-            padding:12px 18px;
-            border-radius:6px;
-            font-size:14px;
+            color:{COLOR_TEXT};
+            padding:11px 16px;
+            border-radius:10px;
+            font-size:13px;
             font-weight:500;
             margin-bottom:14px;">
-          {icon}　{message}
+          <span style="color:{fg};margin-right:8px;">{icon}</span>{message}
         </div>
         """,
         unsafe_allow_html=True,
     )
+
+
+def render_page_header(
+    kicker: str,
+    title: str,
+    description: str,
+    badges: Optional[list[str]] = None,
+    aside_title: str = "",
+    aside_body: str = "",
+) -> None:
+    badges = badges or []
+    badge_html = "".join(
+        f"<span style='display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;"
+        f"background:rgba(255,255,255,0.03);border:1px solid {COLOR_BORDER_SOFT};"
+        f"font-size:11px;font-weight:700;color:{COLOR_MUTED};'>{_eh(b)}</span>"
+        for b in badges
+    )
+    aside_html = ""
+    if aside_title or aside_body:
+        aside_html = f"""
+        <div style="width:320px;max-width:100%;background:rgba(22,27,34,0.5);
+                    backdrop-filter:blur(12px);
+                    border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px 18px;
+                    box-shadow:inset 0 1px 0 rgba(255,255,255,0.03);">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.16em;color:{COLOR_MUTED};font-family:'JetBrains Mono',monospace;">{_eh(aside_title)}</div>
+          <div style="margin-top:8px;font-size:13px;line-height:1.8;color:{COLOR_TEXT};">{aside_body}</div>
+        </div>
+        """
+    st.markdown(
+        f"""
+        <div style="margin:0 0 12px 0;padding:18px 20px 16px 20px;border-radius:14px;border:1px solid rgba(255,255,255,0.08);
+                    background:
+                      radial-gradient(circle at top right, rgba(0,218,243,0.08), transparent 28%),
+                      linear-gradient(180deg, rgba(15,20,27,0.7) 0%, rgba(10,14,23,0.85) 100%);
+                    backdrop-filter: blur(18px);
+                    box-shadow:0 18px 48px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.03);">
+          <div style="display:flex;justify-content:space-between;gap:18px;align-items:flex-start;flex-wrap:wrap;">
+            <div style="flex:1;min-width:320px;">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:0.24em;color:{COLOR_SECOND};text-shadow:0 0 10px rgba(0,218,243,0.3);">{_eh(kicker)}</div>
+              <div style="margin-top:8px;font-size:30px;font-weight:700;line-height:1.06;color:{COLOR_TEXT};letter-spacing:-0.03em;font-family:'Hanken Grotesk','Inter',sans-serif;">{_eh(title)}</div>
+              <div style="margin-top:9px;max-width:760px;font-size:13px;line-height:1.72;color:{COLOR_MUTED};">{_eh(description)}</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">{badge_html}</div>
+            </div>
+            {aside_html}
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_shell_topbar() -> None:
+    st.markdown(
+        f"""
+        <div class="radar-topbar-mount">
+          <div class="radar-topbar">
+            <div class="radar-topbar__left">
+              <div class="radar-topbar__brand">RADAR_TERMINAL</div>
+              <div class="radar-topbar__signal"></div>
+            </div>
+            <div class="radar-topbar__right">
+              <span class="radar-topbar__clock" id="live-clock">--:--:--</span>
+              <span class="radar-topbar__status-dot"></span>
+              <span class="radar-topbar__status-text">SYS_ONLINE</span>
+            </div>
+          </div>
+        </div>
+        <script>
+          setInterval(() => {{
+            const now = new Date();
+            const el = document.getElementById('live-clock');
+            if (el) el.textContent = now.toLocaleTimeString('zh-CN', {{hour12: false}});
+          }}, 1000);
+        </script>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _friendly_market_env_desc(raw: str) -> str:
+    txt = str(raw or "").strip()
+    if not txt or txt == "—":
+        return "暂无环境描述"
+    if "跌停" in txt and (">= 50" in txt or "50" in txt):
+        return "跌停家数偏多，主力环境恶劣"
+    if "跌停" in txt and (">= 30" in txt or "30" in txt):
+        return "跌停家数较多，市场承接偏弱"
+    return txt
 
 
 def _display_value(v, default: str = "暂无") -> str:
@@ -731,18 +975,6 @@ def stock_card(row: pd.Series, variant: str = "default") -> str:
         price_html += f"<span>10:00：<b style='color:{COLOR_SECOND};'>{p1000}</b></span>"
     price_html += "</div>"
 
-    # ⭐ 自选池标记
-    is_pool = str(row.get("is_custom_pool", "")).strip().lower() in ("true", "1")
-    if is_pool:
-        pool_pri = _eh(str(row.get("custom_pool_priority", "")).strip())
-        pool_reason = _eh(str(row.get("custom_pool_reason", "")).strip())
-        pool_badge = f"⭐ 自选池(优先级{pool_pri})"
-        if pool_reason:
-            pool_badge += f"：{pool_reason}"
-        price_html += (
-            f"<div style='font-size:11px;color:#9A6700;margin-top:6px;'>{pool_badge}</div>"
-        )
-
     # 主因/辅助 或 买入四因
     if bs is True and variant == "bought":
         tot = _gf(row.get("total_score"))
@@ -854,7 +1086,7 @@ def render_today_banner(today_df: pd.DataFrame, date_str: str) -> None:
         return
     if state["checked"] == 0:
         status_banner(
-            f"今日推荐 <b>{state['total']}</b> 只，**等待 9:36 自动跑买入确认**。",
+            f"今日推荐 <b>{state['total']}</b> 只，<b>等待 9:36 自动跑买入确认</b>。",
             "info",
         )
         return
@@ -921,7 +1153,7 @@ def generate_today_plain_conclusion(
 
     # 有买入：根据 T+1 状态说明
     if state["bought"] > 0:
-        names_txt = "、".join(_eh(n) for n in bought_names) if bought_names else "—"
+        names_txt = "、".join(bought_names) if bought_names else "—"
         if state["waiting_t1"] > 0:
             return (
                 f"今日已模拟买入 <b style='color:{COLOR_BOUGHT};'>{state['bought']}</b> 只"
@@ -962,89 +1194,6 @@ def generate_today_plain_conclusion(
         f"今日推荐 {state['total']} 只，9:36 检查全部完成，<b>无符合买入条件的票</b>，"
         f"按 9:36 技术确认层规则继续观察。"
     )
-
-
-def render_today_hero(df: pd.DataFrame, sel_date: str, state: dict, plain_text: str, bought_names: list) -> None:
-    """更聚焦的首页主区：把结论、节奏和关键指标集中到首屏。"""
-    ms = _gf(df["market_sentiment"].iloc[0]) if "market_sentiment" in df.columns and not df.empty else None
-    bought_txt = "、".join(_eh(n) for n in bought_names[:3]) if bought_names else "无"
-    if len(bought_names) > 3:
-        bought_txt += f" 等 {len(bought_names)} 只"
-
-    top_reasons = _count_main_reasons(df)
-    top_reason = _eh(top_reasons[0][0]) if top_reasons else "暂无"
-    top_reason_count = top_reasons[0][1] if top_reasons else 0
-
-    if state["waiting_t1"] > 0:
-        rhythm_text = f"买入确认已完成，当前等待 {state['waiting_t1']} 只 T+1 复盘。"
-    elif state["checked"] < state["total"]:
-        rhythm_text = f"今天还有 {state['total'] - state['checked']} 只候选等待 9:36 检查。"
-    elif state["bought"] > 0:
-        rhythm_text = "今日主流程已经闭环，可以直接切去 T+1 复盘页看结果。"
-    else:
-        rhythm_text = "今天没有形成执行信号，节奏以观察和准备明日计划为主。"
-
-    plain_text = plain_text or "等待新一轮数据进入后，首页会自动刷新为当日结论。"
-    sentiment_chip = f"情绪 {ms:.1f}/10" if ms is not None else "情绪待补"
-
-    hero_html = f"""
-    <div style="
-        background:linear-gradient(135deg, {COLOR_CARD_DEEP} 0%, {COLOR_CARD} 58%, #F9F3E8 100%);
-        border:1px solid {COLOR_BORDER};
-        border-radius:18px;
-        padding:22px 24px 18px 24px;
-        margin:8px 0 18px 0;
-        box-shadow:0 12px 30px rgba(90, 65, 40, 0.08);">
-      <div style="display:flex;justify-content:space-between;gap:18px;align-items:flex-start;flex-wrap:wrap;">
-        <div style="flex:1;min-width:320px;">
-          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
-            <span style="background:rgba(9,105,218,0.10);color:{COLOR_SECOND};padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;">今日总览</span>
-            <span style="background:rgba(31,136,61,0.10);color:{COLOR_BOUGHT};padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;">{_date_fmt(sel_date)}</span>
-            <span style="background:rgba(154,103,0,0.10);color:{COLOR_WAIT_T1};padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;">{sentiment_chip}</span>
-          </div>
-          <div style="font-size:30px;line-height:1.15;font-weight:800;color:{COLOR_TEXT};letter-spacing:-0.02em;">
-            先看结论，再看执行。
-          </div>
-          <div style="margin-top:12px;font-size:15px;line-height:1.8;color:{COLOR_TEXT};">
-            {plain_text}
-          </div>
-          <div style="margin-top:14px;padding:12px 14px;background:rgba(255,255,255,0.30);border:1px solid {COLOR_BORDER_SOFT};border-radius:12px;">
-            <div style="font-size:12px;color:{COLOR_MUTED};text-transform:uppercase;letter-spacing:0.08em;">Today's Rhythm</div>
-            <div style="margin-top:6px;font-size:14px;color:{COLOR_TEXT};font-weight:600;">{_eh(rhythm_text)}</div>
-          </div>
-        </div>
-        <div style="width:320px;max-width:100%;display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-          <div style="background:{COLOR_CARD};border:1px solid {COLOR_BORDER_SOFT};border-radius:14px;padding:14px;">
-            <div style="font-size:12px;color:{COLOR_MUTED};">今日推荐</div>
-            <div style="margin-top:6px;font-size:28px;font-weight:800;color:{COLOR_TEXT};">{state['total']}</div>
-          </div>
-          <div style="background:{COLOR_CARD};border:1px solid {COLOR_BORDER_SOFT};border-radius:14px;padding:14px;">
-            <div style="font-size:12px;color:{COLOR_MUTED};">9:36 已查</div>
-            <div style="margin-top:6px;font-size:28px;font-weight:800;color:{COLOR_SECOND};">{state['checked']}</div>
-          </div>
-          <div style="background:{COLOR_CARD};border:1px solid {COLOR_BORDER_SOFT};border-radius:14px;padding:14px;">
-            <div style="font-size:12px;color:{COLOR_MUTED};">模拟买入</div>
-            <div style="margin-top:6px;font-size:28px;font-weight:800;color:{COLOR_BOUGHT};">{state['bought']}</div>
-          </div>
-          <div style="background:{COLOR_CARD};border:1px solid {COLOR_BORDER_SOFT};border-radius:14px;padding:14px;">
-            <div style="font-size:12px;color:{COLOR_MUTED};">等待 T+1</div>
-            <div style="margin-top:6px;font-size:28px;font-weight:800;color:{COLOR_WAIT_T1};">{state['waiting_t1']}</div>
-          </div>
-        </div>
-      </div>
-      <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:12px;margin-top:14px;">
-        <div style="background:{COLOR_CARD};border:1px solid {COLOR_BORDER_SOFT};border-radius:14px;padding:14px 16px;">
-          <div style="font-size:12px;color:{COLOR_MUTED};margin-bottom:6px;">今日买入摘要</div>
-          <div style="font-size:14px;line-height:1.7;color:{COLOR_TEXT};">{bought_txt}</div>
-        </div>
-        <div style="background:{COLOR_CARD};border:1px solid {COLOR_BORDER_SOFT};border-radius:14px;padding:14px 16px;">
-          <div style="font-size:12px;color:{COLOR_MUTED};margin-bottom:6px;">未买主因</div>
-          <div style="font-size:14px;line-height:1.7;color:{COLOR_TEXT};">{top_reason}{("（" + str(top_reason_count) + " 只）") if top_reason_count else ""}</div>
-        </div>
-      </div>
-    </div>
-    """
-    st.markdown(hero_html, unsafe_allow_html=True)
 
 
 # ─── 日期下拉：合并多个数据源 ─────────────────────────────────────────
@@ -1101,6 +1250,48 @@ def _collect_available_dates() -> list[str]:
 
 # ─── PAGE 1: 今日总览 ────────────────────────────────────────────────────
 
+def _render_today_sidebar_data(report_date: str) -> None:
+    """展示某日期可用但非 trade_review 的数据摘要。"""
+    st.markdown("### 📂 当日可用数据")
+    records = []
+
+    md_path = MARKET_DAILY_DIR / f"market_daily_{report_date}.csv"
+    if md_path.exists():
+        records.append(("📊 市场日线快照", md_path.name))
+
+    mb_path = MARKET_BREADTH_DIR / f"market_breadth_{report_date}.csv"
+    if mb_path.exists():
+        records.append(("📈 赚钱效应", mb_path.name))
+
+    tp_path = TOMORROW_PLAN_DIR / f"tomorrow_plan_{report_date}.csv"
+    if tp_path.exists():
+        records.append(("📌 明日计划", tp_path.name))
+
+    ts_dir = T_SIGNAL_DIR
+    if ts_dir.exists():
+        for f in ts_dir.iterdir():
+            if f.name.endswith(f"{report_date}.csv"):
+                records.append(("📉 做 T 信号", f.name))
+
+    if records:
+        cols = st.columns(2)
+        for idx, (label, fname) in enumerate(records):
+            cols[idx % 2].markdown(
+                f"""
+                <div style="background:linear-gradient(180deg, rgba(8,17,11,0.96) 0%, rgba(4,10,6,0.98) 100%);
+                            border:1px solid {COLOR_BORDER_SOFT};border-radius:14px;padding:12px 14px;margin-bottom:10px;
+                            box-shadow:inset 0 1px 0 rgba(183,255,190,0.04);">
+                  <div style="font-size:12px;color:{COLOR_MUTED};margin-bottom:4px;">模块</div>
+                  <div style="font-size:15px;font-weight:700;color:{COLOR_TEXT};">{_eh(label)}</div>
+                  <div style="font-size:12px;color:{COLOR_MUTED};margin-top:6px;">{_eh(fname)}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+    else:
+        st.markdown("_除 trade_review 外无其他数据。_")
+
+
 def _today_data_records(report_date: str) -> list[tuple[str, str]]:
     records = []
 
@@ -1124,58 +1315,449 @@ def _today_data_records(report_date: str) -> list[tuple[str, str]]:
     return records
 
 
-def _render_today_sidebar_data(report_date: str) -> None:
-    """展示某日期可用但非 trade_review 的数据摘要。"""
-    st.markdown("#### 📂 当日可用数据")
-    records = _today_data_records(report_date)
+def _home_fmt_num(v: Optional[float], digits: int = 2) -> str:
+    if v is None:
+        return "—"
+    return f"{v:,.{digits}f}"
 
-    if records:
-        for label, fname in records:
-            st.markdown(f"- {label}（{fname}）")
+
+def _home_fmt_pct(v: Optional[float], digits: int = 2) -> str:
+    if v is None:
+        return "—"
+    return f"{v:+.{digits}f}%"
+
+
+def _home_fmt_amount(total_amount: Optional[float]) -> str:
+    if total_amount is None:
+        return "—"
+    if total_amount >= 1e12:
+        return f"{total_amount/1e12:.2f}T"
+    if total_amount >= 1e8:
+        return f"{total_amount/1e8:,.0f}亿"
+    return f"{total_amount:,.0f}"
+
+
+def _home_sentiment_index(df: pd.DataFrame, daily: Optional[dict]) -> tuple[int, str]:
+    ms = _gf(df["market_sentiment"].iloc[0]) if ("market_sentiment" in df.columns and not df.empty) else None
+    raw = _md_get_float(daily, "market_sentiment_score_raw")
+    adr = _md_get_float(daily, "advance_decline_ratio")
+    idx = _md_get_float(daily, "index_change_pct")
+    if ms is not None:
+        score = int(round(ms * 10))
+    elif raw is not None:
+        score = int(round(raw * 10))
+    elif adr is not None:
+        score = int(round(50 + (adr - 1.0) * 28 + (idx or 0) * 9))
     else:
-        st.markdown("_除 trade_review 外无其他数据。_")
+        score = 50
+    score = max(8, min(92, score))
+    if score >= 68:
+        return score, "积极 / BULLISH"
+    if score >= 52:
+        return score, "中性 / NEUTRAL"
+    return score, "谨慎 / CAUTIOUS"
+
+
+def render_today_terminal_home(sel_date: str, df: pd.DataFrame) -> None:
+    daily = _lifecycle_load_market_daily(sel_date)
+    score, score_label = _home_sentiment_index(df, daily)
+    idx_chg = _md_get_float(daily, "index_change_pct")
+    adr = _md_get_float(daily, "advance_decline_ratio")
+    advance = _md_get_int(daily, "advance_count")
+    decline = _md_get_int(daily, "decline_count")
+    burst_rate = _md_get_float(daily, "burst_rate")
+    total_amount = _md_get_float(daily, "total_amount")
+    env_desc = _friendly_market_env_desc(_md_get(daily, "market_env_desc", "暂无环境描述"))
+    breadth_desc = _md_get(daily, "breadth_desc", "暂无宽度描述")
+    lu = _md_get_int(daily, "limit_up_count")
+    ld = _md_get_int(daily, "limit_down_count")
+    leader_1 = _md_get(daily, "top_sector_1_name", "—")
+    leader_2 = _md_get(daily, "top_sector_2_name", "—")
+    leader_3 = _md_get(daily, "top_sector_3_name", "—")
+    built_at = _md_get(daily, "built_at", "—")
+    records = _today_data_records(sel_date)
+
+    top_cards = [
+        ("上证涨跌 / SSE", _home_fmt_pct(idx_chg), _home_fmt_pct(idx_chg), COLOR_BOUGHT if (idx_chg or 0) >= 0 else COLOR_ERROR),
+        ("涨跌比 / ADR", _home_fmt_num(adr), f"涨 {advance or 0} / 跌 {decline or 0}", COLOR_SECOND),
+        ("今日成交 / VOL", _home_fmt_amount(total_amount), f"涨停 {lu or 0} / 跌停 {ld or 0}", COLOR_SECOND),
+        ("炸板率 / SYS", f"{(burst_rate or 0)*100:.1f}%", built_at[-8:] if built_at and built_at != "—" else "—", COLOR_WAIT_T1 if burst_rate is not None else COLOR_MUTED),
+    ]
+    top_cards_html = "".join(
+        f"""
+        <div style="background:rgba(20,25,34,0.88);border:1px solid rgba(255,255,255,0.06);padding:16px 18px;border-radius:4px;">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.1em;color:{COLOR_MUTED};text-transform:uppercase;">{_eh(label)}</div>
+          <div style="display:flex;justify-content:space-between;align-items:end;margin-top:10px;">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:700;color:{color};">{_eh(value)}</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:{color};">{_eh(sub)}</div>
+          </div>
+        </div>
+        """
+        for label, value, sub, color in top_cards
+    )
+
+    status_dot = COLOR_BOUGHT if score >= 68 else (COLOR_SECOND if score >= 52 else COLOR_ERROR)
+    module_rows = [
+        ("上涨家数", str(advance or "—"), COLOR_BOUGHT),
+        ("下跌家数", str(decline or "—"), COLOR_ERROR),
+        ("平衡描述", breadth_desc, COLOR_TEXT),
+    ]
+    market_snapshot_html = "".join(
+        f"""
+        <div style="display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+          <span style="color:{COLOR_MUTED};font-size:13px;">{_eh(k)}</span>
+          <span style="color:{c};font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;text-align:right;">{_eh(v)}</span>
+        </div>
+        """
+        for k, v, c in module_rows
+    )
+    effect_width = max(12, min(94, int((score / 100) * 100)))
+    themes = " / ".join([x for x in [leader_1, leader_2, leader_3] if x and x != "—"]) or "暂无主线"
+    table_rows = ""
+    has_candidates = not df.empty
+    if not df.empty:
+        sdf = enrich_df(df.copy()).head(6)
+        for _, r in sdf.iterrows():
+            bought = is_bought(r)
+            obs = is_worth_observing(r)
+            dot = COLOR_BOUGHT if bought else (COLOR_SECOND if obs else COLOR_ERROR)
+            action = "EXECUTE" if bought else ("MONITOR" if obs else "DROP")
+            action_style = (
+                f"background:{COLOR_SECOND};color:#0A0E17;border:1px solid {COLOR_SECOND};box-shadow:0 0 14px rgba(0,218,243,0.22);"
+                if bought else
+                (f"border:1px solid rgba(0,218,243,0.55);color:{COLOR_SECOND};background:rgba(0,218,243,0.04);box-shadow:inset 0 0 0 1px rgba(0,218,243,0.06);"
+                 if obs else f"border:1px solid rgba(255,180,171,0.55);color:{COLOR_ERROR};background:rgba(255,180,171,0.06);box-shadow:inset 0 0 0 1px rgba(255,180,171,0.06);")
+            )
+            strength_score = _gf(r.get("total_score")) or 0
+            bars = "".join(
+                f"<div style='width:6px;height:14px;background:{dot if i < max(1, min(4, int(round(strength_score / 25)))) else 'rgba(255,255,255,0.10)'};'></div>"
+                for i in range(4)
+            )
+            current_price = _num_str(r.get('price_0935') or r.get('buy_price') or r.get('open_price'), 2)
+            pct = _pct_str(r.get("open_change_pct"))
+            pct_color = COLOR_BOUGHT if str(pct).startswith("+") else (COLOR_ERROR if str(pct).startswith("-") else COLOR_TEXT)
+            table_rows += f"""
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
+              <td style="padding:10px 8px;"><div style="width:10px;height:10px;border-radius:999px;background:{dot};box-shadow:0 0 8px {dot};"></div></td>
+              <td style="padding:10px 8px;">
+                <div style="font-size:15px;font-weight:700;color:{COLOR_TEXT};">{_eh(r['stock_name'])}</div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:{COLOR_MUTED};">{_eh(r['stock_code'])}</div>
+              </td>
+              <td style="padding:10px 8px;font-family:'JetBrains Mono',monospace;font-size:12px;color:{COLOR_TEXT};">{current_price}</td>
+              <td style="padding:10px 8px;font-family:'JetBrains Mono',monospace;font-size:12px;color:{pct_color};">{pct}</td>
+              <td style="padding:10px 8px;"><div style="display:flex;gap:2px;">{bars}</div></td>
+              <td style="padding:10px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:{COLOR_MUTED};">{_eh(r.get('buy_time') or r.get('second_check_time') or '09:36')}</td>
+              <td style="padding:10px 8px;"><span class="terminal-action" style="{action_style}">{action}</span></td>
+            </tr>
+            """
+
+    if not table_rows:
+        table_rows = f"<tr><td colspan='7' style='padding:22px 8px;color:{COLOR_MUTED};text-align:center;'>今日无推荐，暂无候选记录。</td></tr>"
+
+    st.markdown(
+        """
+        <style>
+          .today-lock-scroll [data-testid="stVerticalBlock"] { gap: 0.7rem; }
+          .today-lock-scroll .stSelectbox { margin-bottom: 0.15rem; }
+          .today-lock-scroll .stSelectbox label p {
+            opacity: 0.76;
+          }
+          .terminal-top-card,
+          .terminal-panel {
+            position: relative;
+            overflow: hidden;
+          }
+          .terminal-top-card::after,
+          .terminal-panel::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background:
+              linear-gradient(180deg, rgba(255,255,255,0.03), transparent 28%),
+              radial-gradient(circle at 85% 18%, rgba(0,218,243,0.08), transparent 28%);
+            opacity: 0.9;
+          }
+          .terminal-top-card::before,
+          .terminal-panel::before {
+            content: "";
+            position: absolute;
+            inset: 14px;
+            pointer-events: none;
+            border: 1px solid rgba(255,255,255,0.02);
+            clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+          }
+          .terminal-panel__corners {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+          }
+          .terminal-panel__corners::before,
+          .terminal-panel__corners::after {
+            content: "";
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            border-top: 1px solid rgba(0,218,243,0.36);
+          }
+          .terminal-panel__corners::before {
+            top: 10px;
+            left: 10px;
+            border-left: 1px solid rgba(0,218,243,0.36);
+          }
+          .terminal-panel__corners::after {
+            right: 10px;
+            bottom: 10px;
+            border-right: 1px solid rgba(0,218,243,0.22);
+            border-bottom: 1px solid rgba(0,218,243,0.22);
+            border-top: none;
+          }
+          .terminal-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 10px;
+            border-radius: 2px;
+            font-family: "JetBrains Mono", monospace;
+            font-size: 11px;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+          }
+          .terminal-kicker {
+            font-family: "JetBrains Mono", monospace;
+            font-size: 10px;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: rgba(222,226,236,0.40);
+          }
+          .terminal-table tbody tr:hover {
+            background: rgba(255,255,255,0.025);
+          }
+          .terminal-table thead th {
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+          }
+          .terminal-panel [data-testid="stMarkdownPre"],
+          .terminal-panel [data-testid="stCode"] {
+            display: none !important;
+          }
+          .terminal-action {
+            display:inline-block;
+            padding:7px 12px;
+            border-radius:2px;
+            font-family:"JetBrains Mono",monospace;
+            font-size:11px;
+            font-weight:700;
+            letter-spacing:0.06em;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+          }
+          .terminal-scroll::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+          }
+          .terminal-scroll::-webkit-scrollbar-thumb {
+            background: rgba(0,218,243,0.25);
+          }
+          .sentiment-ring-shell {
+            position: absolute;
+            inset: 28px;
+            border-radius: 999px;
+            background: radial-gradient(circle, rgba(0,218,243,0.08) 0%, rgba(0,218,243,0.02) 42%, transparent 72%);
+            filter: blur(8px);
+          }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    cols_top = st.columns(4)
+    for col, (label, value, sub, color) in zip(cols_top, top_cards):
+        col.markdown(
+            f"""
+            <div class="terminal-top-card" style="background:linear-gradient(180deg, rgba(15,20,27,0.98) 0%, rgba(16,22,34,0.94) 100%);
+                        border:1px solid rgba(255,255,255,0.07);padding:10px 14px;border-radius:2px;min-height:70px;
+                        box-shadow:inset 0 1px 0 rgba(255,255,255,0.03), 0 10px 28px rgba(0,0,0,0.22);position:relative;overflow:hidden;">
+              <div style="position:absolute;inset:0 auto auto 0;width:100%;height:1px;background:linear-gradient(90deg, rgba(0,218,243,0.38), rgba(0,218,243,0.02));"></div>
+              <div class="terminal-kicker">system metric</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.1em;color:{COLOR_MUTED};text-transform:uppercase;margin-top:3px;">{_eh(label)}</div>
+              <div style="display:flex;justify-content:space-between;align-items:end;margin-top:8px;gap:8px;">
+                <div style="font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:700;color:{color};line-height:1;">{_eh(value)}</div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:{color};text-align:right;line-height:1.2;">{_eh(sub)}</div>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    col_left, col_right = st.columns([2.1, 1.0])
+    with col_left:
+        st.markdown(
+            f"""
+            <div class="terminal-panel" style="background:linear-gradient(180deg, rgba(16,21,29,0.98) 0%, rgba(15,20,28,0.94) 100%);
+                        border:1px solid rgba(255,255,255,0.07);padding:10px 14px 8px 14px;border-radius:2px;min-height:248px;
+                        position:relative;overflow:hidden;box-shadow:inset 0 1px 0 rgba(255,255,255,0.03), 0 18px 42px rgba(0,0,0,0.24);">
+              <div class="terminal-panel__corners"></div>
+              <div style="position:absolute;left:0;top:0;width:100%;height:1px;background:linear-gradient(90deg, rgba(0,218,243,0.5), rgba(0,218,243,0.04));"></div>
+              <div style="display:flex;justify-content:space-between;align-items:start;gap:12px;flex-wrap:wrap;">
+                <div>
+                  <div class="terminal-kicker">overview engine</div>
+                  <div style="font-family:'Hanken Grotesk','Inter',sans-serif;font-size:22px;font-weight:700;color:{COLOR_SECOND};">今日总览 / MARKET SENTIMENT</div>
+                  <div style="margin-top:3px;color:{COLOR_MUTED};font-size:13px;">综合市场情绪分析引擎 V2.0</div>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                  <span class="terminal-chip" style="background:rgba(0,228,121,0.12);border:1px solid rgba(0,228,121,0.24);color:{status_dot};padding:5px 9px;">{_eh(score_label)}</span>
+                  <span class="terminal-chip" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);color:{COLOR_MUTED};padding:5px 9px;">数据刷新: {_eh(built_at[-8:] if built_at and built_at != '—' else '—')}</span>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:center;min-height:128px;">
+                <div style="position:relative;width:148px;height:148px;display:flex;align-items:center;justify-content:center;">
+                  <div class="sentiment-ring-shell"></div>
+                  <div style="position:absolute;inset:22px;border:1px dashed rgba(255,255,255,0.03);border-radius:999px;"></div>
+                  <svg viewBox="0 0 200 200" style="width:100%;height:100%;transform:rotate(-90deg);">
+                    <circle cx="100" cy="100" r="90" stroke="rgba(255,255,255,0.08)" stroke-width="8" fill="none"></circle>
+                    <circle cx="100" cy="100" r="90" stroke="{COLOR_SECOND}" stroke-width="10" fill="none" stroke-linecap="round"
+                            stroke-dasharray="{max(0, min(566, int(round((score / 100) * 566))))} 566" stroke-dashoffset="0" style="filter:drop-shadow(0 0 12px rgba(0,218,243,0.75));"></circle>
+                  </svg>
+                  <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;">
+                    <div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.12em;color:{COLOR_MUTED};">SENTIMENT INDEX</div>
+                    <div style="margin-top:2px;font-family:'Hanken Grotesk','Inter',sans-serif;font-size:38px;line-height:1;color:{COLOR_SECOND};font-weight:700;">{score}</div>
+                    <div style="margin-top:4px;font-family:'JetBrains Mono',monospace;font-size:11px;color:{status_dot};">{_home_fmt_pct(idx_chg)} {'↑' if (idx_chg or 0) >= 0 else '↓'}</div>
+                  </div>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-top:0;">
+                <div style="text-align:center;"><div style="font-size:10px;color:{COLOR_MUTED};font-family:'JetBrains Mono',monospace;">极度恐惧</div><div style="height:2px;background:rgba(255,180,171,0.18);margin-top:8px;"></div></div>
+                <div style="text-align:center;"><div style="font-size:10px;color:{COLOR_MUTED};font-family:'JetBrains Mono',monospace;">恐惧</div><div style="height:2px;background:rgba(255,180,171,0.32);margin-top:8px;"></div></div>
+                <div style="text-align:center;"><div style="font-size:10px;color:{COLOR_SECOND};font-family:'JetBrains Mono',monospace;text-shadow:0 0 8px rgba(0,218,243,0.4);">中性</div><div style="height:2px;background:{COLOR_SECOND};margin-top:8px;box-shadow:0 0 8px rgba(0,218,243,0.55);"></div></div>
+                <div style="text-align:center;"><div style="font-size:11px;color:{COLOR_MUTED};">贪婪</div><div style="height:2px;background:rgba(0,228,121,0.32);margin-top:8px;"></div></div>
+                <div style="text-align:center;"><div style="font-size:11px;color:{COLOR_MUTED};">极度贪婪</div><div style="height:2px;background:rgba(0,228,121,0.18);margin-top:8px;"></div></div>
+              </div>
+              <div style="position:absolute;right:-80px;bottom:-80px;width:220px;height:220px;background:radial-gradient(circle, rgba(0,218,243,0.22) 0%, rgba(0,218,243,0.03) 45%, transparent 72%);filter:blur(24px);"></div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with col_right:
+        st.markdown(
+            f"""
+            <div class="terminal-panel" style="background:linear-gradient(180deg, rgba(16,21,29,0.98) 0%, rgba(15,20,28,0.94) 100%);
+                        border:1px solid rgba(255,255,255,0.07);padding:14px;border-radius:2px;margin-bottom:10px;
+                        box-shadow:inset 0 1px 0 rgba(255,255,255,0.03), 0 16px 32px rgba(0,0,0,0.22);position:relative;overflow:hidden;">
+              <div class="terminal-panel__corners"></div>
+              <div style="position:absolute;left:0;top:0;width:100%;height:1px;background:linear-gradient(90deg, rgba(0,218,243,0.45), rgba(0,218,243,0.02));"></div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <div>
+                  <div class="terminal-kicker">breadth scan</div>
+                  <div style="font-family:'Hanken Grotesk','Inter',sans-serif;font-size:18px;font-weight:700;color:{COLOR_TEXT};margin-top:2px;">市场快照</div>
+                </div>
+                <div style="color:{COLOR_SECOND};font-size:18px;">◲</div>
+              </div>
+              {market_snapshot_html}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            f"""
+            <div class="terminal-panel" style="background:linear-gradient(180deg, rgba(16,21,29,0.98) 0%, rgba(15,20,28,0.94) 100%);
+                        border:1px solid rgba(255,255,255,0.07);padding:14px;border-radius:2px;
+                        box-shadow:inset 0 1px 0 rgba(255,255,255,0.03), 0 16px 32px rgba(0,0,0,0.22);position:relative;overflow:hidden;">
+              <div class="terminal-panel__corners"></div>
+              <div style="position:absolute;left:0;top:0;width:100%;height:1px;background:linear-gradient(90deg, rgba(0,228,121,0.35), rgba(0,228,121,0.02));"></div>
+              <div class="terminal-kicker">profitability</div>
+              <div style="font-family:'Hanken Grotesk','Inter',sans-serif;font-size:18px;font-weight:700;color:{COLOR_TEXT};margin-top:2px;margin-bottom:14px;">赚钱效应</div>
+              <div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:11px;color:{COLOR_MUTED};margin-bottom:8px;">
+                <span>当前强度</span><span style="color:{COLOR_BOUGHT};">{score}% {score_label.split('/')[0].strip()}</span>
+              </div>
+              <div style="height:10px;background:rgba(255,255,255,0.08);border-radius:999px;overflow:hidden;">
+                <div style="height:100%;width:{effect_width}%;background:linear-gradient(90deg,#00daf3 0%, #00e479 100%);box-shadow:0 0 12px rgba(0,228,121,0.38);"></div>
+              </div>
+              <div style="margin-top:14px;color:{COLOR_MUTED};font-size:13px;line-height:1.75;">
+                市场主线：<span style="color:{COLOR_SECOND};">{_eh(themes)}</span><br>
+                连板/炸板：<span style="color:{COLOR_BOUGHT};">涨停 {lu or 0} / 炸板 {int((burst_rate or 0) * 100)}%</span><br>
+                主力环境：<span style="color:{COLOR_SECOND};">{_eh(env_desc)}</span>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.markdown(
+        f"""
+        <div class="terminal-panel terminal-scroll" style="background:linear-gradient(180deg, rgba(16,21,29,0.99) 0%, rgba(15,20,28,0.95) 100%);
+                    border:1px solid rgba(255,255,255,0.07);padding:14px 18px;border-radius:2px;margin-top:10px;max-height:154px;overflow:auto;
+                    box-shadow:inset 0 1px 0 rgba(255,255,255,0.03), 0 18px 42px rgba(0,0,0,0.24);position:relative;">
+          <div class="terminal-panel__corners"></div>
+          <div style="position:absolute;left:0;top:0;width:100%;height:1px;background:linear-gradient(90deg, rgba(0,218,243,0.46), rgba(0,218,243,0.03));"></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:14px;">
+            <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+              <div>
+                <div class="terminal-kicker">execution monitor</div>
+                <div style="font-family:'Hanken Grotesk','Inter',sans-serif;font-size:24px;font-weight:700;color:{COLOR_SECOND};margin-top:2px;">今日候选 / 买入确认</div>
+              </div>
+              <span class="terminal-chip" style="background:rgba(0,218,243,0.10);border:1px solid rgba(0,218,243,0.24);color:{COLOR_SECOND};">实时监测 (ON)</span>
+              <span class="terminal-chip" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);color:{COLOR_MUTED};">历史记录</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:16px;">
+              <span style="display:flex;align-items:center;gap:6px;color:{COLOR_MUTED};font-size:12px;"><span style="width:8px;height:8px;border-radius:999px;background:{COLOR_BOUGHT};display:inline-block;"></span>已确认</span>
+              <span style="display:flex;align-items:center;gap:6px;color:{COLOR_MUTED};font-size:12px;"><span style="width:8px;height:8px;border-radius:999px;background:{COLOR_SECOND};display:inline-block;"></span>监测中</span>
+            </div>
+          </div>
+          {"<div style='margin:0 0 12px 0;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);color:" + COLOR_MUTED + ";font-size:12px;'>今日无推荐，暂无候选记录。</div>" if not has_candidates else ""}
+          <div style="overflow-x:auto;">
+            <table class="terminal-table" style="width:100%;border-collapse:collapse;text-align:left;">
+              <thead>
+                <tr style="border-bottom:1px solid rgba(255,255,255,0.08);">
+                  <th style="padding:12px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:{COLOR_MUTED};">信号状态</th>
+                  <th style="padding:12px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:{COLOR_MUTED};">股票名称 / 代码</th>
+                  <th style="padding:12px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:{COLOR_MUTED};">当前价格</th>
+                  <th style="padding:12px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:{COLOR_MUTED};">涨跌幅</th>
+                  <th style="padding:12px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:{COLOR_MUTED};">主力强度</th>
+                  <th style="padding:12px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:{COLOR_MUTED};">信号时间</th>
+                  <th style="padding:12px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:{COLOR_MUTED};">操作</th>
+                </tr>
+              </thead>
+              <tbody>{table_rows}</tbody>
+            </table>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_today_empty_hero(sel_date: str) -> None:
     records = _today_data_records(sel_date)
     count = len(records)
     record_tags = "".join(
-        f"<span style='display:inline-block;margin:4px 6px 0 0;padding:5px 10px;border-radius:999px;background:{COLOR_CARD};border:1px solid {COLOR_BORDER_SOFT};font-size:12px;color:{COLOR_TEXT};'>{_eh(label)}</span>"
+        f"<span style='display:inline-block;margin:4px 6px 0 0;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,0.03);border:1px solid {COLOR_BORDER_SOFT};font-size:12px;color:{COLOR_TEXT};'>{_eh(label)}</span>"
         for label, _ in records
     ) or f"<span style='display:inline-block;margin-top:4px;color:{COLOR_MUTED};font-size:12px;'>暂无旁路数据</span>"
-
     st.markdown(
         f"""
         <div style="
-            background:linear-gradient(135deg, {COLOR_CARD_DEEP} 0%, {COLOR_CARD} 62%, #F9F3E8 100%);
-            border:1px solid {COLOR_BORDER};
-            border-radius:18px;
-            padding:22px 24px 18px 24px;
-            margin:8px 0 18px 0;
-            box-shadow:0 12px 30px rgba(90, 65, 40, 0.06);">
+            background:rgba(22,27,34,0.5);
+            backdrop-filter:blur(12px);
+            border:1px solid rgba(255,255,255,0.08);
+            border-radius:2px;
+            padding:18px 20px;
+            margin:8px 0 16px 0;
+            box-shadow:0 16px 34px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255,255,255,0.03);">
           <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;">
             <div style="flex:1;min-width:300px;">
-              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-                <span style="background:rgba(9,105,218,0.10);color:{COLOR_SECOND};padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;">今日总览</span>
-                <span style="background:rgba(154,103,0,0.10);color:{COLOR_WAIT_T1};padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;">{_date_fmt(sel_date)}</span>
-                <span style="background:rgba(31,136,61,0.10);color:{COLOR_BOUGHT};padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;">旁路数据 {count} 份</span>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+                <span style="background:{ACCENT_GOLD_BG};color:{COLOR_BOUGHT};padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;border:1px solid {ACCENT_GOLD_LINE};">当日摘要</span>
+                <span style="background:rgba(255,255,255,0.03);color:{COLOR_MUTED};padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;border:1px solid {COLOR_BORDER_SOFT};">{_date_fmt(sel_date)}</span>
               </div>
-              <div style="font-size:30px;line-height:1.15;font-weight:800;color:{COLOR_TEXT};letter-spacing:-0.02em;">
+              <div style="font-size:24px;line-height:1.18;font-weight:700;color:{COLOR_TEXT};font-family:'Hanken Grotesk','Inter',sans-serif;">
                 今天没有候选记录，但并不是没有数据。
               </div>
-              <div style="margin-top:12px;font-size:15px;line-height:1.8;color:{COLOR_TEXT};">
+              <div style="margin-top:10px;font-size:14px;line-height:1.8;color:{COLOR_MUTED};max-width:700px;">
                 当前日期还没有写入 <code>trade_review.csv</code> 的候选或买入确认记录，
                 但市场复盘、明日计划、做 T 观察这些旁路模块已经在工作。
               </div>
-              <div style="margin-top:14px;padding:12px 14px;background:rgba(255,255,255,0.30);border:1px solid {COLOR_BORDER_SOFT};border-radius:12px;">
-                <div style="font-size:12px;color:{COLOR_MUTED};text-transform:uppercase;letter-spacing:0.08em;">Data Ready</div>
-                <div style="margin-top:6px;font-size:14px;color:{COLOR_TEXT};font-weight:600;">
-                  可以继续查看下方文件摘要，或切去「明日交易计划」「做 T 观察」页继续分析。
-                </div>
-              </div>
             </div>
-            <div style="width:320px;max-width:100%;background:{COLOR_CARD};border:1px solid {COLOR_BORDER_SOFT};border-radius:14px;padding:16px;">
-              <div style="font-size:12px;color:{COLOR_MUTED};margin-bottom:8px;">当前已生成模块</div>
+            <div style="width:320px;max-width:100%;background:rgba(255,255,255,0.02);border:1px solid {COLOR_BORDER_SOFT};border-radius:14px;padding:14px 16px;">
+              <div style="font-size:11px;color:{COLOR_MUTED};margin-bottom:8px;text-transform:uppercase;letter-spacing:0.12em;">当前已生成模块 · {count}</div>
               <div style="font-size:14px;line-height:1.8;color:{COLOR_TEXT};">{record_tags}</div>
             </div>
           </div>
@@ -1185,9 +1767,72 @@ def render_today_empty_hero(sel_date: str) -> None:
     )
 
 
-def page_today(df_all: pd.DataFrame) -> None:
-    st.markdown("## 📌 今日总览")
+def render_today_hero(df: pd.DataFrame, sel_date: str, state: dict, plain_text: str, bought_names: list) -> None:
+    ms = _gf(df["market_sentiment"].iloc[0]) if "market_sentiment" in df.columns and not df.empty else None
+    bought_txt = "、".join(_eh(n) for n in bought_names[:3]) if bought_names else "无"
+    if len(bought_names) > 3:
+        bought_txt += f" 等 {len(bought_names)} 只"
+    top_reasons = _count_main_reasons(df)
+    top_reason = _eh(top_reasons[0][0]) if top_reasons else "暂无"
+    top_reason_count = top_reasons[0][1] if top_reasons else 0
+    if state["waiting_t1"] > 0:
+        rhythm_text = f"买入确认已完成，当前等待 {state['waiting_t1']} 只 T+1 复盘。"
+    elif state["checked"] < state["total"]:
+        rhythm_text = f"今天还有 {state['total'] - state['checked']} 只候选等待 9:36 检查。"
+    elif state["bought"] > 0:
+        rhythm_text = "今日主流程已经闭环，可以直接切去 T+1 复盘页看结果。"
+    else:
+        rhythm_text = "今天没有形成执行信号，节奏以观察和准备明日计划为主。"
+    sentiment_chip = f"情绪 {ms:.1f}/10" if ms is not None else "情绪待补"
+    plain_text = plain_text or "等待新一轮数据进入后，首页会自动刷新为当日结论。"
+    st.markdown(
+        f"""
+        <div style="
+            background:rgba(22,27,34,0.5);
+            backdrop-filter:blur(12px);
+            border:1px solid rgba(255,255,255,0.08);
+            border-radius:2px;
+            padding:18px 20px;
+            margin:8px 0 16px 0;
+            box-shadow:0 16px 34px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255,255,255,0.03);">
+          <div style="display:flex;justify-content:space-between;gap:18px;align-items:flex-start;flex-wrap:wrap;">
+            <div style="flex:1;min-width:320px;">
+              <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+                <span style="background:{ACCENT_GOLD_BG};color:{COLOR_BOUGHT};padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;border:1px solid {ACCENT_GOLD_LINE};">执行摘要</span>
+                <span style="background:rgba(255,255,255,0.03);color:{COLOR_MUTED};padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;border:1px solid {COLOR_BORDER_SOFT};">{_date_fmt(sel_date)}</span>
+                <span style="background:{ACCENT_BLUE_BG};color:{COLOR_SECOND};padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;border:1px solid {ACCENT_BLUE_LINE};">{sentiment_chip}</span>
+              </div>
+              <div style="font-size:24px;line-height:1.18;font-weight:700;color:{COLOR_TEXT};font-family:'Hanken Grotesk','Inter',sans-serif;">先看信号，再看执行。</div>
+              <div style="margin-top:10px;font-size:14px;line-height:1.85;color:{COLOR_MUTED};max-width:700px;">{plain_text}</div>
+              <div style="margin-top:14px;padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid {COLOR_BORDER_SOFT};border-radius:12px;">
+                <div style="font-size:11px;color:{COLOR_MUTED};text-transform:uppercase;letter-spacing:0.12em;">Today's Rhythm</div>
+                <div style="margin-top:6px;font-size:14px;color:{COLOR_TEXT};font-weight:600;">{_eh(rhythm_text)}</div>
+              </div>
+            </div>
+            <div style="width:320px;max-width:100%;display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <div style="background:{COLOR_CARD};border:1px solid {COLOR_BORDER_SOFT};border-radius:14px;padding:14px;"><div style="font-size:12px;color:{COLOR_MUTED};">今日推荐</div><div style="margin-top:6px;font-size:28px;font-weight:800;color:{COLOR_TEXT};">{state['total']}</div></div>
+              <div style="background:{COLOR_CARD};border:1px solid {COLOR_BORDER_SOFT};border-radius:14px;padding:14px;"><div style="font-size:12px;color:{COLOR_MUTED};">9:36 已查</div><div style="margin-top:6px;font-size:28px;font-weight:800;color:{COLOR_SECOND};">{state['checked']}</div></div>
+              <div style="background:{COLOR_CARD};border:1px solid {COLOR_BORDER_SOFT};border-radius:14px;padding:14px;"><div style="font-size:12px;color:{COLOR_MUTED};">模拟买入</div><div style="margin-top:6px;font-size:28px;font-weight:800;color:{COLOR_BOUGHT};">{state['bought']}</div></div>
+              <div style="background:{COLOR_CARD};border:1px solid {COLOR_BORDER_SOFT};border-radius:14px;padding:14px;"><div style="font-size:12px;color:{COLOR_MUTED};">等待 T+1</div><div style="margin-top:6px;font-size:28px;font-weight:800;color:{COLOR_WAIT_T1};">{state['waiting_t1']}</div></div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:12px;margin-top:14px;">
+            <div style="background:{COLOR_CARD};border:1px solid {COLOR_BORDER_SOFT};border-radius:14px;padding:14px 16px;">
+              <div style="font-size:12px;color:{COLOR_MUTED};margin-bottom:6px;">今日买入摘要</div>
+              <div style="font-size:14px;line-height:1.7;color:{COLOR_TEXT};">{bought_txt}</div>
+            </div>
+            <div style="background:{COLOR_CARD};border:1px solid {COLOR_BORDER_SOFT};border-radius:14px;padding:14px 16px;">
+              <div style="font-size:12px;color:{COLOR_MUTED};margin-bottom:6px;">未买主因</div>
+              <div style="font-size:14px;line-height:1.7;color:{COLOR_TEXT};">{top_reason}{("（" + str(top_reason_count) + " 只）") if top_reason_count else ""}</div>
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
+
+def page_today(df_all: pd.DataFrame) -> None:
     # 合并多个数据源的日期
     all_dates = _collect_available_dates()
     if not all_dates:
@@ -1201,17 +1846,11 @@ def page_today(df_all: pd.DataFrame) -> None:
     # 筛选 trade_review 记录
     df = df_all[df_all["report_date"] == sel_date].copy() if not df_all.empty else pd.DataFrame()
 
+    render_today_terminal_home(sel_date, df)
+
     if df.empty:
         # 有 V1.6 非推荐记录（如 market_daily / tomorrow_plan / t_signal），
         # 但 trade_review.csv 无当日推荐/买入记录
-        status_banner(
-            f"{_date_fmt(sel_date)} 无候选 / 买入确认记录，"
-            f"但存在市场复盘 / 明日计划 / T 信号等记录。",
-            "info",
-        )
-        render_today_empty_hero(sel_date)
-        # 依然展示 V1.6 旁路数据摘要
-        _render_today_sidebar_data(sel_date)
         return
 
     df = enrich_df(df)
@@ -1219,119 +1858,36 @@ def page_today(df_all: pd.DataFrame) -> None:
         status_banner(f"{_date_fmt(sel_date)} 无推荐数据。", "info")
         return
 
-    _render_simulated_pollution_warning(df, scope=f"{_date_fmt(sel_date)} 推荐记录")
-
-    # 顶部状态横幅
+    # 渲染英雄区和状态横幅
     render_today_banner(df, sel_date)
-
-    # 今日结论
-    state        = compute_today_state(df)
-    bought_names = [r["stock_name"] for _, r in df.iterrows() if is_bought(r)]
-    bought_txt   = "、".join(_eh(n) for n in bought_names) if bought_names else "无"
-    n_nobuy      = state["checked"] - state["bought"]
-    n_uncheck    = state["total"] - state["checked"]
-    conclusion = (
-        f"今日推荐 <b>{state['total']}</b> 只 ｜ "
-        f"9:36 已查 <b>{state['checked']}</b> 只 ｜ "
-        f"模拟买入 <b style='color:{COLOR_BOUGHT};'>{state['bought']}</b> 只（{bought_txt}）｜ "
-        f"未买入 <b>{n_nobuy}</b> 只 ｜ "
-        f"未检查 <b>{n_uncheck}</b> 只 ｜ "
-        f"等待 T+1 <b style='color:{COLOR_WAIT_T1};'>{state['waiting_t1']}</b> 只"
-    )
-    st.markdown(
-        f"<div style='background:{COLOR_CARD};border:1px solid {COLOR_BORDER};"
-        f"border-radius:8px;padding:12px 16px;margin-bottom:14px;font-size:13px;"
-        f"color:{COLOR_TEXT};'>📋 <b>今日结论：</b>{conclusion}</div>",
-        unsafe_allow_html=True,
-    )
-
-    plain_text = generate_today_plain_conclusion(df, state, bought_names)
+    state = compute_today_state(df)
+    bought = df[df.apply(lambda r: _gb(r.get("buy_signal_0935")) is True, axis=1)]
+    bought_names = [_eh(r.get("stock_name", "")) for _, r in bought.iterrows() if _eh(r.get("stock_name", ""))]
+    top_reasons = _count_main_reasons(df)
+    top_reason_text = top_reasons[0][0] if top_reasons else "暂无"
+    plain_text = f"今日推荐 {state['total']} 只，已确认买入 {len(bought)} 只。主要未买入原因：{top_reason_text}"
     render_today_hero(df, sel_date, state, plain_text, bought_names)
-
-    # KPI 卡片（5个）
-    cols = st.columns(5)
-    kpis = [
-        ("今日推荐",  state["total"],         COLOR_TEXT,    "本日所有推荐票"),
-        ("9:36 已查", state["checked"],       COLOR_TEXT,    "已完成9:36检查"),
-        ("模拟买入",  state["bought"],        COLOR_BOUGHT,  "buy_signal_0935=true"),
-        ("二次观察",  state["second_check"],  COLOR_SECOND,  "10:00 二次确认"),
-        ("等待 T+1",  state["waiting_t1"],    COLOR_WAIT_T1, "已买入待 T+1 数据"),
-    ]
-    for col, (label, val, color, sub) in zip(cols, kpis):
-        col.markdown(kpi_card(label, val, color, sub), unsafe_allow_html=True)
-
-    ms = _gf(df["market_sentiment"].iloc[0])
-    if ms is not None:
-        st.markdown(
-            f"<div style='margin-top:14px;font-size:13px;color:{COLOR_MUTED};'>"
-            f"当日大盘情绪：<b style='color:{COLOR_TEXT};'>{ms:.1f}/10</b></div>",
-            unsafe_allow_html=True,
-        )
-
-    st.divider()
-
-    # —— 今日买入名单 ——
-    df_bought = df[df.apply(is_bought, axis=1)]
-    st.markdown(f"### ✅ 今日已模拟买入（{len(df_bought)} 只）")
-    if df_bought.empty:
-        st.caption("（今日无模拟买入）")
-    else:
-        for _, r in df_bought.iterrows():
-            st.markdown(stock_card(r, variant="bought"), unsafe_allow_html=True)
-
-    # —— Top3 不买原因 ——
-    top3 = _count_main_reasons(df)[:3]
-    if top3:
-        st.markdown("### 📉 今日不买原因 Top3")
-        for label, count, stocks in top3:
-            stocks_txt = "、".join(_eh(s) for s in stocks)
-            st.markdown(
-                f"<div style='background:{COLOR_CARD};border:1px solid {COLOR_BORDER};"
-                f"border-left:3px solid {COLOR_NO_BUY};border-radius:6px;padding:10px 14px;"
-                f"margin-bottom:8px;'>"
-                f"<div style='font-size:13px;color:{COLOR_TEXT};font-weight:600;'>{_eh(label)}</div>"
-                f"<div style='font-size:12px;color:{COLOR_MUTED};margin-top:4px;'>"
-                f"共 <b>{count}</b> 次　涉及：{stocks_txt}</div>"
-                f"</div>",
-                unsafe_allow_html=True,
-            )
-
-    # —— 二次观察名单 ——
-    df_sec = df[df.apply(has_sec_check, axis=1)]
-    if not df_sec.empty:
-        st.markdown(f"### 👀 今日二次观察（{len(df_sec)} 只 · 仅观察不买入）")
-        for _, r in df_sec.iterrows():
-            st.markdown(stock_card(r, variant="observe"), unsafe_allow_html=True)
-
-    # —— 下一步 ——
-    if state["waiting_t1"] > 0:
-        next_step = f"等待 T+1 收盘后自动复盘 {state['waiting_t1']} 只买入票（无需手动操作）"
-    elif state["bought"] > 0 and state["done_t1"] > 0:
-        next_step = "全部 T+1 复盘已完成，可查看「T+1 复盘」页"
-    elif state["bought"] == 0 and state["checked"] == state["total"]:
-        next_step = "今日策略无票，无需操作；明日 08:50 自动开始下一轮"
-    elif state["checked"] < state["total"]:
-        next_step = "等待 9:36 自动跑买入确认"
-    else:
-        next_step = "无需手动操作"
-    st.markdown(
-        f"<div style='background:{COLOR_CARD_ALT};border:1px solid {COLOR_BORDER_SOFT};"
-        f"border-radius:6px;padding:10px 14px;margin-top:14px;font-size:13px;color:{COLOR_TEXT};'>"
-        f"⏭ <b>下一步：</b>{next_step}</div>",
-        unsafe_allow_html=True,
-    )
 
 
 # ─── PAGE 2: 买入确认（三段式）───────────────────────────────────────
 
 def page_buy_check(df_all: pd.DataFrame) -> None:
-    st.markdown("## ✅ 买入确认")
-
     if df_all.empty:
         status_banner("当前无数据。", "info")
         return
 
     dates_all = sorted(df_all["report_date"].unique().tolist(), reverse=True)
+    render_page_header(
+        "Execution Review",
+        "买入确认",
+        "把所有推荐票按当日执行结果拆成已买入、值得继续观察和直接放弃三段，方便快速判断策略当天的执行质量。",
+        badges=[f"可选日期 {len(dates_all)}", "9:36 检查", "只读回看"],
+        aside_title="Review Lens",
+        aside_body=(
+            "这一页不改任何交易结果，只把已有记录按执行结论分层展示。<br>"
+            "先看结构分布，再看每只票的原因。"
+        ),
+    )
     sel_dates = st.multiselect(
         "推荐日期", options=dates_all, default=dates_all[:3], format_func=_date_fmt,
     )
@@ -1350,6 +1906,11 @@ def page_buy_check(df_all: pd.DataFrame) -> None:
     df_observe = df[df.apply(is_worth_observing, axis=1)]
     df_drop    = df[df.apply(is_hard_drop, axis=1)]
 
+    top = st.columns(3)
+    top[0].markdown(kpi_card("已买入", len(df_bought), COLOR_BOUGHT, "形成执行信号"), unsafe_allow_html=True)
+    top[1].markdown(kpi_card("值得观察", len(df_observe), COLOR_SECOND, "可继续观察/二次确认"), unsafe_allow_html=True)
+    top[2].markdown(kpi_card("直接放弃", len(df_drop), COLOR_DROP, "硬性不符合条件"), unsafe_allow_html=True)
+
     # —— 顶部柔和颜色柱状图（不再用大面积红色）——
     counts = pd.DataFrame([
         {"分类": "已买入",   "数量": len(df_bought)},
@@ -1366,7 +1927,7 @@ def page_buy_check(df_all: pd.DataFrame) -> None:
         },
         text="数量", height=200,
     )
-    fig.update_layout(**_plotly_cream_layout(
+    fig.update_layout(**_plotly_terminal_layout(
         showlegend=False, xaxis_title=None, yaxis_title=None,
     ))
     fig.update_traces(textposition="outside",
@@ -1468,14 +2029,23 @@ def _resolve_settlement(row) -> Tuple[str, str]:
 
 
 def page_t1_review(df_all: pd.DataFrame) -> None:
-    st.markdown("## 🔄 T+1 复盘")
-
     if df_all.empty:
         status_banner("当前无数据。", "info")
         return
 
     df = enrich_df(df_all.copy())
     df_bought = df[df.apply(is_bought, axis=1)]
+    render_page_header(
+        "Outcome Audit",
+        "T+1 复盘",
+        "聚焦已经触发模拟买入的样本，查看次日结果、止损触发和风险调整后的真实质量。这一页只读，不改任何结算规则。",
+        badges=["只看已买入样本", "T+1 结果", "风险调整成功率"],
+        aside_title="Audit Scope",
+        aside_body=(
+            "样本来源：已经触发 <code>buy_signal_0935</code> 的记录。<br>"
+            "页面只展示结果解释与统计，不回写任何字段。"
+        ),
+    )
 
     if df_bought.empty:
         status_banner("尚无任何模拟买入记录。", "info")
@@ -1698,7 +2268,7 @@ def page_t1_review(df_all: pd.DataFrame) -> None:
             textposition="outside",
             textfont=dict(color=COLOR_TEXT),
         )
-        fig.update_layout(**_plotly_cream_layout(
+        fig.update_layout(**_plotly_terminal_layout(
             showlegend=False, yaxis_tickformat=".0%",
             coloraxis_colorbar=dict(tickfont=dict(color=COLOR_TEXT)),
         ))
@@ -1717,7 +2287,7 @@ def page_t1_review(df_all: pd.DataFrame) -> None:
             textposition="outside",
             textfont=dict(color=COLOR_TEXT),
         )
-        fig.update_layout(**_plotly_cream_layout(yaxis_tickformat=".0%"))
+        fig.update_layout(**_plotly_terminal_layout(yaxis_tickformat=".0%"))
         st.plotly_chart(fig, width="stretch")
 
     st.markdown("##### 成功 / 失败统计")
@@ -1819,7 +2389,7 @@ def page_not_bought(df_all: pd.DataFrame) -> None:
                 color_discrete_sequence=[COLOR_NO_BUY],
                 height=max(220, 38 * len(rdf) + 80),
             )
-            fig.update_layout(**_plotly_cream_layout(
+            fig.update_layout(**_plotly_terminal_layout(
                 yaxis=dict(autorange="reversed"),
                 xaxis_title=None, yaxis_title=None,
             ))
@@ -2062,8 +2632,8 @@ def page_period_review(df_all: pd.DataFrame) -> None:
     """
     if top_reason:
         code, data = top_reason[0]
-        cn_reason = _reason_zh(code)
-        stocks_txt = "、".join(data["stocks"][:3])
+        cn_reason = _eh(_reason_zh(code))
+        stocks_txt = "、".join(_eh(s) for s in data["stocks"][:3])
         if len(data["stocks"]) > 3:
             stocks_txt += "…"
         scorecard_html += (
@@ -2144,7 +2714,7 @@ def page_period_review(df_all: pd.DataFrame) -> None:
         color_discrete_map={"全A": COLOR_FULL, "主题龙头": COLOR_THEME},
         text="值", height=300,
     )
-    fig.update_layout(**_plotly_cream_layout(
+    fig.update_layout(**_plotly_terminal_layout(
         xaxis_title=None, yaxis_title=None,
         legend=dict(font=dict(color=COLOR_TEXT)),
     ))
@@ -2163,7 +2733,7 @@ def page_period_review(df_all: pd.DataFrame) -> None:
     top_reasons = _count_main_reasons(df)
     if top_reasons:
         for i, (label, cnt, stocks) in enumerate(top_reasons[:10], 1):
-            stocks_txt = "、".join(stocks[:6])
+            stocks_txt = "、".join(_eh(s) for s in stocks[:6])
             if len(stocks) > 6:
                 stocks_txt += f"… 等共 {len(stocks)} 只"
             st.markdown(
@@ -2171,7 +2741,7 @@ def page_period_review(df_all: pd.DataFrame) -> None:
                 f"border-left:3px solid {COLOR_NO_BUY};border-radius:6px;"
                 f"padding:10px 14px;margin-bottom:6px;'>"
                 f"<div style='font-size:13px;color:{COLOR_TEXT};'>"
-                f"<b>{i}. {label}</b>："
+                f"<b>{i}. {_eh(label)}</b>："
                 f"<b style='color:{COLOR_WAIT_T1};'>{cnt} 次</b>"
                 f"</div>"
                 f"<div style='font-size:12px;color:{COLOR_MUTED};margin-top:4px;'>"
@@ -4073,7 +4643,7 @@ def _lifecycle_render_market_env_section(daily: Optional[dict]) -> None:
 
     # —— 右栏：复盘观察口径 ——
     env_verdict  = _md_get(daily, "market_env_verdict", "未知")
-    env_desc     = _md_get(daily, "market_env_desc", "—")
+    env_desc     = _friendly_market_env_desc(_md_get(daily, "market_env_desc", "—"))
     data_status  = _md_get(daily, "sentiment_data_status", "missing")
     detail_avail = _md_get(daily, "sentiment_detail_available", "False")
     weak_flag    = _md_get(daily, "weak_breadth_flag", "")
@@ -4609,13 +5179,16 @@ def _tp_status_card(title: str, value: str, desc: str, level: str = "info") -> s
         "neutral": (COLOR_MUTED,   COLOR_CARD),
     }
     accent, bg = level_map.get(level, level_map["info"])
+    title = _eh(title, "—")
+    value = _eh(value or "—", "—")
+    desc = _eh(desc, "—")
     return (
         f"<div style='background:{bg};border:1px solid {COLOR_BORDER};"
         f"border-left:4px solid {accent};border-radius:8px;"
         f"padding:12px 14px;min-height:118px;margin-bottom:10px;'>"
         f"<div style='font-size:12px;color:{COLOR_MUTED};line-height:1.4;'>{title}</div>"
         f"<div style='font-size:20px;font-weight:750;color:{COLOR_TEXT};"
-        f"line-height:1.45;margin-top:4px;'>{value or '—'}</div>"
+        f"line-height:1.45;margin-top:4px;'>{value}</div>"
         f"<div style='font-size:12.5px;color:{COLOR_TEXT};line-height:1.55;"
         f"margin-top:8px;'>{desc}</div>"
         f"</div>"
@@ -4655,19 +5228,12 @@ def _tp_risk_desc(risk: str) -> tuple:
     return "风险等级需要人工确认。", "info"
 
 
-def _tp_allowed_themes_desc(themes: list, sector_status: str, trade_permission: str = "只观察") -> tuple:
-    perm = (trade_permission or "只观察").strip()
+def _tp_allowed_themes_desc(themes: list, sector_status: str) -> tuple:
     if (sector_status or "").strip() != "ok":
-        return "主线数据不可信，明日不应按主线方向放行。", "bad"
-    if not themes:
-        return "明日没有明确观察方向，建议降低预期。", "warn"
-    if perm == "只观察":
-        return "以下方向为今日领涨，仅作明日观察池，不代表可买，市场退潮下不建议追高。", "warn"
-    if perm in ("小仓试错", "只做主线核心"):
-        return "以下方向为小仓试错观察池，仍需 9:36 技术确认。", "warn"
-    if perm == "正常交易":
-        return "以下方向为明日重点观察方向，需经 9:36 技术确认层后才可买入。", "ok"
-    return "以下方向供人工参考，不构成买入建议。", "info"
+        return "明日主线方向不可信/为空，明日不应按主线放行。", "bad"
+    if themes:
+        return "这些方向来自 V1.6 复盘计划层，只代表明日重点观察方向。", "ok"
+    return "明日没有明确主线方向，建议降低预期。", "warn"
 
 
 def _tp_run_subprocess(label: str, cmd_list: list, timeout: int) -> dict:
@@ -4937,10 +5503,16 @@ def _tp_save_plan_with_edits(orig_plan: dict, edits: dict) -> tuple:
 
 def page_tomorrow_plan() -> None:
     """📌 V1.6 明日交易计划：一键生成 + 查看 + 人工编辑 + 一键确认。"""
-    st.markdown("## 📌 明日交易计划")
-    st.caption(
-        "V1.6 复盘计划驱动第二天选股。**计划看好 ≠ 直接买入**；"
-        "第二天 9:36 仍由 V1.6 三层（复盘计划层 + 资金条件层（观察模式）+ 9:36 技术确认层）共同决定是否模拟买入。"
+    render_page_header(
+        "Plan Console",
+        "明日交易计划",
+        "这里管理第二天的交易计划、人工确认和复盘四件套触发。计划看好不等于直接买入，第二天仍需经过完整确认链路。",
+        badges=["复盘计划层", "人工确认", "只读 + 手动生成"],
+        aside_title="Control Notes",
+        aside_body=(
+            "这页负责生成、审阅和确认计划文案。<br>"
+            "第二天是否形成模拟买入，仍取决于 V1.6 的完整检查流程。"
+        ),
     )
 
     # —— 加载 plan + v16 配置 ——
@@ -4971,7 +5543,7 @@ def page_tomorrow_plan() -> None:
         sector_label, sector_desc, sector_level = _tp_sector_desc(sector_status)
         perm_desc, perm_level = _tp_permission_desc(perm)
         risk_desc, risk_level = _tp_risk_desc(risk)
-        themes_desc, themes_level = _tp_allowed_themes_desc(allowed, sector_status, perm)
+        themes_desc, themes_level = _tp_allowed_themes_desc(allowed, sector_status)
 
         st.caption(f"复盘日：{rd} ｜ 市场状态：{state} ｜ 人工确认：{'待确认' if need_rv else reviewed_at}")
         c1, c2, c3 = st.columns(3)
@@ -4992,17 +5564,8 @@ def page_tomorrow_plan() -> None:
             _tp_status_card("风险等级", risk, risk_desc, risk_level),
             unsafe_allow_html=True,
         )
-        # 根据交易权限决定方向卡片标题
-        if perm == "只观察":
-            themes_label = "今日领涨观察池"
-        elif perm in ("小仓试错", "只做主线核心"):
-            themes_label = "小仓试错观察方向"
-        elif perm == "正常交易":
-            themes_label = "重点观察方向"
-        else:
-            themes_label = "明日观察方向"
         c5.markdown(
-            _tp_status_card(themes_label, allowed_value, themes_desc, themes_level),
+            _tp_status_card("明日主线方向", allowed_value, themes_desc, themes_level),
             unsafe_allow_html=True,
         )
         c6.markdown(
@@ -5031,14 +5594,6 @@ def page_tomorrow_plan() -> None:
         if sector_status != "ok":
             status_banner(
                 "⚠️ 明日主线方向不可信/为空，明日不应按主线放行。",
-                "warning",
-            )
-
-        # —— 追高/一日游风险提示 ——
-        if state in ("退潮", "数据不足") or risk in ("高",):
-            status_banner(
-                "当前不适合根据今日涨幅直接追高。今日领涨板块可能存在一日游或资金避险轮动风险，"
-                "应等待下一交易日盘中确认，不直接追买。",
                 "warning",
             )
 
@@ -5112,30 +5667,23 @@ def page_tomorrow_plan() -> None:
                 st.rerun()
 
     with col_b:
-        st.markdown("**生成 V1.6 盘后复盘流程**")
+        st.markdown("**生成 V1.6 复盘四件套**")
         st.caption(
-            "依次执行：盘后板块快照 → 市场赚钱效应复盘 → "
-            "持仓/止损后跟踪 → 明日交易计划。",
+            "依次执行：build_board_eod_cache → build_market_daily → "
+            "build_post_stop_tracking → build_tomorrow_plan --merge-keep-manual。"
         )
-        with st.expander("📄 查看具体脚本"):
-            st.caption(
-                "1. scripts/build_board_eod_cache.py → 盘后板块快照\n"
-                "2. scripts/build_market_daily.py → 市场赚钱效应复盘\n"
-                "3. scripts/build_post_stop_tracking.py → 持仓/止损后跟踪\n"
-                "4. scripts/build_tomorrow_plan.py → 明日交易计划"
-            )
         pipe_locked, pipe_lock_ts = _is_locked(REVIEW_PIPELINE_KEY)
         if pipe_locked:
             age = int(time.time() - pipe_lock_ts) if pipe_lock_ts else 0
             st.caption(f"⏳ 正在运行中（已 {age} 秒）...")
 
-        if st.button("🚀 一键生成 V1.6 盘后复盘流程", key="btn_build_pipeline",
+        if st.button("🚀 一键生成 V1.6 复盘四件套", key="btn_build_pipeline",
                      disabled=pipe_locked, width="stretch"):
             if _acquire_lock(REVIEW_PIPELINE_KEY):
                 try:
                     results = []
                     board_failed = False
-                    with st.spinner("正在依次执行 V1.6 盘后复盘流程... (最长 240 秒)"):
+                    with st.spinner("正在依次执行 V1.6 复盘四件套... (最长 240 秒)"):
                         for label, cmd, timeout, stop_on_fail in [
                             (
                                 "build_board_eod_cache",
@@ -5189,18 +5737,12 @@ def page_tomorrow_plan() -> None:
                     "error",
                 )
             status_banner(
-                f"V1.6 盘后复盘流程执行：{sum(1 for r in results if r['returncode']==0)}/{len(results)} 成功",
+                f"V1.6 复盘四件套执行：{sum(1 for r in results if r['returncode']==0)}/{len(results)} 成功",
                 "success" if all_ok else "error",
             )
             for r in results:
-                label_cn = {
-                    "build_board_eod_cache": "盘后板块快照",
-                    "build_market_daily": "市场赚钱效应复盘",
-                    "build_post_stop_tracking": "持仓/止损后跟踪",
-                    "build_tomorrow_plan": "明日交易计划",
-                }.get(r['label'], r['label'])
                 emoji = "✅" if r["returncode"] == 0 else "❌"
-                with st.expander(f"{emoji} {label_cn}（{r['duration_s']}s）",
+                with st.expander(f"{emoji} {r['label']}（{r['duration_s']}s, exit={r['returncode']}）",
                                  expanded=False):
                     if r.get("stdout"): st.code(r["stdout"], language="text")
                     if r.get("stderr"): st.code(r["stderr"], language="text")
@@ -5374,7 +5916,6 @@ def _ts_load_signals() -> Optional[pd.DataFrame]:
 
 
 def _tt_load_latest() -> Optional[pd.DataFrame]:
-    """Load latest T-trade CSV; return None if missing/empty."""
     if not T_TRADE_LATEST.exists():
         return None
     try:
@@ -5385,7 +5926,6 @@ def _tt_load_latest() -> Optional[pd.DataFrame]:
 
 
 def _tt_load_bs_log(report_date: str) -> Optional[pd.DataFrame]:
-    """Load dated B/S log by report_date; return None if missing/empty."""
     if not report_date:
         return None
     path = T_TRADE_DIR / f"t_bs_log_{report_date}.csv"
@@ -5398,27 +5938,26 @@ def _tt_load_bs_log(report_date: str) -> Optional[pd.DataFrame]:
         return None
 
 
-def _tt_infer_data_mode(df: pd.DataFrame) -> pd.Series:
-    if "data_mode" in df.columns:
-        mode = df["data_mode"].astype(str).str.strip().str.lower()
-        return mode.where(mode.ne(""), "real")
-    joined = (
-        df.get("source", pd.Series("", index=df.index)).astype(str)
-        + " "
-        + df.get("stock_name", pd.Series("", index=df.index)).astype(str)
-        + " "
-        + df.get("observer_note", pd.Series("", index=df.index)).astype(str)
-        + " "
-        + df.get("note", pd.Series("", index=df.index)).astype(str)
-    )
-    return joined.str.lower().map(lambda s: "sample" if ("样例" in s or "sample" in s) else "real")
+def _tt_num(val, default: float = 0.0) -> float:
+    parsed = pd.to_numeric(pd.Series([val]), errors="coerce").iloc[0]
+    return float(parsed) if pd.notna(parsed) else default
+
+
+def _tt_data_mode(row) -> str:
+    raw = str(row.get("data_mode", "")).strip().lower()
+    if raw in ("real", "sample"):
+        return raw
+    joined = " ".join(str(row.get(k, "")) for k in ("source", "stock_name", "observer_note", "note"))
+    return "sample" if ("样例" in joined or "sample" in joined.lower()) else "real"
 
 
 def _tt_filter_mode(df: Optional[pd.DataFrame], show_sample: bool) -> Optional[pd.DataFrame]:
     if df is None or df.empty:
         return df
     data = df.copy()
-    data["data_mode"] = _tt_infer_data_mode(data)
+    if "data_mode" not in data.columns:
+        data["data_mode"] = data.apply(_tt_data_mode, axis=1)
+    data["data_mode"] = data["data_mode"].astype(str).str.strip().str.lower().replace({"": "real"})
     if not show_sample:
         data = data[data["data_mode"] == "real"]
     return data
@@ -5487,863 +6026,1240 @@ def _ts_bool_cn(val, t_val: str = "是", f_val: str = "否") -> str:
 
 
 def page_t_signal() -> None:
-    """📈 做 T 观察记录 — 只读 output/t_signal/ 展示 T 信号观察结果。"""
-    st.markdown("## 📈 做 T 观察记录")
-    st.caption(
-        "V1.6 旁路模块：只识别和记录 T 信号，不自动买卖，不插入 9:36 买入主链。"
+    """📈 做 T 观察记录 — 信号 + T 交易记录 + B/S 点统计。"""
+    render_page_header(
+        title="做 T 观察",
+        description="第二阶段会记录 B/S 点、止盈止损、盈亏统计，但仍然只是模拟观察，不接券商、不自动下单。",
+        kicker="T EXECUTION LAB",
+        badges=["SIMULATE ONLY", "V1.6 SIDE MODULE"],
+        aside_title="执行边界",
+        aside_body="当前为做 T 模拟记录，不构成自动买卖指令。<br>任何买卖均未提交订单，can_execute_live 固定为 False。",
     )
-    st.caption("当前为做 T 模拟记录，不构成自动买卖指令。")
 
-    df = _ts_load_signals()
-
-    if df is None:
-        status_banner(
-            "暂无做 T 信号记录。当前模块仅为模拟观察，不会自动买卖。",
-            "info",
-        )
-        return
-
-    # ── 0. 区分真实信号与测试样例 ──────────────────────────────────
-    is_sample_mask = df.get("data_mode", pd.Series(dtype=str)).astype(str).str.lower().isin(
-        ("sample", "test")
-    ) if "data_mode" in df.columns else pd.Series([False]*len(df))
-    df_real = df[~is_sample_mask].copy()
-    df_sample = df[is_sample_mask].copy()
-
-    # ── 0.5 测试样例显示开关 ─────────────────────────────────────────
-    show_sample = st.checkbox("显示测试样例记录", value=False,
-                              help="勾选后显示本地测试样例 T 信号（仅用于规则验证）")
-    if show_sample:
-        display_df = pd.concat([df_real, df_sample], ignore_index=True)
-        status_banner(
-            "当前显示的是本地测试样例 T 信号，仅用于规则验证，"
-            "不代表真实行情，不构成自动买卖指令。",
-            "warning",
-        )
-    else:
-        display_df = df_real.copy()
-
-    if display_df.empty:
-        if not df_real.empty:
-            st.info("无匹配真实 T 信号记录。")
-            return
-        if not df_sample.empty and not show_sample:
-            status_banner(
-                "暂无真实做 T 信号记录。当前测试样例已隐藏；"
-                "测试样例仅用于规则验证，不代表真实行情。",
-                "info",
-            )
-            return
-        status_banner(
-            "暂无做 T 信号记录。当前模块仅为模拟观察，不会自动买卖。",
-            "info",
-        )
-        return
-
-    # ── 1. 安全检测（基于 display_df） ──────────────────────────────
-    all_simulate = all(
-        str(v).strip().lower() == "simulate"
-        for v in display_df.get("execution_mode", pd.Series(dtype=str))
-    ) if not display_df.empty else True
-    all_live_blocked = all(
-        str(v).strip().lower() == "false"
-        for v in display_df.get("can_execute_live", pd.Series(dtype=str))
-    ) if not display_df.empty else True
-    all_not_submitted = all(
-        str(v).strip().lower() == "not_submitted"
-        for v in display_df.get("order_status", pd.Series(dtype=str))
-    ) if not display_df.empty else True
-    all_broker_disconnected = all(
-        str(v).strip().lower() == "not_connected"
-        for v in display_df.get("broker_status", pd.Series(dtype=str))
-    ) if not display_df.empty else True
-    safety_ok = all_simulate and all_live_blocked and all_not_submitted and all_broker_disconnected
-
-    # ── 2. 顶部状态卡（仅统计真实信号） ──────────────────────────────
-    total_real = len(df_real)
-    n_low_real = int((df_real.get("signal_type", "") == "low_absorb").sum()) if not df_real.empty else 0
-    n_high_real = int((df_real.get("signal_type", "") == "high_throw").sum()) if not df_real.empty else 0
-    n_pass_real = int(df_real.get("rule_pass", pd.Series(dtype=str)).astype(str).str.lower().isin(
-        ("true", "1")).sum()) if not df_real.empty else 0
-    n_fail_real = total_real - n_pass_real
-
-    st.markdown("### 📊 今日真实 T 信号")
-    if not df_sample.empty:
-        st.caption(f"另有 {len(df_sample)} 条测试样例记录（已隐藏，可勾选显示）")
-
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.markdown(kpi_card("真实信号总数", total_real, COLOR_TEXT), unsafe_allow_html=True)
-    c2.markdown(kpi_card("低吸信号", n_low_real, "#1F883D"), unsafe_allow_html=True)
-    c3.markdown(kpi_card("高抛信号", n_high_real, "#B91C1C"), unsafe_allow_html=True)
-    c4.markdown(kpi_card("规则通过", n_pass_real, "#1F883D"), unsafe_allow_html=True)
-    c5.markdown(kpi_card("规则未通过", n_fail_real, "#9A6700"), unsafe_allow_html=True)
-
-    with st.expander("🔒 安全状态检查", expanded=True):
-        safe_color = "#1F883D" if safety_ok else "#B91C1C"
-        safe_icon = "✅" if safety_ok else "⚠️"
-        safe_text = "全部正常" if safety_ok else "检测到异常"
-        st.markdown(
-            f"<div style='font-size:16px;font-weight:600;color:{safe_color};'>"
-            f"{safe_icon}　{safe_text}</div>",
-            unsafe_allow_html=True,
-        )
-        sc1, sc2, sc3, sc4 = st.columns(4)
-        sc1.metric("execution_mode", "全部 simulate" if all_simulate else "❌ 异常",
-                    delta_color="off")
-        sc2.metric("can_execute_live", "全部禁止" if all_live_blocked else "❌ 异常",
-                    delta_color="off")
-        sc3.metric("order_status", "全部未提交" if all_not_submitted else "❌ 异常",
-                    delta_color="off")
-        sc4.metric("broker_status", "全部未连接" if all_broker_disconnected else "❌ 异常",
-                    delta_color="off")
-
-    # ── 3. 安全提示横幅 ──────────────────────────────────────────────
     status_banner(
-        "当前仅为做 T 信号模拟记录，不构成自动买卖指令。",
+        "当前为做 T 模拟记录，不构成自动买卖指令。",
         "warning",
     )
-    if not safety_ok:
-        status_banner(
-            "检测到异常：T 信号记录出现可实盘执行字段，请检查。",
-            "error",
-        )
 
-    # ── 4. 筛选器 ────────────────────────────────────────────────────
-    st.markdown("### 🔍 筛选")
-
-    # report_date filter
-    dates = sorted(display_df["report_date"].unique(), reverse=True) if "report_date" in display_df.columns else []
-    sel_date = st.selectbox("报告日期", ["全部"] + dates, key="ts_date")
-
-    # signal_type filter
-    type_options = ["全部", "低吸 T", "高抛 T"]
-    sel_type = st.selectbox("信号类型", type_options, key="ts_type")
-
-    # rule_pass filter
-    pass_options = ["全部", "规则通过", "规则未通过"]
-    sel_pass = st.selectbox("规则状态", pass_options, key="ts_pass")
-
-    # stock_code search
-    sel_code = st.text_input("股票代码搜索", key="ts_code").strip()
-
-    # ── 5. 表格 ──────────────────────────────────────────────────────
-    display = display_df.copy()
-
-    if sel_date != "全部":
-        display = display[display["report_date"] == sel_date]
-
-    if sel_type != "全部":
-        target = "low_absorb" if sel_type == "低吸 T" else "high_throw"
-        display = display[display.get("signal_type", "") == target]
-
-    if sel_pass != "全部":
-        is_pass = sel_pass == "规则通过"
-        display = display[
-            display.get("rule_pass", pd.Series(dtype=str)).astype(str).str.lower().isin(("true", "1"))
-        ] if is_pass else display[
-            ~display.get("rule_pass", pd.Series(dtype=str)).astype(str).str.lower().isin(("true", "1"))
-        ]
-
-    if sel_code:
-        display = display[display.get("stock_code", "").astype(str).str.contains(sel_code)]
-
-    if display.empty:
-        st.info("无匹配信号记录。")
-        return
-
-    # ── 通用清洗函数：None/NaN/空 → "—" ──
-    def _cln(v):
-        """Convert None/NaN/empty/unknown/simulate to Chinese display."""
-        if v is None:
-            return "—"
-        s = str(v).strip().lower()
-        if s in ("", "nan", "none", "null"):
-            return "—"
-        return v
-
-    # ── 样例/真实分类 ──
-    is_sample_mask = display.get("data_mode", pd.Series(dtype=str)).astype(str).str.lower().isin(
-        ("sample", "test")
-    ) if "data_mode" in display.columns else pd.Series([False]*len(display))
-
-    # 逐行构建展示数据
-    show_rows = []
-    for idx in range(len(display)):
-        row = display.iloc[idx]
-        samp = is_sample_mask.iloc[idx] if idx < len(is_sample_mask) else False
-
-        # 规则通过状态
-        rule_pass_raw = str(row.get("rule_pass", "")).strip().lower()
-        rule_pass_ok = rule_pass_raw in ("true", "1")
-
-        # 失败原因：通过则为 "—"
-        fail_reason_raw = str(row.get("fail_reason", "")).strip()
-        if rule_pass_ok or not fail_reason_raw or fail_reason_raw in ("nan", "none", ""):
-            fail_reason_display = "—"
-        else:
-            fail_reason_display = _FAIL_REASON_CN.get(fail_reason_raw, fail_reason_raw)
-
-        # MA10
-        ma10_raw = str(row.get("ma10", "")).strip()
-        if samp and (not ma10_raw or ma10_raw in ("nan", "none", "")):
-            ma10_display = "样例未提供"
-        elif ma10_raw in ("", "nan", "none"):
-            ma10_display = "—"
-        else:
-            try:
-                ma10_display = round(float(ma10_raw), 2)
-            except (ValueError, TypeError):
-                ma10_display = "—"
-
-        # MA10向上
-        ma10_up_raw = str(row.get("ma10_slope_up", "")).strip().lower()
-        if samp:
-            if ma10_up_raw in ("true", "1"):
-                ma10_up_display = "✅ 样例向上"
-            else:
-                ma10_up_display = "样例未验证"
-        else:
-            if ma10_up_raw in ("true", "1"):
-                ma10_up_display = "✅ 向上"
-            elif ma10_up_raw in ("false", "0"):
-                ma10_up_display = "❌ 向下/未知"
-            else:
-                ma10_up_display = "—"
-
-        # 数值列（样例直接用字符串，真实转数值）
-        def _num_or_dash(v):
-            try:
-                return round(float(v), 2)
-            except (ValueError, TypeError):
-                return "—"
-
-        # 信号价格
-        price_raw = str(row.get("signal_price", "")).strip()
-        if price_raw in ("", "nan", "none"):
-            price_display = "—"
-        elif samp:
-            price_display = price_raw  # 已带"（样例）"
-        else:
-            price_display = _num_or_dash(price_raw)
-
-        show_rows.append({
-            "报告日期":  _cln(row.get("report_date", "")),
-            "股票代码":  _cln(row.get("stock_code", "")),
-            "股票名称":  _cln(row.get("stock_name", "")),
-            "数据模式":  "测试样例" if samp else ("真实数据" if str(row.get("data_mode", "")).strip().lower() == "real" else "—"),
-            "价格性质":  "样例价格" if str(row.get("price_is_real", "")).strip().lower() in ("false", "0") else ("真实价格" if str(row.get("price_is_real", "")).strip().lower() in ("true", "1") else "—"),
-            "名称性质":  "样例名称/未确认" if str(row.get("stock_name_is_real", "")).strip().lower() in ("false", "0") else ("真实名称" if str(row.get("stock_name_is_real", "")).strip().lower() in ("true", "1") else "—"),
-            "数据源":    "本地分钟样例" if "minute_sample" in str(row.get("source", "")).lower() else _cln(row.get("source", "")),
-            "信号时间":  _cln(row.get("signal_time", "")),
-            "信号类型":  {"low_absorb": "低吸 T", "high_throw": "高抛 T"}.get(str(row.get("signal_type", "")).strip(), _cln(row.get("signal_type", ""))),
-            "操作方向":  {"sim_buy": "模拟买入", "sim_sell": "模拟卖出"}.get(str(row.get("signal_side", "")).strip(), _cln(row.get("signal_side", ""))),
-            "信号价格":  price_display,
-            "规则通过":  "✅ 规则通过" if rule_pass_ok else "❌ 规则未通过",
-            "失败原因":  fail_reason_display,
-            "MA10":      ma10_display,
-            "MA10向上":  ma10_up_display,
-            "窗口(分钟)": _num_or_dash(row.get("window_minutes", "")),
-            "涨跌%":     _num_or_dash(row.get("move_pct", "")),
-            "放量倍数":  _num_or_dash(row.get("volume_multiple", "")),
-            "缩量比":    _num_or_dash(row.get("shrink_ratio", "")),
-            "缩量确认":  "是" if str(row.get("shrink_confirmed", "")).strip().lower() in ("true", "1") else "否",
-            "T仓位":     _cln(row.get("t_ratio", "")),
-            "持仓状态":  {"unknown": "—", "true": "有持仓", "1": "有持仓", "false": "无持仓", "0": "无持仓"}.get(str(row.get("has_position", "")).strip().lower(), _cln(row.get("has_position", ""))),
-            "可卖数量":  _cln(row.get("sellable_qty", "")),
-            "模拟T数量": _cln(row.get("sim_t_qty", "")),
-            "执行模式":  "模拟观察" if str(row.get("execution_mode", "")).strip().lower() == "simulate" else _cln(row.get("execution_mode", "")),
-            "允许实盘":  "否" if str(row.get("can_execute_live", "")).strip().lower() in ("false", "0") else ("⚠️ 是" if str(row.get("can_execute_live", "")).strip().lower() in ("true", "1") else "—"),
-            "实盘拦截原因": {"simulated_observer_only": "模拟观察，不接实盘"}.get(str(row.get("live_block_reason", "")).strip(), _cln(row.get("live_block_reason", ""))),
-            "订单状态":  "未提交" if str(row.get("order_status", "")).strip().lower() == "not_submitted" else _cln(row.get("order_status", "")),
-            "券商状态":  "未连接" if str(row.get("broker_status", "")).strip().lower() == "not_connected" else _cln(row.get("broker_status", "")),
-            "备注":      _cln(row.get("observer_note", "")),
-        })
-
-    show = pd.DataFrame(show_rows)
-
-    st.markdown("### 📋 信号明细")
-    st.dataframe(show, width="stretch", hide_index=True)
-
-    # ── 6. T 交易记录（同样默认隐藏 sample）─────────────────────────
+    signals_raw = _ts_load_signals()
     trades_raw = _tt_load_latest()
+
+    show_sample = st.checkbox("显示样例数据", value=False, key="tt_show_sample")
+    signals = _tt_filter_mode(signals_raw, show_sample)
     trades = _tt_filter_mode(trades_raw, show_sample)
 
-    st.markdown("### 📒 今日 T 交易记录")
+    if signals is None or signals.empty:
+        if show_sample:
+            status_banner("暂无做 T 信号记录。", "info")
+        else:
+            status_banner("暂无真实 T 数据。勾选“显示样例数据”后可查看 sample 验证记录。", "info")
+        return
+
+    all_simulate = all(str(v).strip().lower() == "simulate" for v in signals.get("execution_mode", pd.Series(dtype=str)))
+    all_live_blocked = all(str(v).strip().lower() == "false" for v in signals.get("can_execute_live", pd.Series(dtype=str)))
+    all_not_submitted = all(str(v).strip().lower() == "not_submitted" for v in signals.get("order_status", pd.Series(dtype=str)))
+    all_broker_disconnected = all(str(v).strip().lower() == "not_connected" for v in signals.get("broker_status", pd.Series(dtype=str)))
+    trade_safety_ok = True
+    if trades is not None and not trades.empty:
+        trade_safety_ok = (
+            all(str(v).strip().lower() == "simulate" for v in trades.get("execution_mode", pd.Series(dtype=str))) and
+            all(str(v).strip().lower() == "false" for v in trades.get("can_execute_live", pd.Series(dtype=str))) and
+            all(str(v).strip().lower() == "not_submitted" for v in trades.get("order_status", pd.Series(dtype=str))) and
+            all(str(v).strip().lower() == "not_connected" for v in trades.get("broker_status", pd.Series(dtype=str)))
+        )
+    safety_ok = all_simulate and all_live_blocked and all_not_submitted and all_broker_disconnected and trade_safety_ok
+
+    if not safety_ok:
+        status_banner("检测到异常：做 T 记录里出现了疑似可实盘字段，请检查。", "error")
+
+    st.markdown("### 今日真实 T 信号")
+    total = len(signals)
+    n_low = int(signals.get("signal_type", "").astype(str).eq("low_absorb").sum())
+    n_high = int(signals.get("signal_type", "").astype(str).eq("high_throw").sum())
+    n_pass = int(signals.get("rule_pass", pd.Series(dtype=str)).astype(str).str.lower().isin(("true", "1")).sum())
+    n_fail = total - n_pass
+
+    s1, s2, s3, s4 = st.columns(4)
+    s1.markdown(kpi_card("今日 T 信号", total, COLOR_TEXT), unsafe_allow_html=True)
+    s2.markdown(kpi_card("低吸 T", n_low, "#1F883D"), unsafe_allow_html=True)
+    s3.markdown(kpi_card("高抛 T", n_high, COLOR_SECOND), unsafe_allow_html=True)
+    s4.markdown(kpi_card("规则通过", n_pass, "#1F883D"), unsafe_allow_html=True)
+    if n_fail > 0:
+        st.caption(f"当前还有 {n_fail} 条信号未通过规则确认。")
+
+    sig_show = pd.DataFrame()
+    sig_show["股票代码"] = signals.get("stock_code", "")
+    sig_show["股票名称"] = signals.get("stock_name", "")
+    sig_show["信号类型"] = signals.get("signal_type", "").map(lambda v: {"low_absorb": "低吸 T", "high_throw": "高抛 T"}.get(str(v), str(v)))
+    sig_show["信号时间"] = signals.get("signal_time", "")
+    sig_show["信号价格"] = signals.get("signal_price", "")
+    sig_show["规则通过"] = signals.get("rule_pass", "").map(lambda v: "✅ 规则通过" if str(v).strip().lower() in ("true", "1") else "❌ 未通过")
+    sig_show["失败原因"] = signals.get("fail_reason", "").map(lambda v: _FAIL_REASON_CN.get(str(v).strip(), str(v)))
+    sig_show["数据模式"] = signals.get("data_mode", "")
+    st.dataframe(sig_show, width="stretch", hide_index=True)
+
+    st.markdown("### 今日 T 交易记录")
     if trades is None or trades.empty:
         if show_sample:
             status_banner("当前还没有 T 交易记录。请先运行 build_t_trade_tracker.py。", "info")
         else:
-            status_banner("暂无真实 T 数据。当前默认不展示 sample T 交易记录。", "info")
-    else:
-        trade_safe = (
-            all(str(v).strip().lower() == "simulate" for v in trades.get("execution_mode", pd.Series(dtype=str)))
-            and all(str(v).strip().lower() == "false" for v in trades.get("can_execute_live", pd.Series(dtype=str)))
-            and all(str(v).strip().lower() == "not_submitted" for v in trades.get("order_status", pd.Series(dtype=str)))
-            and all(str(v).strip().lower() == "not_connected" for v in trades.get("broker_status", pd.Series(dtype=str)))
-        )
-        if not trade_safe:
-            status_banner("检测到异常：T 交易记录里出现了疑似可实盘字段，请检查。", "error")
+            status_banner("暂无真实 T 数据。当前默认不展示 sample 记录。", "info")
+        return
 
-        stats = _tt_trade_stats(trades)
-        t1, t2, t3, t4, t5, t6, t7 = st.columns(7)
-        t1.markdown(kpi_card("今日 T 笔数", stats["total"], COLOR_TEXT), unsafe_allow_html=True)
-        t2.markdown(kpi_card("已止盈笔数", stats["tp"], "#1F883D"), unsafe_allow_html=True)
-        t3.markdown(kpi_card("已止损笔数", stats["sl"], "#B91C1C"), unsafe_allow_html=True)
-        t4.markdown(kpi_card("未完成笔数", stats["open"], "#9A6700"), unsafe_allow_html=True)
-        t5.markdown(kpi_card("总收益率", f"{stats['return_sum'] * 100:.2f}%", COLOR_SECOND), unsafe_allow_html=True)
-        t6.markdown(kpi_card("模拟盈亏", f"{stats['pnl_sum']:.2f}", COLOR_TEXT), unsafe_allow_html=True)
-        t7.markdown(kpi_card("胜率", f"{stats['win_rate'] * 100:.1f}%", "#1F883D" if stats["win_rate"] >= 0.5 else "#9A6700"), unsafe_allow_html=True)
+    stats = _tt_trade_stats(trades)
+    t1, t2, t3, t4, t5, t6, t7 = st.columns(7)
+    t1.markdown(kpi_card("今日 T 笔数", stats["total"], COLOR_TEXT), unsafe_allow_html=True)
+    t2.markdown(kpi_card("已止盈笔数", stats["tp"], "#1F883D"), unsafe_allow_html=True)
+    t3.markdown(kpi_card("已止损笔数", stats["sl"], "#B91C1C"), unsafe_allow_html=True)
+    t4.markdown(kpi_card("未完成笔数", stats["open"], "#9A6700"), unsafe_allow_html=True)
+    t5.markdown(kpi_card("总收益率", f"{stats['return_sum'] * 100:.2f}%", COLOR_SECOND), unsafe_allow_html=True)
+    t6.markdown(kpi_card("模拟盈亏", f"{stats['pnl_sum']:.2f}", COLOR_TEXT), unsafe_allow_html=True)
+    t7.markdown(kpi_card("胜率", f"{stats['win_rate'] * 100:.1f}%", "#1F883D" if stats["win_rate"] >= 0.5 else "#9A6700"), unsafe_allow_html=True)
 
-        trade_show = pd.DataFrame()
-        trade_show["股票代码"] = trades.get("stock_code", "")
-        trade_show["股票名称"] = trades.get("stock_name", "")
-        trade_show["信号类型"] = trades.get("signal_type", "").map(
-            lambda v: {"low_absorb": "低吸 T", "high_throw": "高抛 T"}.get(str(v), str(v))
-        )
-        trade_show["B点时间"] = trades.apply(
-            lambda r: r.get("entry_time", "") if str(r.get("entry_point", "")) == "B" else r.get("exit_time", ""),
-            axis=1,
-        )
-        trade_show["B点价格"] = trades.apply(
-            lambda r: r.get("entry_price", "") if str(r.get("entry_point", "")) == "B" else r.get("exit_price", ""),
-            axis=1,
-        )
-        trade_show["S点时间"] = trades.apply(
-            lambda r: r.get("entry_time", "") if str(r.get("entry_point", "")) == "S" else r.get("exit_time", ""),
-            axis=1,
-        )
-        trade_show["S点价格"] = trades.apply(
-            lambda r: r.get("entry_price", "") if str(r.get("entry_point", "")) == "S" else r.get("exit_price", ""),
-            axis=1,
-        )
-        trade_show["止盈价"] = trades.apply(
-            lambda r: r.get("take_profit_price", "") if str(r.get("signal_type", "")) == "low_absorb" else r.get("buyback_price", ""),
-            axis=1,
-        )
-        trade_show["止损价"] = trades.apply(
-            lambda r: r.get("stop_loss_price", "") if str(r.get("signal_type", "")) == "low_absorb" else r.get("stop_buyback_price", ""),
-            axis=1,
-        )
-        trade_show["退出原因"] = trades.get("exit_reason", "")
-        trade_show["盈亏%"] = pd.to_numeric(trades.get("return_pct", ""), errors="coerce").map(
-            lambda v: f"{v * 100:.2f}%" if pd.notna(v) else ""
-        )
-        trade_show["状态"] = trades.get("trade_status", "")
-        trade_show["数据模式"] = trades.get("data_mode", "")
-        trade_show["是否实盘允许"] = trades.get("can_execute_live", "").map(
-            lambda v: "否" if str(v).strip().lower() in ("false", "0") else "⚠️ 是"
-        )
-        st.dataframe(trade_show, width="stretch", hide_index=True)
+    trade_show = pd.DataFrame()
+    trade_show["股票代码"] = trades.get("stock_code", "")
+    trade_show["股票名称"] = trades.get("stock_name", "")
+    trade_show["信号类型"] = trades.get("signal_type", "").map(lambda v: {"low_absorb": "低吸 T", "high_throw": "高抛 T"}.get(str(v), str(v)))
+    trade_show["B点时间"] = trades.apply(lambda r: r.get("entry_time", "") if str(r.get("entry_point", "")) == "B" else r.get("exit_time", ""), axis=1)
+    trade_show["B点价格"] = trades.apply(lambda r: r.get("entry_price", "") if str(r.get("entry_point", "")) == "B" else r.get("exit_price", ""), axis=1)
+    trade_show["S点时间"] = trades.apply(lambda r: r.get("entry_time", "") if str(r.get("entry_point", "")) == "S" else r.get("exit_time", ""), axis=1)
+    trade_show["S点价格"] = trades.apply(lambda r: r.get("entry_price", "") if str(r.get("entry_point", "")) == "S" else r.get("exit_price", ""), axis=1)
+    trade_show["止盈价"] = trades.apply(lambda r: r.get("take_profit_price", "") if str(r.get("signal_type", "")) == "low_absorb" else r.get("buyback_price", ""), axis=1)
+    trade_show["止损价"] = trades.apply(lambda r: r.get("stop_loss_price", "") if str(r.get("signal_type", "")) == "low_absorb" else r.get("stop_buyback_price", ""), axis=1)
+    trade_show["退出原因"] = trades.get("exit_reason", "")
+    trade_show["盈亏%"] = pd.to_numeric(trades.get("return_pct", ""), errors="coerce").map(lambda v: f"{v * 100:.2f}%" if pd.notna(v) else "")
+    trade_show["状态"] = trades.get("trade_status", "")
+    trade_show["数据模式"] = trades.get("data_mode", "")
+    trade_show["是否实盘允许"] = trades.get("can_execute_live", "").map(lambda v: "否" if str(v).strip().lower() in ("false", "0") else "⚠️ 是")
+    st.dataframe(trade_show, width="stretch", hide_index=True)
 
-        # ── 7. B/S 点与盈亏统计 ─────────────────────────────────────
-        report_date = ""
-        if "report_date" in trades.columns and not trades.empty:
-            report_date = str(trades["report_date"].iloc[0]).strip()
-        bs_log = _tt_filter_mode(_tt_load_bs_log(report_date), show_sample)
+    report_date = ""
+    if "report_date" in trades.columns and not trades.empty:
+        report_date = str(trades["report_date"].iloc[0]).strip()
+    bs_log = _tt_filter_mode(_tt_load_bs_log(report_date), show_sample)
 
-        st.markdown("### 🧭 B/S 点与盈亏统计")
-        if bs_log is None or bs_log.empty:
-            status_banner("当前还没有 B/S 点记录。", "info")
-        else:
-            b_points = bs_log[bs_log.get("point_type", "").astype(str).eq("B")]
-            s_points = bs_log[bs_log.get("point_type", "").astype(str).eq("S")]
-            bcol, scol = st.columns(2)
-            with bcol:
-                st.markdown("#### B 点列表")
-                b_show = pd.DataFrame()
-                b_show["股票代码"] = b_points.get("stock_code", "")
-                b_show["股票名称"] = b_points.get("stock_name", "")
-                b_show["B点原因"] = b_points.get("point_reason", "")
-                b_show["B点时间"] = b_points.get("point_time", "")
-                b_show["B点价格"] = b_points.get("point_price", "")
-                b_show["关联收益"] = pd.to_numeric(b_points.get("return_pct_after_exit", ""), errors="coerce").map(
-                    lambda v: f"{v * 100:.2f}%" if pd.notna(v) else ""
-                )
-                st.dataframe(b_show, width="stretch", hide_index=True)
-            with scol:
-                st.markdown("#### S 点列表")
-                s_show = pd.DataFrame()
-                s_show["股票代码"] = s_points.get("stock_code", "")
-                s_show["股票名称"] = s_points.get("stock_name", "")
-                s_show["S点原因"] = s_points.get("point_reason", "")
-                s_show["S点时间"] = s_points.get("point_time", "")
-                s_show["S点价格"] = s_points.get("point_price", "")
-                s_show["关联收益"] = pd.to_numeric(s_points.get("return_pct_after_exit", ""), errors="coerce").map(
-                    lambda v: f"{v * 100:.2f}%" if pd.notna(v) else ""
-                )
-                st.dataframe(s_show, width="stretch", hide_index=True)
+    st.markdown("### B/S 点与盈亏统计")
+    if bs_log is None or bs_log.empty:
+        status_banner("当前还没有 B/S 点记录。", "info")
+        return
 
-    # ── 8. 安全提示横幅（底部重复） ─────────────────────────────────
-    status_banner(
-        "当前仅为做 T 信号模拟记录，不构成自动买卖指令。",
-        "warning",
-    )
-    if not safety_ok:
-        status_banner(
-            "检测到异常：T 信号记录出现可实盘执行字段，请检查。",
-            "error",
-        )
+    b_points = bs_log[bs_log.get("point_type", "").astype(str).eq("B")]
+    s_points = bs_log[bs_log.get("point_type", "").astype(str).eq("S")]
+    bcol, scol = st.columns(2)
+    with bcol:
+        st.markdown("#### B 点列表")
+        b_show = pd.DataFrame()
+        b_show["股票代码"] = b_points.get("stock_code", "")
+        b_show["股票名称"] = b_points.get("stock_name", "")
+        b_show["B点原因"] = b_points.get("point_reason", "")
+        b_show["B点时间"] = b_points.get("point_time", "")
+        b_show["B点价格"] = b_points.get("point_price", "")
+        b_show["关联收益"] = pd.to_numeric(b_points.get("return_pct_after_exit", ""), errors="coerce").map(lambda v: f"{v * 100:.2f}%" if pd.notna(v) else "")
+        st.dataframe(b_show, width="stretch", hide_index=True)
+    with scol:
+        st.markdown("#### S 点列表")
+        s_show = pd.DataFrame()
+        s_show["股票代码"] = s_points.get("stock_code", "")
+        s_show["股票名称"] = s_points.get("stock_name", "")
+        s_show["S点原因"] = s_points.get("point_reason", "")
+        s_show["S点时间"] = s_points.get("point_time", "")
+        s_show["S点价格"] = s_points.get("point_price", "")
+        s_show["关联收益"] = pd.to_numeric(s_points.get("return_pct_after_exit", ""), errors="coerce").map(lambda v: f"{v * 100:.2f}%" if pd.notna(v) else "")
+        st.dataframe(s_show, width="stretch", hide_index=True)
 
-
-# ─── V1.6 ⭐ 自选股票池 ────────────────────────────────────────────────
-
-WATCHLIST_PATH = BASE_DIR / "data" / "watchlist" / "custom_stock_pool.csv"
 
 def _wl_load() -> list[dict]:
-    """Load watchlist CSV; return empty list if missing/invalid."""
     if not WATCHLIST_PATH.exists():
         return []
     try:
-        import csv
-        with open(WATCHLIST_PATH, encoding="utf-8-sig", newline="") as f:
-            return list(csv.DictReader(f))
+        return pd.read_csv(WATCHLIST_PATH, dtype=str, keep_default_na=False, encoding="utf-8-sig").to_dict("records")
     except Exception:
         return []
 
 
-def _wl_build_name_cache() -> tuple:
-    """
-    构建双向名称缓存。
-    返回 (code_to_name: dict, name_to_code: dict)
-
-    来源优先级（高→低）：
-      1. output/trade_review.csv（历史确认记录）
-      2. data/cache/stock_name_universe.csv（5524 只全市场索引）
-      3. data/watchlist/stock_name_cache.csv（手工修正兜底）
-    """
-    code_to_name: dict[str, str] = {}
-    name_to_code: dict[str, str] = {}
-
-    # 1) trade_review.csv（最高优先级：历史已确认记录）
-    for csv_path in [OUTPUT_DIR / "trade_review.csv", OUTPUT_DIR / "trade_review_cn.csv"]:
-        if csv_path.exists():
-            try:
-                import csv
-                with open(csv_path, encoding="utf-8-sig", newline="") as f:
-                    for r in csv.DictReader(f):
-                        code = str(r.get("stock_code", "")).strip().zfill(6)
-                        name = str(r.get("stock_name", "")).strip()
-                        if code and name and len(code) == 6:
-                            code_to_name[code] = name
-                            if name not in name_to_code:
-                                name_to_code[name] = code
-            except Exception:
-                pass
-
-    # 2) 全市场索引 stock_name_universe.csv（5524 只）
-    universe_path = BASE_DIR / "data" / "cache" / "stock_name_universe.csv"
-    if universe_path.exists():
-        try:
-            import csv
-            with open(universe_path, encoding="utf-8-sig", newline="") as f:
-                for r in csv.DictReader(f):
-                    code = str(r.get("代码", "") or r.get("stock_code", "")).strip().zfill(6)
-                    name = str(r.get("名称", "") or r.get("stock_name", "")).strip()
-                    if code and name and len(code) == 6:
-                        if code not in code_to_name:
-                            code_to_name[code] = name
-                        if name not in name_to_code:
-                            name_to_code[name] = code
-        except Exception:
-            pass
-
-    # 3) stock_name_cache.csv（手工修正兜底）
-    name_cache_path = BASE_DIR / "data" / "watchlist" / "stock_name_cache.csv"
-    if name_cache_path.exists():
-        try:
-            import csv
-            with open(name_cache_path, encoding="utf-8-sig", newline="") as f:
-                for r in csv.DictReader(f):
-                    code = str(r.get("stock_code", "")).strip().zfill(6)
-                    name = str(r.get("stock_name", "")).strip()
-                    if code and name and len(code) == 6:
-                        # 不覆盖已经存在的映射（以 trade_review 和 universe 为准）
-                        if code not in code_to_name:
-                            code_to_name[code] = name
-                        if name not in name_to_code:
-                            name_to_code[name] = code
-        except Exception:
-            pass
-
-    return code_to_name, name_to_code
-    """
-    构建双向名称缓存。
-    返回 (code_to_name: dict, name_to_code: dict)
-    来源：本地缓存文件 + trade_review 历史记录
-    """
-    code_to_name: dict[str, str] = {}
-    name_to_code: dict[str, str] = {}
-
-    # 1) 本地缓存文件 data/watchlist/stock_name_cache.csv（最高优先级）
-    name_cache_path = BASE_DIR / "data" / "watchlist" / "stock_name_cache.csv"
-    if name_cache_path.exists():
-        try:
-            import csv
-            with open(name_cache_path, encoding="utf-8-sig", newline="") as f:
-                for r in csv.DictReader(f):
-                    code = str(r.get("stock_code", "")).strip().zfill(6)
-                    name = str(r.get("stock_name", "")).strip()
-                    if code and name and len(code) == 6:
-                        code_to_name[code] = name
-                        name_to_code[name] = code
-        except Exception:
-            pass
-
-    # 2) trade_review.csv / trade_review_cn.csv（本地已确认记录）
-    for csv_path in [OUTPUT_DIR / "trade_review.csv", OUTPUT_DIR / "trade_review_cn.csv"]:
-        if csv_path.exists():
-            try:
-                import csv
-                with open(csv_path, encoding="utf-8-sig", newline="") as f:
-                    for r in csv.DictReader(f):
-                        code = str(r.get("stock_code", "")).strip().zfill(6)
-                        name = str(r.get("stock_name", "")).strip()
-                        if code and name and len(code) == 6 and code not in code_to_name:
-                            code_to_name[code] = name
-                            if name not in name_to_code:
-                                name_to_code[name] = code
-            except Exception:
-                pass
-
-    return code_to_name, name_to_code
-
-
-def _wl_lookup_from_akshare(codes: list[str], names: list[str]) -> tuple:
-    """
-    通过 akshare 东方财富实时行情拉取股票信息。
-    返回 (code_to_name, name_to_code) 两个 dict。
-    """
-    code_to_name: dict[str, str] = {}
-    name_to_code: dict[str, str] = {}
-    if not codes and not names:
-        return code_to_name, name_to_code
-    try:
-        import akshare as ak
-        df = ak.stock_zh_a_spot_em()
-        if df is not None and not df.empty:
-            code_set = set(codes)
-            name_set = set(names)
-            for _, row in df.iterrows():
-                code = str(row.get("代码", "")).strip().zfill(6)
-                name = str(row.get("名称", "")).strip()
-                if not code or not name or len(code) != 6:
-                    continue
-                if code in code_set:
-                    code_to_name[code] = name
-                if name in name_set:
-                    name_to_code[name] = code
-    except Exception:
-        pass
-    return code_to_name, name_to_code
-
-
-def _wl_resolve_stock_names(rows: list[dict]) -> tuple:
-    """
-    双向补全：code → name / name → code。
-    返回 (updated_rows, unfilled_count, mismatch_count)
-    """
-    # 第一步：收集需要查找的 codes 和 names
-    need_codes = set()
-    need_names = set()
-    for r in rows:
-        code = str(r.get("stock_code", "")).strip().zfill(6)
-        name = str(r.get("stock_name", "")).strip()
-        has_code = bool(code and len(code) == 6 and code != "000000")
-        has_name = bool(name and name not in ("", "nan", "None", "名称未匹配"))
-        if has_code and not has_name:
-            need_codes.add(code)
-        if has_name and not has_code:
-            need_names.add(name)
-
-    # 第二步：查双向缓存
-    code_to_name, name_to_code = _wl_build_name_cache()
-
-    # 第三步：未命中的走 akshare 实时行情
-    still_need_codes = [c for c in need_codes if c not in code_to_name]
-    still_need_names = [n for n in need_names if n not in name_to_code]
-    if still_need_codes or still_need_names:
-        try:
-            live_c2n, live_n2c = _wl_lookup_from_akshare(still_need_codes, still_need_names)
-            code_to_name.update(live_c2n)
-            name_to_code.update(live_n2c)
-        except Exception:
-            pass
-
-    # 第四步：更新 rows + 检测不匹配
-    import copy
-    updated = copy.deepcopy(rows)
-    unfilled = 0
-    mismatches = []
-
-    for r in updated:
-        code = str(r.get("stock_code", "")).strip().zfill(6)
-        name = str(r.get("stock_name", "")).strip()
-        has_code = bool(code and len(code) == 6 and code != "000000")
-        has_name = bool(name and name not in ("", "nan", "None", "名称未匹配"))
-
-        if has_code and not has_name:
-            # code → name
-            if code in code_to_name:
-                r["stock_name"] = code_to_name[code]
-            else:
-                r["stock_name"] = "名称未匹配"
-                unfilled += 1
-
-        elif has_name and not has_code:
-            # name → code
-            if name in name_to_code:
-                r["stock_code"] = name_to_code[name]
-            else:
-                unfilled += 1
-
-        elif has_code and has_name:
-            # 双向校验
-            expected_name = code_to_name.get(code)
-            expected_code = name_to_code.get(name)
-            if expected_name and name != expected_name:
-                mismatches.append(f"{code} 代码对应 {expected_name}，但名称填了 {name}")
-            elif expected_code and code != expected_code:
-                mismatches.append(f"{name} 名称对应 {expected_code}，但代码填了 {code}")
-
-    return updated, unfilled, mismatches
-
-
 def _wl_save(rows: list[dict]) -> bool:
-    """Save watchlist CSV; return True on success."""
     try:
         WATCHLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
-        import csv
-        with open(WATCHLIST_PATH, "w", encoding="utf-8-sig", newline="") as f:
-            w = csv.DictWriter(f, fieldnames=[
-                "stock_code", "stock_name", "priority", "theme",
-                "reason", "research_date", "status", "max_position_pct", "note",
-            ])
-            w.writeheader()
-            for r in rows:
-                w.writerow(r)
+        pd.DataFrame(rows).to_csv(WATCHLIST_PATH, index=False, encoding="utf-8-sig")
         return True
     except Exception:
         return False
 
 
-def _wl_build_toast(resolved: list, unfilled: int, mismatches: list) -> str:
-    """根据补全结果构建准确的消息文本。"""
-    n_total = len(resolved)
-    n_ok = n_total - unfilled
-    if unfilled == 0 and not mismatches:
-        return f"全部 {n_total} 条已自动补全。"
-    parts = []
-    if unfilled > 0:
-        parts.append(f"{n_ok}/{n_total} 条已补全，仍有 {unfilled} 条未匹配")
-    if mismatches:
-        parts.append(f"发现 {len(mismatches)} 处代码/名称不一致")
-    return "；".join(parts) + "，请手工确认。"
-
-
 def _wl_clean_rows(rows: list[dict]) -> list[dict]:
-    """
-    清洗 data_editor 输出的行：
-    - 删除 stock_code 为空的整行
-    - stock_code 转 6 位
-    - priority 默认 "1"
-    - status 默认 "active"
-    - 文本字段去 None/nan → ""
-    - 去重（同 stock_code 保留最后一条）
-    """
     cleaned = []
     seen = set()
-    for r in rows:
-        code = str(r.get("stock_code", "")).strip().zfill(6)
-        if not code or code in ("000000", "nan", "none", ""):
+    for row in rows:
+        code = "".join(ch for ch in str(row.get("stock_code", "")).strip() if ch.isdigit()).zfill(6)
+        name = str(row.get("stock_name", "")).strip()
+        if not code:
             continue
-        # 从后往前去重（保留最后一条）
-        # 先收集所有有效行，再去重
-        entry = {
+        if code in seen:
+            continue
+        seen.add(code)
+        cleaned.append({
             "stock_code": code,
-            "stock_name": str(r.get("stock_name", "")).strip() or "",
-            "priority":   str(r.get("priority", "")).strip() or "1",
-            "theme":      str(r.get("theme", "")).strip() or "",
-            "reason":     str(r.get("reason", "")).strip() or "",
-            "research_date": str(r.get("research_date", "")).strip() or "",
-            "status":     str(r.get("status", "")).strip() or "active",
-            "max_position_pct": str(r.get("max_position_pct", "")).strip() or "",
-            "note":       str(r.get("note", "")).strip() or "",
-        }
-        # 标准化 priority/status
-        if entry["priority"] not in ("1", "2", "3"):
-            entry["priority"] = "1"
-        if entry["status"] not in ("active", "watch", "paused"):
-            entry["status"] = "active"
-        cleaned.append(entry)
-
-    # 去重：同 stock_code 只保留最后一条
-    deduped = {}
-    for entry in cleaned:
-        deduped[entry["stock_code"]] = entry
-    return list(deduped.values())
+            "stock_name": name,
+            "priority": str(row.get("priority", "1") or "1").strip(),
+            "theme": str(row.get("theme", "") or "").strip(),
+            "reason": str(row.get("reason", "") or "").strip(),
+            "research_date": str(row.get("research_date", "") or "").strip(),
+            "status": str(row.get("status", "active") or "active").strip(),
+            "max_position_pct": str(row.get("max_position_pct", "") or "").strip(),
+            "note": str(row.get("note", "") or "").strip(),
+        })
+    return cleaned
 
 
-def _wl_identify(query: str) -> dict:
-    """
-    快速识别：输入代码或名称，返回 {code, name, matched, error}。
-    """
-    q = query.strip()
+WL_COLUMNS = [
+    "stock_code", "stock_name", "priority", "theme", "reason",
+    "research_date", "status", "max_position_pct", "note",
+]
+
+
+def _wl_normalize_df(rows: list[dict]) -> pd.DataFrame:
+    df = pd.DataFrame(rows) if rows else pd.DataFrame(columns=WL_COLUMNS)
+    for col in WL_COLUMNS:
+        if col not in df.columns:
+            df[col] = ""
+    df = df[WL_COLUMNS].fillna("")
+    df["stock_code"] = df["stock_code"].astype(str).map(lambda x: "".join(ch for ch in x if ch.isdigit()).zfill(6) if str(x).strip() else "")
+    df["stock_name"] = df["stock_name"].astype(str).str.strip()
+    df["priority"] = df["priority"].astype(str).str.strip().replace("", "3")
+    df["priority_sort"] = pd.to_numeric(df["priority"], errors="coerce").fillna(9).astype(int)
+    raw_status = df["status"].astype(str).str.strip().str.lower()
+    df["status_raw"] = raw_status
+    df["status"] = raw_status.map(lambda x: "active" if x == "active" else "inactive")
+    df["theme"] = df["theme"].astype(str).str.strip()
+    df["reason"] = df["reason"].astype(str).str.strip()
+    df["research_date"] = df["research_date"].astype(str).str.strip()
+    df["max_position_pct"] = df["max_position_pct"].astype(str).str.strip()
+    df["note"] = df["note"].astype(str).str.strip()
+    df = df[df["stock_code"] != ""].copy()
+    df = df.sort_values(["priority_sort", "stock_code"], ascending=[True, True], kind="stable")
+    return df.reset_index(drop=True)
+
+
+def _wl_card_value(v: str, fallback: str) -> str:
+    val = str(v or "").strip()
+    return val if val else fallback
+
+
+def _wl_status_badge(status: str) -> tuple[str, str, str]:
+    if status == "active":
+        return "active", COLOR_BOUGHT, "观察中"
+    return "inactive", COLOR_MUTED, "非活跃"
+
+
+def _wl_build_name_cache() -> tuple[dict[str, str], dict[str, str]]:
+    code_to_name: dict[str, str] = {}
+    name_to_code: dict[str, str] = {}
+
+    def add_pair(code: str, name: str) -> None:
+        clean_code = "".join(ch for ch in str(code).strip() if ch.isdigit()).zfill(6)
+        clean_name = str(name or "").strip()
+        if len(clean_code) != 6 or not clean_name:
+            return
+        code_to_name.setdefault(clean_code, clean_name)
+        name_to_code.setdefault(clean_name, clean_code)
+
+    for csv_path in [
+        BASE_DIR / "data" / "watchlist" / "stock_name_cache.csv",
+        BASE_DIR / "data" / "cache" / "stock_name_universe.csv",
+        OUTPUT_DIR / "trade_review.csv",
+        OUTPUT_DIR / "trade_review_cn.csv",
+    ]:
+        if not csv_path.exists():
+            continue
+        try:
+            cache_df = pd.read_csv(csv_path, dtype=str, keep_default_na=False, encoding="utf-8-sig")
+        except Exception:
+            continue
+        for _, row in cache_df.iterrows():
+            code = row.get("stock_code", "") or row.get("代码", "")
+            name = row.get("stock_name", "") or row.get("名称", "")
+            add_pair(str(code), str(name))
+
+    return code_to_name, name_to_code
+
+
+def _wl_identify(query: str) -> dict[str, str | bool]:
+    q = str(query or "").strip()
     if not q:
-        return {"code": "", "name": "", "matched": False, "error": "输入为空"}
-    code_to_name, name_to_code = _wl_build_name_cache()
+        return {"matched": False, "code": "", "name": "", "error": "请输入股票代码或名称"}
 
-    if q.isdigit() and len(q) == 6:
-        code = q.zfill(6)
+    code_to_name, name_to_code = _wl_build_name_cache()
+    digits = "".join(ch for ch in q if ch.isdigit())
+    if q.isdigit() and len(digits) <= 6:
+        code = digits.zfill(6)
         name = code_to_name.get(code, "")
         if name:
-            return {"code": code, "name": name, "matched": True, "error": ""}
-        return {"code": code, "name": "", "matched": False, "error": f"未匹配到代码 {code}"}
+            return {"matched": True, "code": code, "name": name, "error": ""}
+        return {"matched": False, "code": code, "name": "", "error": f"未匹配到代码 {code} 的股票名称"}
 
-    code = name_to_code.get(q, "")
-    if code:
-        name = code_to_name.get(code, q)
-        return {"code": code, "name": name, "matched": True, "error": ""}
+    if q in name_to_code:
+        code = name_to_code[q]
+        return {"matched": True, "code": code, "name": code_to_name.get(code, q), "error": ""}
 
-    for name, c in name_to_code.items():
+    for name, code in name_to_code.items():
         if q in name:
-            return {"code": c, "name": name, "matched": True, "error": ""}
+            return {"matched": True, "code": code, "name": name, "error": ""}
 
-    return {"code": "", "name": "", "matched": False, "error": f"未匹配到名称 {q}"}
+    return {"matched": False, "code": "", "name": "", "error": f"未匹配到 {q}"}
 
 
 def page_watchlist() -> None:
-    """⭐ 自选股票池 — 快速添加 + 表格管理。"""
-    st.markdown("## ⭐ 自选股票池")
-    st.caption(
-        "自选股票池只提高候选优先级，不代表自动买入。"
-        "最终仍需通过 V1.6 复盘计划层、资金条件层和 9:36 技术确认。"
+    exists = WATCHLIST_PATH.exists()
+    rows = _wl_load()
+    df = _wl_normalize_df(rows)
+    total_count = len(df)
+    active_count = int((df["status"] == "active").sum()) if not df.empty else 0
+    p1_count = int((df["priority"] == "1").sum()) if not df.empty else 0
+    theme_count = int(df["theme"].astype(str).str.strip().ne("").sum()) if not df.empty else 0
+    reason_count = int(df["reason"].astype(str).str.strip().ne("").sum()) if not df.empty else 0
+
+    st.markdown(
+        """
+        <style>
+          .main .block-container {
+            max-width: 1240px !important;
+            padding-left: 24px !important;
+            padding-right: 24px !important;
+          }
+          .watchlist-page-head {
+            max-width: 1180px;
+            margin: -118px auto 8px auto;
+          }
+          .watchlist-hero {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 240px;
+            gap: 12px;
+            align-items: center;
+            padding: 13px 15px;
+            border-radius: 14px;
+            background:
+              radial-gradient(circle at top right, rgba(0,218,243,0.08), transparent 32%),
+              linear-gradient(180deg, rgba(15,20,27,0.96) 0%, rgba(10,14,23,0.94) 100%);
+            border: 1px solid rgba(255,255,255,0.08);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 18px 38px rgba(0,0,0,0.18);
+          }
+          .watchlist-hero__kicker {
+            font-family: "JetBrains Mono", monospace;
+            font-size: 10px;
+            letter-spacing: 0.18em;
+            color: #67DFFF;
+            font-weight: 700;
+          }
+          .watchlist-hero__title {
+            margin-top: 5px;
+            font-size: 24px;
+            line-height: 1.08;
+            font-weight: 800;
+            color: #F7F9FD;
+            font-family: "Hanken Grotesk", "Inter", sans-serif;
+          }
+          .watchlist-hero__desc {
+            margin-top: 6px;
+            max-width: 680px;
+            font-size: 12px;
+            line-height: 1.48;
+            color: rgba(222,226,236,0.78);
+          }
+          .watchlist-hero__badges {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+          }
+          .watchlist-hero__badges span {
+            padding: 4px 9px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.035);
+            border: 1px solid rgba(255,255,255,0.07);
+            color: rgba(222,226,236,0.88);
+            font-size: 11px;
+            font-weight: 700;
+          }
+          .watchlist-hero__source {
+            display: grid;
+            gap: 4px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: rgba(255,255,255,0.018);
+            border: 1px solid rgba(255,255,255,0.07);
+            font-size: 12px;
+            line-height: 1.45;
+            color: rgba(222,226,236,0.72);
+          }
+          .watchlist-hero__source div {
+            font-size: 10px;
+            letter-spacing: 0.12em;
+            color: rgba(222,226,236,0.46);
+          }
+          .watchlist-hero__source b {
+            color: #DEE2EC;
+          }
+          .watchlist-hero__source code {
+            color: #7EE787;
+            font-size: 11px;
+            white-space: nowrap;
+          }
+          .watchlist-alert-row {
+            max-width: 1180px;
+            margin: 6px auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+          }
+          .watchlist-alert-row span {
+            display: block;
+            padding: 7px 10px;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.035);
+            border-left: 3px solid rgba(0,218,243,0.72);
+            color: rgba(222,226,236,0.86);
+            font-size: 12px;
+            line-height: 1.5;
+          }
+          .watchlist-metrics {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 8px;
+            max-width: 1180px;
+            margin: 0 auto 8px auto;
+          }
+          .watchlist-metric {
+            position: relative;
+            overflow: hidden;
+            background:
+              radial-gradient(circle at top right, rgba(0,218,243,0.10), transparent 32%),
+              linear-gradient(180deg, rgba(15,20,27,0.98) 0%, rgba(16,22,34,0.93) 100%);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 12px;
+            padding: 7px 10px;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 16px 32px rgba(0,0,0,0.16);
+          }
+          .watchlist-metric::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 1px;
+            background: linear-gradient(90deg, rgba(0,218,243,0.34), rgba(0,218,243,0.02));
+          }
+          .watchlist-metric__label {
+            font-size: 10px;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: rgba(222,226,236,0.52);
+            font-family: "JetBrains Mono", monospace;
+          }
+          .watchlist-metric__value {
+            margin-top: 4px;
+            font-size: 20px;
+            line-height: 1;
+            font-weight: 800;
+            font-family: "JetBrains Mono", monospace;
+          }
+          .watchlist-board {
+            display: block;
+            min-height: 0;
+            position: relative;
+            max-width: 1180px;
+            margin: 0 auto;
+          }
+          .watchlist-board::before {
+            display: none;
+          }
+          .watchlist-panel {
+            position: relative;
+            overflow: hidden;
+            background:
+              radial-gradient(circle at top right, rgba(0,218,243,0.08), transparent 30%),
+              linear-gradient(180deg, rgba(15,20,27,0.97) 0%, rgba(16,22,34,0.93) 100%);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 14px;
+            padding: 12px;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 18px 38px rgba(0,0,0,0.18);
+          }
+          .watchlist-panel::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 1px;
+            background: linear-gradient(90deg, rgba(0,218,243,0.42), rgba(0,218,243,0.03));
+          }
+          .watchlist-panel__kicker {
+            font-size: 10px;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: rgba(222,226,236,0.48);
+            font-family: "JetBrains Mono", monospace;
+          }
+          .watchlist-panel__title {
+            margin-top: 6px;
+            font-size: 18px;
+            font-weight: 700;
+            color: #DEE2EC;
+            font-family: "Hanken Grotesk", "Inter", sans-serif;
+          }
+          .watchlist-panel__body {
+            margin-top: 9px;
+          }
+          .watchlist-panel__desc {
+            margin-top: 8px;
+            font-size: 12px;
+            line-height: 1.65;
+            color: rgba(222,226,236,0.68);
+          }
+          .watchlist-card-grid {
+            min-height: 0;
+            max-height: none;
+            overflow: visible;
+            padding-right: 0;
+          }
+          .watchlist-card-shell {
+            position: relative;
+            overflow: hidden;
+            border-radius: 14px;
+            margin-bottom: 10px;
+          }
+          .watchlist-card-shell::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background:
+              linear-gradient(180deg, rgba(255,255,255,0.03), transparent 24%),
+              radial-gradient(circle at 85% 12%, rgba(0,218,243,0.07), transparent 30%);
+          }
+          .watchlist-card-grid::-webkit-scrollbar {
+            width: 6px;
+          }
+          .watchlist-card-grid::-webkit-scrollbar-thumb {
+            background: rgba(0,218,243,0.22);
+          }
+          .watchlist-countline {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            margin-top: 10px;
+            padding: 9px 11px;
+            border-radius: 12px;
+            background: rgba(255,255,255,0.025);
+            border: 1px solid rgba(255,255,255,0.05);
+          }
+          .watchlist-tools {
+            max-width: 1180px;
+            margin: 0 auto 8px auto;
+            padding: 10px 12px;
+            border-radius: 14px;
+            background:
+              radial-gradient(circle at top right, rgba(0,218,243,0.07), transparent 28%),
+              linear-gradient(180deg, rgba(15,20,27,0.97) 0%, rgba(16,22,34,0.93) 100%);
+            border: 1px solid rgba(255,255,255,0.08);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 18px 38px rgba(0,0,0,0.16);
+          }
+          .watchlist-tools__head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding-bottom: 0;
+            margin-bottom: 0;
+            border-bottom: none;
+          }
+          .watchlist-tools__title {
+            font-size: 18px;
+            line-height: 1.1;
+            font-weight: 800;
+            color: #F7F9FD;
+            font-family: "Hanken Grotesk", "Inter", sans-serif;
+          }
+          .watchlist-tools__sub {
+            margin-top: 4px;
+            font-size: 12px;
+            color: rgba(222,226,236,0.62);
+          }
+          .watchlist-feed-head {
+            max-width: 1180px;
+            margin: 0 auto 4px auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 0;
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+          }
+          .watchlist-feed-head__title {
+            font-size: 11px;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: rgba(222,226,236,0.56);
+            font-family: "JetBrains Mono", monospace;
+          }
+          .watchlist-feed-head__meta {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+          }
+          .watchlist-feed-card {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 270px;
+            min-height: 128px;
+            border-radius: 14px;
+            background:
+              radial-gradient(circle at 88% 12%, rgba(0,218,243,0.06), transparent 24%),
+              linear-gradient(180deg, rgba(16,21,29,0.99) 0%, rgba(14,18,28,0.95) 100%);
+            border: 1px solid rgba(255,255,255,0.08);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 12px 24px rgba(0,0,0,0.15);
+            overflow: hidden;
+          }
+          .watchlist-feed-card__main {
+            padding: 14px 16px;
+            display: grid;
+            gap: 10px;
+          }
+          .watchlist-feed-card__top {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 14px;
+          }
+          .watchlist-feed-card__identity {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+          }
+          .watchlist-feed-card__name {
+            font-size: 20px;
+            line-height: 1.12;
+            font-weight: 800;
+            color: #F7F9FD;
+            font-family: "Hanken Grotesk", "Inter", sans-serif;
+          }
+          .watchlist-feed-card__code {
+            padding: 3px 8px;
+            border-radius: 7px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.06);
+            color: rgba(222,226,236,0.62);
+            font-size: 11px;
+            font-family: "JetBrains Mono", monospace;
+          }
+          .watchlist-feed-card__badges {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+          }
+          .watchlist-feed-card__reason {
+            max-width: 640px;
+          }
+          .watchlist-feed-card__label {
+            font-size: 10px;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: rgba(222,226,236,0.46);
+            font-family: "JetBrains Mono", monospace;
+          }
+          .watchlist-feed-card__copy {
+            margin-top: 4px;
+            color: rgba(222,226,236,0.78);
+            font-size: 13px;
+            line-height: 1.55;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+          }
+          .watchlist-feed-card__side {
+            border-left: 1px solid rgba(255,255,255,0.07);
+            background: linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.014));
+            padding: 13px 14px;
+            display: grid;
+            align-content: space-between;
+            gap: 10px;
+          }
+          .watchlist-feed-card__sidegrid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 9px 12px;
+          }
+          .watchlist-feed-card__sidevalue {
+            margin-top: 3px;
+            font-size: 12px;
+            line-height: 1.35;
+            color: #DEE2EC;
+            font-weight: 700;
+          }
+          .watchlist-mini-bars {
+            display: flex;
+            align-items: end;
+            gap: 3px;
+            height: 32px;
+            padding: 0 2px;
+            overflow: hidden;
+            mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
+          }
+          .watchlist-mini-bars span {
+            flex: 1;
+            min-width: 8px;
+            border-radius: 4px 4px 1px 1px;
+            background: linear-gradient(180deg, rgba(78,222,163,0.86), rgba(0,218,243,0.28));
+            box-shadow: 0 0 10px rgba(0,218,243,0.10);
+          }
+          .watchlist-safe-chip {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 8px;
+            border-radius: 999px;
+            background: rgba(255,180,171,0.08);
+            border: 1px solid rgba(255,180,171,0.18);
+            color: #ffb4ab;
+            font-size: 10px;
+            font-weight: 700;
+          }
+          div[data-testid="stExpander"]:has(div[data-testid="stMarkdown"] + div) {
+            max-width: 1180px;
+            margin-left: auto;
+            margin-right: auto;
+          }
+          .watchlist-mini {
+            font-size: 11px;
+            color: rgba(222,226,236,0.58);
+          }
+          .watchlist-riskcallout {
+            margin-top: 10px;
+            padding: 10px 12px;
+            border-radius: 14px;
+            background: rgba(255,180,171,0.06);
+            border: 1px solid rgba(255,180,171,0.14);
+            color: #DEE2EC;
+            line-height: 1.7;
+            font-size: 12px;
+          }
+          .watchlist-completion {
+            margin-top: 12px;
+            padding: 13px 15px;
+            border-radius: 14px;
+            background: rgba(0,218,243,0.06);
+            border: 1px solid rgba(0,218,243,0.14);
+            color: #DEE2EC;
+            line-height: 1.75;
+            font-size: 12px;
+          }
+          .watchlist-filter-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+            color: rgba(222,226,236,0.72);
+            font-size: 11px;
+            font-family: "JetBrains Mono", monospace;
+            letter-spacing: 0.04em;
+          }
+          .watchlist-control-shell {
+            margin-top: 8px;
+            padding: 9px 10px 8px 10px;
+            border-radius: 12px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.016));
+            border: 1px solid rgba(255,255,255,0.05);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+          }
+          .watchlist-control-shell + .watchlist-control-shell {
+            margin-top: 10px;
+          }
+          .watchlist-control-title {
+            font-size: 10px;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: rgba(222,226,236,0.48);
+            font-family: "JetBrains Mono", monospace;
+            margin-bottom: 10px;
+          }
+          .watchlist-feature-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            margin-top: 14px;
+          }
+          .watchlist-feature-tile {
+            padding: 13px;
+            border-radius: 14px;
+            background: rgba(255,255,255,0.022);
+            border: 1px solid rgba(255,255,255,0.05);
+          }
+          .watchlist-feature-tile__value {
+            font-family: "JetBrains Mono", monospace;
+            font-size: 18px;
+            font-weight: 700;
+            color: #DEE2EC;
+          }
+          .watchlist-feature-tile__label {
+            margin-top: 6px;
+            font-size: 10px;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: rgba(222,226,236,0.48);
+          }
+          .watchlist-card-orbit {
+            display: none;
+          }
+          .watchlist-card-orbit::before,
+          .watchlist-card-orbit::after {
+            content: "";
+            position: absolute;
+            inset: 12px;
+            border-radius: 50%;
+            border: 1px dashed rgba(0,218,243,0.08);
+          }
+          .watchlist-card-orbit::after {
+            inset: 26px;
+            border-style: solid;
+            border-color: rgba(0,218,243,0.16);
+          }
+          .watchlist-card-kicker {
+            font-size: 10px;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: rgba(222,226,236,0.46);
+            font-family: "JetBrains Mono", monospace;
+          }
+          .watchlist-card-title {
+            margin-top: 4px;
+            font-size: 17px;
+            line-height: 1.08;
+            font-weight: 700;
+            color: #F7F9FD;
+            font-family: "Hanken Grotesk", "Inter", sans-serif;
+          }
+          .watchlist-card-code {
+            margin-top: 4px;
+            font-size: 11px;
+            color: rgba(222,226,236,0.62);
+            font-family: "JetBrains Mono", monospace;
+          }
+          .watchlist-badge-soft {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 9px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+            color: rgba(222,226,236,0.82);
+            font-size: 11px;
+          }
+          .watchlist-card-theme {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: rgba(0,218,243,0.08);
+            border: 1px solid rgba(0,218,243,0.16);
+            color: #67DFFF;
+            font-size: 11px;
+            font-weight: 600;
+          }
+          .watchlist-card-theme.is-empty {
+            background: rgba(255,255,255,0.03);
+            border-color: rgba(255,255,255,0.07);
+            color: rgba(222,226,236,0.68);
+          }
+          .watchlist-card-copy {
+            margin-top: 6px;
+          }
+          .watchlist-card-copy__label {
+            font-size: 10px;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: rgba(222,226,236,0.48);
+            font-family: "JetBrains Mono", monospace;
+          }
+          .watchlist-card-copy__text {
+            margin-top: 4px;
+            font-size: 12px;
+            line-height: 1.42;
+            color: #DEE2EC;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+          }
+          .watchlist-card-meta {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px 10px;
+          }
+          .watchlist-card-meta__label,
+          .watchlist-card-note__label {
+            font-size: 11px;
+            color: rgba(222,226,236,0.54);
+          }
+          .watchlist-card-meta__value,
+          .watchlist-card-note__text {
+            margin-top: 3px;
+            font-size: 12px;
+            line-height: 1.42;
+            color: #DEE2EC;
+          }
+          .watchlist-card-note {
+            margin-top: 7px;
+            padding-top: 7px;
+            border-top: 1px solid rgba(255,255,255,0.045);
+          }
+          .watchlist-maintenance {
+            max-width: 1180px;
+            margin: 12px auto 0 auto;
+            padding: 15px 16px;
+            border-radius: 14px;
+            background:
+              radial-gradient(circle at top right, rgba(0,218,243,0.06), transparent 30%),
+              linear-gradient(180deg, rgba(15,20,27,0.97) 0%, rgba(16,22,34,0.93) 100%);
+            border: 1px solid rgba(255,255,255,0.08);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 18px 38px rgba(0,0,0,0.18);
+          }
+          .watchlist-maintenance__kicker {
+            font-size: 10px;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: rgba(222,226,236,0.48);
+            font-family: "JetBrains Mono", monospace;
+          }
+          .watchlist-maintenance__title {
+            margin-top: 6px;
+            font-size: 18px;
+            font-weight: 700;
+            color: #DEE2EC;
+            font-family: "Hanken Grotesk", "Inter", sans-serif;
+          }
+          @media (max-width: 1100px) {
+            .main .block-container {
+              max-width: 100% !important;
+              padding-left: 18px !important;
+              padding-right: 18px !important;
+            }
+            .watchlist-page-head {
+              margin-top: -40px;
+            }
+            .watchlist-hero,
+            .watchlist-alert-row {
+              grid-template-columns: 1fr;
+            }
+            .watchlist-metrics {
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .watchlist-board {
+              grid-template-columns: 1fr;
+            }
+            .watchlist-board::before {
+              display: none;
+            }
+            .watchlist-card-grid {
+              max-height: none;
+              overflow: visible;
+            }
+            .watchlist-feature-grid {
+              grid-template-columns: 1fr;
+            }
+            .watchlist-feed-card {
+              grid-template-columns: 1fr;
+            }
+            .watchlist-feed-card__side {
+              border-left: none;
+              border-top: 1px solid rgba(255,255,255,0.07);
+            }
+          }
+        </style>
+        """,
+        unsafe_allow_html=True,
     )
 
-    # ── 0. 初始化 session_state ──
-    if "wl_table" not in st.session_state:
-        st.session_state["wl_table"] = _wl_load()
-    if "wl_identify_result" not in st.session_state:
-        st.session_state["wl_identify_result"] = None
+    completion_note = (
+        "主题或研究理由还没完善，建议补齐后再作为稳定观察池使用。"
+        if total_count > 0 and (theme_count == 0 or reason_count == 0)
+        else "信息完整度已经具备日常跟踪基础。"
+    )
+    st.markdown(
+        f"""
+        <div class="watchlist-page-head">
+          <div class="watchlist-hero">
+            <div>
+              <div class="watchlist-hero__kicker">WATCHLIST RESEARCH</div>
+              <div class="watchlist-hero__title">⭐ 我的自选观察池</div>
+              <div class="watchlist-hero__desc">自选池只用于观察，不代表自动买入；最终仍需经过 V1.6 明日计划层、资金条件层、9:36 技术确认。</div>
+              <div class="watchlist-hero__badges">
+                <span>总数 {total_count}</span>
+                <span>Active {active_count}</span>
+                <span>P1 {p1_count}</span>
+              </div>
+            </div>
+            <div class="watchlist-hero__source">
+              <div>观察池来源</div>
+              <b>本地研究源</b>
+              <code>data/watchlist/custom_stock_pool.csv</code>
+              <span>当前已读取：<b>{total_count}</b> 只股票</span>
+            </div>
+          </div>
+        </div>
+        <div class="watchlist-alert-row">
+          <span>自选池只是观察池，不是买入指令。</span>
+          <span>{_eh(completion_note)}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    # ── 1. 快速添加区域 ──
-    st.markdown("### ➕ 快速添加股票")
-    c1, c2, c3 = st.columns([3, 1, 1])
-    query = c1.text_input("输入股票代码或名称", key="wl_query",
-                          placeholder="例：300476 或 胜宏科技 或 同花顺")
-    if c2.button("🔍 识别", use_container_width=True):
-        st.session_state["wl_identify_result"] = _wl_identify(query)
-        st.rerun()
+    if not exists:
+        status_banner("尚未创建自选观察池", "info")
+        st.caption("路径：`data/watchlist/custom_stock_pool.csv`")
 
-    # 显示识别结果
-    result = st.session_state.get("wl_identify_result")
-    if result:
-        if result["matched"]:
-            st.success(f"✅ 识别成功：{result['code']} {result['name']}")
-            if c3.button("➕ 加入自选池", use_container_width=True,
-                         type="primary"):
-                table = list(st.session_state["wl_table"])
-                found = False
-                for r in table:
-                    if r.get("stock_code") == result["code"]:
-                        r["stock_name"] = result["name"]
-                        found = True
-                        break
-                if not found:
-                    table.append({
-                        "stock_code": result["code"],
-                        "stock_name": result["name"],
-                        "priority": "1",
-                        "theme": "",
-                        "reason": "",
-                        "research_date": "",
-                        "status": "active",
-                        "max_position_pct": "",
-                        "note": "",
-                    })
-                st.session_state["wl_table"] = table
-                st.session_state["wl_identify_result"] = None
+    st.markdown(
+        f"""
+          <div class="watchlist-metrics">
+            <div class="watchlist-metric">
+              <div class="watchlist-metric__label">观察池总数</div>
+              <div class="watchlist-metric__value" style="color:{COLOR_TEXT};">{total_count}</div>
+            </div>
+            <div class="watchlist-metric">
+              <div class="watchlist-metric__label">活跃观察</div>
+              <div class="watchlist-metric__value" style="color:{COLOR_BOUGHT};">{active_count}</div>
+            </div>
+            <div class="watchlist-metric">
+              <div class="watchlist-metric__label">高优先级</div>
+              <div class="watchlist-metric__value" style="color:{COLOR_WAIT_T1};">{p1_count}</div>
+            </div>
+            <div class="watchlist-metric">
+              <div class="watchlist-metric__label">主题已填</div>
+              <div class="watchlist-metric__value" style="color:{COLOR_SECOND};">{theme_count}</div>
+            </div>
+            <div class="watchlist-metric">
+              <div class="watchlist-metric__label">理由已填</div>
+              <div class="watchlist-metric__value" style="color:{COLOR_TEXT};">{reason_count}</div>
+            </div>
+          </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        f"""
+        <div class="watchlist-tools">
+          <div class="watchlist-tools__head">
+            <div>
+              <div class="watchlist-panel__kicker">RESEARCH CONSOLE</div>
+              <div class="watchlist-tools__title">搜索、识别与观察筛选</div>
+              <div class="watchlist-tools__sub">输入代码或名称先识别，再加入观察池；筛选仅影响当前展示，不触发任何交易动作。</div>
+            </div>
+            <div class="watchlist-feed-head__meta">
+              <span class="watchlist-filter-chip">active / p1 {active_count}/{p1_count}</span>
+              <span class="watchlist-safe-chip">观察池 ≠ 买入指令</span>
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    keyword = ""
+    status_filter = "全部"
+    priority_filter = "全部"
+    only_theme = False
+    only_reason = False
+    with st.expander("展开：快速添加 / 搜索筛选", expanded=False):
+        add_col, search_col, status_col, priority_col = st.columns([1.45, 1.45, 0.8, 0.8], gap="small")
+        with add_col:
+            with st.form("wl_quick_add_form", clear_on_submit=False):
+                query = st.text_input("股票代码 / 名称", value="", placeholder="例如 300476 / 胜宏科技", key="wl_quick_query")
+                submitted = st.form_submit_button("识别", width="stretch")
+        with search_col:
+            keyword = st.text_input("搜索股票代码 / 名称", value="", placeholder="筛选当前观察池", key="wl_filter_kw")
+        with status_col:
+            status_filter = st.selectbox("status 筛选", ["全部", "active", "inactive"], index=0)
+        with priority_col:
+            priority_filter = st.selectbox("priority 筛选", ["全部", "1", "2", "3"], index=0)
+
+        option_col, result_col = st.columns([1.2, 2.8], gap="small")
+        with option_col:
+            only_theme = st.checkbox("只看已填写主题", value=False)
+            only_reason = st.checkbox("只看已填写研究理由", value=False)
+        with result_col:
+            submitted = bool(locals().get("submitted", False))
+            query = str(locals().get("query", ""))
+            if submitted:
+                st.session_state["wl_identify_result"] = _wl_identify(query)
+            result = st.session_state.get("wl_identify_result")
+            if result:
+                if result.get("matched"):
+                    st.success(f"识别成功：{result.get('code')} {result.get('name')}")
+                    if st.button("加入自选池", type="primary", key="wl_add_btn"):
+                        table = _wl_clean_rows(_wl_load())
+                        code = str(result.get("code", ""))
+                        found = False
+                        for row in table:
+                            if row.get("stock_code") == code:
+                                row["stock_name"] = str(result.get("name", ""))
+                                row["status"] = "active"
+                                found = True
+                                break
+                        if not found:
+                            table.append({
+                                "stock_code": code,
+                                "stock_name": str(result.get("name", "")),
+                                "priority": "1",
+                                "theme": "",
+                                "reason": "",
+                                "research_date": "",
+                                "status": "active",
+                                "max_position_pct": "",
+                                "note": "",
+                            })
+                        if _wl_save(_wl_clean_rows(table)):
+                            status_banner("已加入自选池。", "success")
+                            time.sleep(0.4)
+                            st.rerun()
+                        else:
+                            status_banner("保存失败，请检查文件权限。", "error")
+                else:
+                    st.warning(str(result.get("error", "未匹配到股票")))
+
+    show_df = df.copy()
+    kw = keyword.strip().lower()
+    if kw:
+        show_df = show_df[
+            show_df["stock_code"].astype(str).str.lower().str.contains(kw, na=False)
+            | show_df["stock_name"].astype(str).str.lower().str.contains(kw, na=False)
+        ]
+    if status_filter != "全部":
+        show_df = show_df[show_df["status"] == status_filter]
+    if priority_filter != "全部":
+        show_df = show_df[show_df["priority"] == priority_filter]
+    if only_theme:
+        show_df = show_df[show_df["theme"].astype(str).str.strip() != ""]
+    if only_reason:
+        show_df = show_df[show_df["reason"].astype(str).str.strip() != ""]
+
+    st.markdown("<div class='watchlist-board'>", unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <div class="watchlist-feed-head">
+          <div class="watchlist-feed-head__meta">
+            <span class="watchlist-filter-chip">展示 {len(show_df)} / {total_count}</span>
+            <span class="watchlist-filter-chip">基础视图</span>
+            <span class="watchlist-filter-chip">优先级排序</span>
+            <span class="watchlist-safe-chip">不构成买入指令</span>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown("<div class='watchlist-card-grid'>", unsafe_allow_html=True)
+    if show_df.empty:
+        status_banner("当前筛选条件下没有匹配股票。", "info")
+    else:
+        for _, row in show_df.iterrows():
+            _, status_color, status_text = _wl_status_badge(str(row.get("status", "")))
+            theme = _wl_card_value(row.get("theme", ""), "未填写")
+            theme_class = "watchlist-card-theme is-empty" if theme == "未填写" else "watchlist-card-theme"
+            reason = _wl_card_value(row.get("reason", ""), "待补充")
+            max_pos = _wl_card_value(row.get("max_position_pct", ""), "未设置")
+            note = _wl_card_value(row.get("note", ""), "无")
+            research_date = _wl_card_value(row.get("research_date", ""), "未填写")
+            code_text = str(row.get("stock_code", ""))
+            seed = sum(ord(ch) for ch in code_text)
+            bars = "".join(
+                f"<span style='height:{18 + ((seed + i * 13) % 72)}%;'></span>"
+                for i in range(7)
+            )
+            filled_score = int(theme != "未填写") + int(reason != "待补充") + int(research_date != "未填写") + int(max_pos != "未设置")
+            completion_pct = int(filled_score / 4 * 100)
+            st.markdown(
+                f"""
+                <div class="watchlist-card-shell">
+                  <div class="watchlist-feed-card">
+                    <div class="watchlist-feed-card__main">
+                      <div class="watchlist-feed-card__top">
+                        <div class="watchlist-feed-card__identity">
+                          <div class="watchlist-feed-card__name">{_eh(_wl_card_value(row.get('stock_name', ''), '未命名'))}</div>
+                          <div class="watchlist-feed-card__code">{_eh(code_text)}</div>
+                          <div class="watchlist-feed-card__badges">
+                            <span class="watchlist-badge-soft">P{_eh(row.get('priority', '3'))}</span>
+                            <span class="watchlist-badge-soft" style="color:{status_color};">{_eh(status_text)}</span>
+                            <span class="{theme_class}">{_eh(theme)}</span>
+                          </div>
+                        </div>
+                        <span class="watchlist-safe-chip">自选 ≠ 买入</span>
+                      </div>
+                      <div class="watchlist-feed-card__reason">
+                        <div class="watchlist-feed-card__label">Research Reason 研究理由</div>
+                        <div class="watchlist-feed-card__copy">{_eh(reason)}</div>
+                      </div>
+                      <div style="font-size:12px;color:{COLOR_MUTED};line-height:1.45;"><b style="color:{COLOR_TEXT};">观察备注：</b>{_eh(note)}</div>
+                    </div>
+                    <div class="watchlist-feed-card__side">
+                      <div class="watchlist-feed-card__sidegrid">
+                        <div>
+                          <div class="watchlist-feed-card__label">研究日期</div>
+                          <div class="watchlist-feed-card__sidevalue">{_eh(research_date)}</div>
+                        </div>
+                        <div>
+                          <div class="watchlist-feed-card__label">仓位参考</div>
+                          <div class="watchlist-feed-card__sidevalue">{_eh(max_pos)}</div>
+                        </div>
+                      </div>
+                      <div>
+                        <div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:6px;">
+                          <span class="watchlist-feed-card__label">Research Pulse 信息完整度</span>
+                          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:{COLOR_SECOND};font-weight:700;">{completion_pct}%</span>
+                        </div>
+                        <div class="watchlist-mini-bars">{bars}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+    st.markdown("</div></div>", unsafe_allow_html=True)
+
+    st.markdown("<div class='watchlist-maintenance'><div class='watchlist-maintenance__kicker'>池子维护</div><div class='watchlist-maintenance__title'>维护自选池</div></div>", unsafe_allow_html=True)
+    with st.expander("展开维护自选池", expanded=False):
+        st.caption("这里仅维护观察池内容，保存后会写回 `data/watchlist/custom_stock_pool.csv`，不会触发任何买入、下单或交易行为。")
+        edit_df = df[WL_COLUMNS].copy() if not df.empty else pd.DataFrame(columns=WL_COLUMNS)
+        edited = st.data_editor(
+            edit_df,
+            num_rows="dynamic",
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "stock_code": st.column_config.TextColumn("股票代码", width=90, required=True),
+                "stock_name": st.column_config.TextColumn("股票名称", width=120),
+                "priority": st.column_config.SelectboxColumn("优先级", options=["1", "2", "3"], width=70),
+                "theme": st.column_config.TextColumn("调研主题", width=120),
+                "reason": st.column_config.TextColumn("研究理由", width=180),
+                "research_date": st.column_config.TextColumn("研究日期", width=100),
+                "status": st.column_config.SelectboxColumn("状态", options=["active", "inactive"], width=90),
+                "max_position_pct": st.column_config.TextColumn("最大仓位%", width=90),
+                "note": st.column_config.TextColumn("备注", width=150),
+            },
+        )
+        cleaned = _wl_clean_rows(edited.fillna("").to_dict("records"))
+        st.caption(f"维护区当前将保存 {len(cleaned)} 只股票。文件位置：`{WATCHLIST_PATH}`")
+        if st.button("保存自选池", type="primary", width="stretch"):
+            if _wl_save(cleaned):
+                status_banner("自选池已保存。", "success")
+                time.sleep(0.4)
                 st.rerun()
-        else:
-            st.warning(f"⚠️ {result['error']}")
-
-    st.divider()
-
-    # ── 2. 表格管理区 ──
-    st.markdown("### 📋 已添加股票")
-    table_rows = st.session_state["wl_table"]
-    if not table_rows:
-        st.info("暂无自选股票，请使用上方「快速添加」功能。")
-
-    df = pd.DataFrame(table_rows) if table_rows else pd.DataFrame(
-        columns=["stock_code", "stock_name", "priority", "theme",
-                 "reason", "research_date", "status", "max_position_pct", "note"])
-
-    edited = st.data_editor(
-        df,
-        column_config={
-            "stock_code":       st.column_config.TextColumn("股票代码", width=90, required=True),
-            "stock_name":       st.column_config.TextColumn("股票名称", width=120),
-            "priority":         st.column_config.SelectboxColumn("优先级", options=["1", "2", "3"], width=70),
-            "theme":            st.column_config.TextColumn("调研主题", width=120),
-            "reason":           st.column_config.TextColumn("入池理由", width=200),
-            "research_date":    st.column_config.TextColumn("调研日期", width=100),
-            "status":           st.column_config.SelectboxColumn("状态", options=["active", "watch", "paused"], width=90),
-            "max_position_pct": st.column_config.TextColumn("最大仓位%", width=80),
-            "note":             st.column_config.TextColumn("备注", width=150),
-        },
-        num_rows="dynamic",
-        hide_index=True,
-        width="stretch",
-    )
-
-    # ── 3. 校验 + 保存 ──
-    raw_rows = edited.fillna("").to_dict("records")
-    cleaned = _wl_clean_rows(raw_rows)
-
-    errors = []
-    seen_codes = set()
-    for idx, r in enumerate(cleaned):
-        code = r.get("stock_code", "")
-        name = r.get("stock_name", "")
-        priority = r.get("priority", "")
-        status = r.get("status", "")
-        if not code.isdigit() or len(code) != 6:
-            errors.append(f"第 {idx+1} 行：股票代码无效")
-            continue
-        if not name:
-            errors.append(f"第 {idx+1} 行 ({code})：股票名称为空")
-        if priority not in ("1", "2", "3"):
-            errors.append(f"第 {idx+1} 行 ({code})：优先级无效")
-        if status not in ("active", "watch", "paused"):
-            errors.append(f"第 {idx+1} 行 ({code})：状态无效")
-        if code in seen_codes:
-            errors.append(f"重复股票代码 {code}")
-        seen_codes.add(code)
-
-    if errors:
-        for e in errors:
-            st.error(e)
-
-    c1, c2 = st.columns([1, 3])
-    if c1.button("💾 保存自选股票池", type="primary", disabled=bool(errors)):
-        save_ok = True
-        for r in cleaned:
-            code, name = r["stock_code"], r["stock_name"]
-            code_to_name, name_to_code = _wl_build_name_cache()
-            expected = code_to_name.get(code)
-            if expected and name and name != expected:
-                st.error(f"代码/名称不一致：{code} → {expected}，但填了 {name}")
-                save_ok = False
-        if save_ok and _wl_save(cleaned):
-            st.session_state["wl_table"] = cleaned
-            status_banner("自选股票池已保存。", "success")
-            st.rerun()
-        elif save_ok:
-            status_banner("保存失败，请检查文件权限。", "error")
-
-    # 统计
-    active_cnt = sum(1 for r in st.session_state["wl_table"] if r.get("status") in ("active", "watch"))
-    st.caption(f"当前 {len(st.session_state['wl_table'])} 只，其中 active/watch {active_cnt} 只")
+            else:
+                status_banner("保存失败，请检查文件权限。", "error")
 
 
 # ─── main ───────────────────────────────────────────────────────────────
@@ -6355,63 +7271,198 @@ def main() -> None:
         layout="wide",
         initial_sidebar_state="expanded",
     )
-    # —— 全局 CSS：V1.6 奶油色主题（覆盖 Streamlit 自身白色背景）——
+    # —— 全局 CSS：RADAR_TERMINAL 深蓝黑·电光青·霓虹绿 — 玻璃态·终端感 ——
     st.markdown(f"""
     <style>
-      /* 整页主底 — 与 .streamlit/config.toml 的 backgroundColor 对齐 */
-      .stApp {{ background-color: {COLOR_BG} !important; }}
-      .main .block-container {{ padding-top:1.6rem; padding-bottom:2rem; background-color: {COLOR_BG}; }}
-
-      /* sidebar 用次级奶油底 */
-      section[data-testid="stSidebar"] > div {{
-          background-color: {COLOR_CARD_DEEP} !important;
-      }}
-      section[data-testid="stSidebar"] *, section[data-testid="stSidebar"] .stMarkdown {{
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Hanken+Grotesk:wght@600;700&family=JetBrains+Mono:wght@500;700&display=swap');
+      .stApp {{
+          background:
+            radial-gradient(circle at top, rgba(0,218,243,0.12), transparent 28%),
+            linear-gradient(180deg, #0A0E17 0%, #0C121B 38%, #0A0E17 100%) !important;
           color: {COLOR_TEXT};
+          font-family: "Inter", "PingFang SC", "Helvetica Neue", system-ui, sans-serif;
+      }}
+      .main .block-container {{
+          padding-top:0;
+          padding-bottom:0.1rem;
+          max-width: 1360px;
+      }}
+      div[data-testid="stElementContainer"]:has(.radar-topbar-mount),
+      div[data-testid="stElementContainer"]:has(.top-nav-radio) {{
+          height: 0 !important;
+          min-height: 0 !important;
+          margin: 0 !important;
+          padding: 0 !important;
+      }}
+      div[data-testid="stElementContainer"]:has(.top-nav-radio) + div[data-testid="stElementContainer"] {{
+          height: 0 !important;
+          min-height: 0 !important;
+          margin: 0 !important;
+          padding: 0 !important;
+      }}
+      div[data-testid="stElementContainer"]:has(.top-nav-radio) + div[data-testid="stElementContainer"] > div {{
+          height: 0 !important;
+          min-height: 0 !important;
+          margin: 0 !important;
+          padding: 0 !important;
+      }}
+      header[data-testid="stHeader"],
+      div[data-testid="stToolbar"],
+      div[data-testid="stDecoration"],
+      div[data-testid="stStatusWidget"],
+      div[data-testid="stAppDeployButton"],
+      button[data-testid="stBaseButton-header"],
+      #MainMenu,
+      footer {{
+          display: none !important;
+          visibility: hidden !important;
+      }}
+      /* ── 终端网格背景 ── */
+      .stApp::before {{
+          content: "";
+          position: fixed;
+          inset: 0;
+          pointer-events: none;
+          background-image: radial-gradient(rgba(0,218,243,0.05) 1px, transparent 1px);
+          background-size: 32px 32px;
+          opacity: 0.28;
+          z-index: 0;
+      }}
+      section[data-testid="stSidebar"] {{ display:none !important; }}
+      code, pre, kbd {{
+          font-family: "JetBrains Mono", "SFMono-Regular", "Consolas", "Menlo", monospace !important;
       }}
 
       /* metric / KPI 卡片 */
       div[data-testid="stMetric"] {{
-          background: {COLOR_CARD};
-          border: 1px solid {COLOR_BORDER};
-          border-radius: 10px;
+          background: linear-gradient(180deg, rgba(18,24,33,0.92) 0%, rgba(15,20,27,0.96) 100%);
+          border: 1px solid rgba(255,255,255,0.08);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 0 22px rgba(0,218,243,0.05);
+          border-radius: 12px;
           padding: 14px 16px;
           color: {COLOR_TEXT};
       }}
 
-      /* dataframe / 表格容器 — 把内部白底覆盖成奶油 */
+      /* dataframe / 表格容器 — 玻璃态深色表格 */
       div[data-testid="stDataFrame"],
       div[data-testid="stDataFrame"] > div,
       div[data-testid="stDataFrame"] [data-baseweb="table"],
       div[data-testid="stDataFrame"] .glideDataEditor {{
-          background-color: {COLOR_CARD} !important;
-          border: 1px solid {COLOR_BORDER};
-          border-radius: 8px;
+          background-color: rgba(20,25,34,0.92) !important;
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 12px;
           color: {COLOR_TEXT};
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
       }}
 
       /* select / multiselect / radio / button */
       div[data-baseweb="select"] > div,
       div[data-baseweb="popover"] > div {{
-          background-color: {COLOR_CARD} !important;
+          background-color: rgba(28,34,45,0.92) !important;
+          border-color: rgba(255,255,255,0.08) !important;
+          color: {COLOR_TEXT} !important;
+          border-radius: 12px !important;
+          min-height: 48px;
+      }}
+      div[data-baseweb="select"] span,
+      div[data-baseweb="popover"] * {{
+          color: {COLOR_TEXT} !important;
+      }}
+      div[data-baseweb="select"] input {{
+          font-family: "JetBrains Mono", "SFMono-Regular", "Consolas", "Menlo", monospace !important;
+      }}
+      .stSelectbox label, .stMultiSelect label, .stTextInput label, .stTextArea label {{
+          color: {COLOR_MUTED} !important;
+          font-size: 11px !important;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+      }}
+      .today-lock-scroll div[data-testid="stSelectbox"] {{
+          max-width: 220px;
+      }}
+      .today-lock-scroll div[data-testid="stSelectbox"] > div[data-baseweb="select"] > div {{
+          min-height: 38px !important;
+          background: linear-gradient(180deg, rgba(15,20,27,0.96) 0%, rgba(16,22,34,0.92) 100%) !important;
+          border-radius: 2px !important;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 0 0 1px rgba(255,255,255,0.03);
+      }}
+      .today-lock-scroll div[data-testid="stSelectbox"] span {{
+          font-family: "JetBrains Mono", monospace !important;
+          font-size: 12px !important;
+      }}
+      .st-key-today_date_sel {{
+          margin-top: -144px !important;
+          margin-bottom: -6px !important;
+      }}
+      .st-key-today_date_sel::before {{
+          content: "SESSION DATE";
+          display: block;
+          margin-bottom: 6px;
+          font-family: "JetBrains Mono", monospace;
+          font-size: 10px;
+          letter-spacing: 0.16em;
+          text-transform: uppercase;
+          color: rgba(222,226,236,0.44);
+      }}
+      .st-key-today_date_sel label {{
+          margin-bottom: 1px !important;
+      }}
+      .st-key-today_date_sel label p {{
+          font-size: 12px !important;
+          letter-spacing: 0.02em !important;
+          color: rgba(222,226,236,0.82) !important;
+          font-weight: 700 !important;
+      }}
+      .st-key-today_date_sel div[data-testid="stSelectbox"] {{
+          max-width: 1280px !important;
+      }}
+      .st-key-today_date_sel div[data-testid="stSelectbox"] > div[data-baseweb="select"] > div {{
+          min-height: 42px !important;
+          background: linear-gradient(180deg, rgba(20,24,34,0.98) 0%, rgba(17,22,33,0.94) 100%) !important;
+          border-radius: 16px !important;
+          border: 1px solid rgba(255,255,255,0.08) !important;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 14px 30px rgba(0,0,0,0.14) !important;
+          padding-left: 10px !important;
+      }}
+      .st-key-today_date_sel + div[data-testid="stElementContainer"] + div[data-testid="stLayoutWrapper"] {{
+          margin-top: -14px !important;
+      }}
+      .st-key-today_date_sel + div[data-testid="stElementContainer"] + div[data-testid="stLayoutWrapper"] + div[data-testid="stLayoutWrapper"] {{
+          margin-top: 10px !important;
+      }}
+      .st-key-today_date_sel + div[data-testid="stElementContainer"] + div[data-testid="stLayoutWrapper"] + div[data-testid="stLayoutWrapper"] + div[data-testid="stElementContainer"] {{
+          margin-top: 12px !important;
+      }}
+      .st-key-today_date_sel + div[data-testid="stElementContainer"] + div[data-testid="stLayoutWrapper"] + div[data-testid="stLayoutWrapper"] + div[data-testid="stElementContainer"] .terminal-panel {{
+          margin-top: 6px !important;
+      }}
+      .stTextInput input, .stTextArea textarea {{
+          background: rgba(28,34,45,0.92) !important;
+          color: {COLOR_TEXT} !important;
+          border: 1px solid rgba(255,255,255,0.08) !important;
+          border-radius: 12px !important;
       }}
 
-      /* Streamlit "info / warning / error / success" 容器统一奶油变体 */
+      /* Streamlit "info / warning / error / success" 容器统一终端风格 */
       div[data-testid="stAlert"][kind="info"] {{
           background-color: {COLOR_BANNER_INFO} !important;
           color: {COLOR_TEXT};
+          border: 1px solid {COLOR_BORDER};
       }}
       div[data-testid="stAlert"][kind="success"] {{
           background-color: {COLOR_BANNER_SUCCESS} !important;
           color: {COLOR_TEXT};
+          border: 1px solid {COLOR_BORDER};
       }}
       div[data-testid="stAlert"][kind="warning"] {{
           background-color: {COLOR_BANNER_WARN} !important;
           color: {COLOR_TEXT};
+          border: 1px solid {COLOR_BORDER};
       }}
       div[data-testid="stAlert"][kind="error"] {{
           background-color: {COLOR_BANNER_ERROR} !important;
           color: {COLOR_TEXT};
+          border: 1px solid rgba(255,94,102,0.35);
       }}
 
       /* tabs */
@@ -6423,6 +7474,21 @@ def main() -> None:
       /* 标题色 + caption */
       h1, h2, h3, h4, h5 {{ color: {COLOR_TEXT}; }}
       .stCaption, small {{ color: {COLOR_MUTED}; }}
+      h2 {{
+          font-size: 1.85rem;
+          margin-top: 0.25rem;
+          margin-bottom: 0.85rem;
+          font-family: "Hanken Grotesk", "Inter", sans-serif;
+          font-weight: 700;
+      }}
+      h3 {{
+          font-size: 1.28rem;
+          margin-top: 1rem;
+          margin-bottom: 0.65rem;
+          font-family: "Hanken Grotesk", "Inter", sans-serif;
+          font-weight: 700;
+      }}
+      p, li, label, span, div {{ text-shadow: 0 0 0.01px rgba(222,226,236,0.03); }}
 
       /* 横向 radio */
       .stRadio > div {{ flex-direction: row; gap: 1rem; }}
@@ -6436,63 +7502,563 @@ def main() -> None:
       /* plotly chart 外层容器 */
       div[data-testid="stPlotlyChart"] > div {{
           background-color: {COLOR_CARD};
-          border-radius: 8px;
+          border-radius: 12px;
+          border: 1px solid {COLOR_BORDER_SOFT};
+      }}
+
+      /* dataframe header */
+      .glideDataEditor [role="columnheader"] {{
+          background: {COLOR_CARD_ALT} !important;
+          color: {COLOR_TEXT} !important;
+      }}
+      .glideDataEditor [role="gridcell"] {{
+          color: {COLOR_TEXT} !important;
+      }}
+
+      /* 按钮整体做成终端按键 */
+      .stButton button, .stDownloadButton button {{
+          border-radius: 2px !important;
+          border: 1px solid rgba(255,255,255,0.10) !important;
+          background: linear-gradient(180deg, rgba(22,27,34,0.9) 0%, rgba(15,20,27,0.95) 100%) !important;
+          color: {COLOR_TEXT} !important;
+          font-family: "JetBrains Mono", monospace !important;
+          font-size: 11px !important;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+      }}
+      .stButton button:hover, .stDownloadButton button:hover {{
+          border-color: {COLOR_SECOND} !important;
+          box-shadow: 0 0 18px rgba(0,218,243,0.18);
+          background: linear-gradient(180deg, rgba(22,27,34,0.95) 0%, rgba(15,20,27,0.98) 100%) !important;
+      }}
+      .stButton button p, .stDownloadButton button p {{
+          font-weight: 700;
+          letter-spacing: 0.01em;
+      }}
+      div[data-testid="stExpander"] {{
+          background: rgba(22,27,34,0.7);
+          backdrop-filter: blur(20px);
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 2px;
+          overflow: hidden;
+      }}
+      div[data-testid="stExpander"] details summary p {{
+          color: {COLOR_TEXT} !important;
+          font-weight: 700;
+      }}
+      div[data-testid="stForm"] {{
+          background: rgba(22,27,34,0.5);
+          backdrop-filter: blur(12px);
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 2px;
+          padding: 16px 18px 8px 18px;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+      }}
+      div[data-testid="column"] > div:has(> div[data-testid="stButton"]),
+      div[data-testid="column"] > div:has(> div[data-testid="stMarkdown"]) {{
+          border-radius: 12px;
+      }}
+      .top-nav-radio {{
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 42px;
+          z-index: 32;
+          background: linear-gradient(180deg, rgba(8, 12, 18, 0.98) 0%, rgba(9, 14, 22, 0.93) 100%);
+          backdrop-filter: blur(16px);
+          border-bottom: 1px solid rgba(255,255,255,0.07);
+          pointer-events: none;
+          box-shadow: 0 14px 34px rgba(0,0,0,0.34), inset 0 -1px 0 rgba(0,218,243,0.08);
+      }}
+      .top-nav-radio::before {{
+          content: "";
+          position: absolute;
+          left: 0;
+          right: 0;
+          top: 0;
+          height: 1px;
+          background: linear-gradient(90deg, rgba(0,218,243,0.0), rgba(0,218,243,0.42), rgba(0,218,243,0.0));
+      }}
+      .top-nav-radio + div[data-testid="stRadio"],
+      div[data-testid="stElementContainer"]:has(.top-nav-radio) + div[data-testid="stElementContainer"] div[data-testid="stRadio"] {{
+          position: fixed;
+          top: 0;
+          left: 246px;
+          right: 18px;
+          z-index: 41;
+          background: transparent !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          min-height: 0 !important;
+          height: 42px !important;
+      }}
+      .top-nav-radio + div[data-testid="stRadio"] [role="radiogroup"],
+      div[data-testid="stElementContainer"]:has(.top-nav-radio) + div[data-testid="stElementContainer"] div[data-testid="stRadio"] [role="radiogroup"] {{
+          display: grid !important;
+          grid-template-columns: repeat(10, minmax(0, 1fr));
+          flex-wrap: nowrap;
+          gap: 6px;
+          overflow: visible;
+          padding: 0 !important;
+          height: 42px !important;
+          padding-top: 0 !important;
+          padding-bottom: 0 !important;
+          align-items: center;
+      }}
+      .top-nav-radio + div[data-testid="stRadio"] > label,
+      div[data-testid="stElementContainer"]:has(.top-nav-radio) + div[data-testid="stElementContainer"] div[data-testid="stRadio"] > label {{
+          display: none !important;
+      }}
+      .top-nav-radio + div[data-testid="stRadio"] [role="radiogroup"] > label,
+      div[data-testid="stElementContainer"]:has(.top-nav-radio) + div[data-testid="stElementContainer"] div[data-testid="stRadio"] [role="radiogroup"] > label {{
+          position: relative !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          background: rgba(255,255,255,0.0) !important;
+          border: 1px solid transparent !important;
+          border-radius: 0 !important;
+          border-bottom: 2px solid transparent !important;
+          padding: 0 4px !important;
+          min-width: 0 !important;
+          width: 100% !important;
+          min-height: 40px !important;
+          height: 40px !important;
+          box-shadow: none !important;
+          white-space: nowrap !important;
+          overflow: hidden !important;
+      }}
+      .top-nav-radio + div[data-testid="stRadio"] [role="radiogroup"] > label > div:first-child,
+      div[data-testid="stElementContainer"]:has(.top-nav-radio) + div[data-testid="stElementContainer"] div[data-testid="stRadio"] [role="radiogroup"] > label > div:first-child {{
+          display: none !important;
+      }}
+      .top-nav-radio + div[data-testid="stRadio"] [role="radiogroup"] > label:hover,
+      div[data-testid="stElementContainer"]:has(.top-nav-radio) + div[data-testid="stElementContainer"] div[data-testid="stRadio"] [role="radiogroup"] > label:hover {{
+          background: linear-gradient(180deg, rgba(0,218,243,0.055), rgba(0,218,243,0.012)) !important;
+      }}
+      .top-nav-radio + div[data-testid="stRadio"] [role="radiogroup"] > label p,
+      div[data-testid="stElementContainer"]:has(.top-nav-radio) + div[data-testid="stElementContainer"] div[data-testid="stRadio"] [role="radiogroup"] > label p {{
+          font-size: 11px !important;
+          color: rgba(222,226,236,0.55) !important;
+          font-family: "Inter", "PingFang SC", sans-serif !important;
+          letter-spacing: 0 !important;
+          font-weight: 700 !important;
+          line-height: 1 !important;
+          max-width: 100% !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+          white-space: nowrap !important;
+          margin: 0 !important;
+      }}
+      .top-nav-radio + div[data-testid="stRadio"] [role="radiogroup"] > label:has(input:checked),
+      div[data-testid="stElementContainer"]:has(.top-nav-radio) + div[data-testid="stElementContainer"] div[data-testid="stRadio"] [role="radiogroup"] > label:has(input:checked) {{
+          border-bottom-color: {COLOR_SECOND} !important;
+          background: linear-gradient(180deg, rgba(0,218,243,0.08), rgba(0,218,243,0.018)) !important;
+          box-shadow: inset 0 -10px 18px rgba(0,218,243,0.06) !important;
+      }}
+      .top-nav-radio + div[data-testid="stRadio"] [role="radiogroup"] > label:has(input:checked) p,
+      div[data-testid="stElementContainer"]:has(.top-nav-radio) + div[data-testid="stElementContainer"] div[data-testid="stRadio"] [role="radiogroup"] > label:has(input:checked) p {{
+          color: {COLOR_SECOND} !important;
+          text-shadow: 0 0 10px rgba(0,218,243,0.28);
+      }}
+      .radar-topbar {{
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 42px;
+          display: flex;
+          justify-content: flex-start;
+          align-items: center;
+          padding: 0 18px 0 18px;
+          background: transparent;
+          border-bottom: none;
+          z-index: 42;
+          pointer-events: none;
+      }}
+      .radar-topbar__left {{
+          display: flex;
+          align-items: center;
+          gap: 18px;
+      }}
+      .radar-topbar__brand {{
+          font-family: "JetBrains Mono", monospace;
+          font-size: 17px;
+          font-weight: 700;
+          color: {COLOR_SECOND};
+          pointer-events: auto;
+          letter-spacing: 0.10em;
+          text-shadow: 0 0 18px rgba(0,218,243,0.34);
+          position: relative;
+      }}
+      .radar-topbar__brand::before {{
+          content: "LOCAL QUANT";
+          position: absolute;
+          top: -6px;
+          left: 1px;
+          font-size: 8px;
+          letter-spacing: 0.18em;
+          color: rgba(222,226,236,0.30);
+          white-space: nowrap;
+      }}
+      .radar-topbar__brand::after {{
+          content: "_";
+          animation: cursor-blink 1s step-end infinite;
+          color: {COLOR_SECOND};
+          text-shadow: 0 0 8px rgba(0,218,243,0.5);
+      }}
+      @keyframes cursor-blink {{
+          0%, 100% {{ opacity: 1; }}
+          50% {{ opacity: 0; }}
+      }}
+      .radar-topbar__signal {{
+          width: 38px;
+          height: 2px;
+          background: linear-gradient(90deg, {COLOR_SECOND} 0%, rgba(0,218,243,0.0) 100%);
+          box-shadow: 0 0 16px rgba(0,218,243,0.28);
+          opacity: 0.9;
+      }}
+      .radar-topbar__right {{
+          display: none;
+          align-items: center;
+          gap: 14px;
+          margin-left: auto;
+          pointer-events: auto;
+      }}
+      .radar-topbar__clock {{
+          font-family: "JetBrains Mono", monospace;
+          font-size: 10px;
+          font-weight: 600;
+          color: {COLOR_SECOND};
+          text-shadow: 0 0 10px rgba(0,218,243,0.35);
+          letter-spacing: 0.06em;
+      }}
+      .radar-topbar__status-dot {{
+          display: inline-block;
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: {COLOR_BOUGHT};
+          box-shadow: 0 0 8px rgba(0,228,121,0.6);
+          animation: status-pulse 2s ease-in-out infinite;
+      }}
+      @keyframes status-pulse {{
+          0%, 100% {{ opacity: 1; box-shadow: 0 0 8px rgba(0,228,121,0.6); }}
+          50% {{ opacity: 0.4; box-shadow: 0 0 4px rgba(0,228,121,0.2); }}
+      }}
+      .radar-topbar__status-text {{
+          font-family: "JetBrains Mono", monospace;
+          font-size: 10px;
+          color: {COLOR_MUTED};
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+      }}
+      .radar-topbar__right::before {{
+          content: "";
+          width: 34px;
+          height: 1px;
+          background: linear-gradient(90deg, rgba(0,218,243,0.0), rgba(0,218,243,0.42));
+          margin-right: 2px;
+        }}
+      /* ── 扫描线动画 ── */
+      .radar-topbar::after {{
+          content: "";
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 1px;
+          background: linear-gradient(90deg, transparent, rgba(0,218,243,0.6), transparent);
+          animation: scan-line 3s linear infinite;
+          pointer-events: none;
+      }}
+      @keyframes scan-line {{
+          0% {{ transform: translateY(0); opacity: 0; }}
+          10% {{ opacity: 1; }}
+          30% {{ transform: translateY(40px); opacity: 1; }}
+          31% {{ opacity: 0; transform: translateY(40px); }}
+          100% {{ transform: translateY(0); opacity: 0; }}
+      }}
+      /* ── 导航标签悬停发光 ── */
+      .top-nav-radio + div[data-testid="stRadio"] [role="radiogroup"] > label:has(input:checked)::after,
+      div[data-testid="stElementContainer"]:has(.top-nav-radio) + div[data-testid="stElementContainer"] div[data-testid="stRadio"] [role="radiogroup"] > label:has(input:checked)::after {{
+          content: "";
+          position: absolute;
+          bottom: -1px;
+          left: 18%;
+          right: 18%;
+          height: 2px;
+          background: {COLOR_SECOND};
+          box-shadow: 0 0 12px rgba(0,218,243,0.5);
+          border-radius: 1px;
+      }}
+      @media (max-width: 1180px) {{
+          .top-nav-radio + div[data-testid="stRadio"],
+          div[data-testid="stElementContainer"]:has(.top-nav-radio) + div[data-testid="stElementContainer"] div[data-testid="stRadio"] {{
+              left: 220px;
+              right: 10px;
+          }}
+          .top-nav-radio + div[data-testid="stRadio"] [role="radiogroup"],
+          div[data-testid="stElementContainer"]:has(.top-nav-radio) + div[data-testid="stElementContainer"] div[data-testid="stRadio"] [role="radiogroup"] {{
+              gap: 3px;
+          }}
+          .top-nav-radio + div[data-testid="stRadio"] [role="radiogroup"] > label p,
+          div[data-testid="stElementContainer"]:has(.top-nav-radio) + div[data-testid="stElementContainer"] div[data-testid="stRadio"] [role="radiogroup"] > label p {{
+              font-size: 10px !important;
+          }}
+          .radar-topbar__brand {{
+              font-size: 15px;
+              letter-spacing: 0.08em;
+          }}
+          .radar-topbar__signal {{
+              width: 26px;
+          }}
+      }}
+
+      /* ════════════════════════════════════════════════════════════════ */
+      /* RADAR_TERMINAL V2 升级补丁（Stitch 设计稿同步：2026-06-01）         */
+      /* ════════════════════════════════════════════════════════════════ */
+
+      /* 1) V2 玻璃态卡片 / KPI 卡 hover 上抬 + 内描边发光 */
+      .rt-v2-kpi-card:hover,
+      .rt-v2-glass-card:hover {{
+          transform: translateY(-2px);
+          border-color: rgba(0,218,243,0.32) !important;
+          box-shadow: 0 14px 28px rgba(0,0,0,0.35),
+                      inset 0 0 0 1px rgba(0,218,243,0.10),
+                      0 0 22px rgba(0,218,243,0.10) !important;
+      }}
+
+      /* 2) Tab 选中态 ── 电光青 outline + 微光晕（Stitch 设计稿一致） */
+      .top-nav-radio + div[data-testid="stRadio"] [role="radiogroup"] > label[data-checked="true"],
+      .top-nav-radio + div[data-testid="stRadio"] [role="radiogroup"] > label[aria-checked="true"],
+      div[data-testid="stElementContainer"]:has(.top-nav-radio) + div[data-testid="stElementContainer"]
+      div[data-testid="stRadio"] [role="radiogroup"] > label[data-checked="true"],
+      div[data-testid="stElementContainer"]:has(.top-nav-radio) + div[data-testid="stElementContainer"]
+      div[data-testid="stRadio"] [role="radiogroup"] > label[aria-checked="true"] {{
+          background: rgba(0,218,243,0.06) !important;
+          border: 1px solid rgba(0,218,243,0.55) !important;
+          border-radius: 7px !important;
+          box-shadow: 0 0 14px rgba(0,218,243,0.32),
+                      inset 0 0 0 1px rgba(0,218,243,0.18) !important;
+      }}
+      .top-nav-radio + div[data-testid="stRadio"] [role="radiogroup"] > label[data-checked="true"] p,
+      .top-nav-radio + div[data-testid="stRadio"] [role="radiogroup"] > label[aria-checked="true"] p,
+      div[data-testid="stElementContainer"]:has(.top-nav-radio) + div[data-testid="stElementContainer"]
+      div[data-testid="stRadio"] [role="radiogroup"] > label[data-checked="true"] p,
+      div[data-testid="stElementContainer"]:has(.top-nav-radio) + div[data-testid="stElementContainer"]
+      div[data-testid="stRadio"] [role="radiogroup"] > label[aria-checked="true"] p {{
+          color: {COLOR_SECOND} !important;
+          text-shadow: 0 0 8px rgba(0,218,243,0.55);
+          font-weight: 700 !important;
+      }}
+
+      /* 3) 数据表 grid ── 紧凑 row 36px + hover 电光青 inset 左边线 */
+      div[data-testid="stDataFrame"] div[data-baseweb="table"] td,
+      div[data-testid="stDataFrame"] div[data-baseweb="table"] th {{
+          font-family: {FONT_MONO} !important;
+          font-size: 12px !important;
+          letter-spacing: 0.02em;
+      }}
+      div[data-testid="stDataFrame"] div[data-baseweb="table"] tr:hover td {{
+          background: rgba(0,218,243,0.05) !important;
+          box-shadow: inset 2px 0 0 {COLOR_SECOND};
+      }}
+
+      /* 4) st.metric 容器统一 V2 玻璃态 + 左侧 accent 条 */
+      div[data-testid="stMetric"] {{
+          position: relative;
+          background: {COLOR_GLASS_BG} !important;
+          border: 1px solid {COLOR_GLASS_EDGE} !important;
+          border-radius: 12px !important;
+          padding: 14px 18px 14px 22px !important;
+          transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+      }}
+      div[data-testid="stMetric"]::before {{
+          content: "";
+          position: absolute;
+          left: 0; top: 14px; bottom: 14px; width: 2px;
+          background: {COLOR_SECOND};
+          box-shadow: 0 0 12px rgba(0,218,243,0.40);
+          border-radius: 0 2px 2px 0;
+      }}
+      div[data-testid="stMetric"]:hover {{
+          transform: translateY(-2px);
+          border-color: rgba(0,218,243,0.32) !important;
+          box-shadow: 0 14px 28px rgba(0,0,0,0.35),
+                      inset 0 0 0 1px rgba(0,218,243,0.10),
+                      0 0 22px rgba(0,218,243,0.10) !important;
+      }}
+      div[data-testid="stMetric"] [data-testid="stMetricLabel"] p {{
+          font-family: {FONT_MONO} !important;
+          font-size: 10px !important;
+          color: {COLOR_MUTED} !important;
+          text-transform: uppercase;
+          letter-spacing: 0.14em;
+      }}
+      div[data-testid="stMetric"] [data-testid="stMetricValue"] {{
+          font-family: {FONT_MONO} !important;
+          font-size: 28px !important;
+          font-weight: 700 !important;
+          letter-spacing: -0.01em;
+      }}
+      div[data-testid="stMetric"] [data-testid="stMetricDelta"] {{
+          font-family: {FONT_MONO} !important;
+          font-size: 12px !important;
+      }}
+
+      /* 5) 按钮 ── 主按钮反色风格 + hover 电光青光晕 */
+      .stButton > button[kind="primary"] {{
+          background: transparent !important;
+          color: {COLOR_SECOND} !important;
+          border: 1px solid {COLOR_SECOND} !important;
+          border-radius: 10px !important;
+          font-family: {FONT_MONO} !important;
+          font-size: 12px !important;
+          font-weight: 700 !important;
+          letter-spacing: 0.12em !important;
+          text-transform: uppercase;
+          transition: all .18s ease;
+          box-shadow: 0 0 0 rgba(0,218,243,0) inset;
+      }}
+      .stButton > button[kind="primary"]:hover {{
+          background: {COLOR_SECOND} !important;
+          color: #00141a !important;
+          box-shadow: 0 0 18px rgba(0,218,243,0.55),
+                      0 0 0 1px rgba(0,218,243,0.18) inset;
+      }}
+      .stButton > button[kind="secondary"] {{
+          background: rgba(0,0,0,0.18) !important;
+          color: {COLOR_TEXT} !important;
+          border: 1px solid {COLOR_GLASS_EDGE} !important;
+          border-radius: 10px !important;
+          font-family: {FONT_MONO} !important;
+          font-size: 12px !important;
+          letter-spacing: 0.08em !important;
+      }}
+      .stButton > button[kind="secondary"]:hover {{
+          border-color: {COLOR_SECOND} !important;
+          color: {COLOR_SECOND} !important;
+      }}
+
+      /* 6) toggle / tabs / expander 统一玻璃态描边 */
+      div[data-testid="stTabs"] button[role="tab"] {{
+          font-family: {FONT_MONO} !important;
+          font-size: 12px !important;
+          letter-spacing: 0.10em;
+          text-transform: uppercase;
+          color: {COLOR_MUTED} !important;
+      }}
+      div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {{
+          color: {COLOR_SECOND} !important;
+          text-shadow: 0 0 6px rgba(0,218,243,0.50);
+      }}
+      div[data-testid="stTabs"] [role="tablist"] [data-baseweb="tab-highlight"] {{
+          background: {COLOR_SECOND} !important;
+          box-shadow: 0 0 8px rgba(0,218,243,0.55);
+      }}
+      div[data-testid="stExpander"] {{
+          background: {COLOR_GLASS_BG} !important;
+          border: 1px solid {COLOR_GLASS_EDGE} !important;
+          border-radius: 12px !important;
+      }}
+
+      /* 7) 字体堆栈全局统一 */
+      .stApp, .stMarkdown, p, span, div, li, td, th {{
+          font-family: {FONT_BODY};
+      }}
+      h1, h2, h3, h4, h5, h6 {{
+          font-family: {FONT_HEADLINE} !important;
+          letter-spacing: -0.01em;
+      }}
+      .rt-mono, .mono, code, kbd, pre {{
+          font-family: {FONT_MONO} !important;
+      }}
+
+      /* 8) V2 chip 状态标签的 hover 微亮 */
+      .rt-v2-chip:hover {{
+          box-shadow: 0 0 10px currentColor;
       }}
     </style>
     """, unsafe_allow_html=True)
+    render_shell_topbar()
+    nav_pages = [
+        "今日总览", "买入确认", "T+1 复盘",
+        "未买入跟踪", "周月复盘",
+        "候选复盘", "明日计划",
+        "做T观察", "⭐ 我的自选", "手动补跑",
+    ]
+    st.markdown("<div class='top-nav-radio'></div>", unsafe_allow_html=True)
+    page = st.radio(
+        "顶部导航",
+        nav_pages,
+        horizontal=True,
+        label_visibility="collapsed",
+        format_func=lambda x: x,
+        key="top_nav_page",
+    )
 
-    with st.sidebar:
-        st.markdown("## 📊 朱哥短线雷达 V1.6")
-        st.caption("本地复盘看板 · V1.6（复盘计划层 + 资金条件层（观察模式） + 9:36 技术确认层）")
+    is_today_page = "今日总览" in page
+    is_watchlist_page = "我的自选" in page
+    if is_today_page or is_watchlist_page:
         st.markdown(
-            f"<div style='font-size:11px;color:{COLOR_MUTED};line-height:1.6;margin-top:4px;'>"
-            "只读 output/ 下数据，不写交易记录，<br>不接券商，不自动交易。"
-            "</div>",
+            """
+            <style>
+              html, body, [data-testid="stAppViewContainer"], .stApp, section.main {
+                overflow: hidden !important;
+                height: 100vh !important;
+                max-height: 100vh !important;
+              }
+              .main .block-container {
+                height: calc(100vh - 40px) !important;
+                max-height: calc(100vh - 40px) !important;
+                overflow: hidden !important;
+                padding-top: 0 !important;
+                padding-bottom: 0 !important;
+              }
+              .main [data-testid="stVerticalBlock"] {
+                gap: 0.18rem !important;
+              }
+            </style>
+            """,
             unsafe_allow_html=True,
         )
-        st.divider()
-        page = st.radio(
-            "选择页面",
-            ["📌 今日总览", "✅ 买入确认", "🔄 T+1 复盘",
-             "👁 未买入跟踪", "📅 周/月复盘",
-             "📒 每日候选复盘", "📌 明日交易计划",
-             "📈 做 T 观察",
-             "⭐ 自选股票池",
-             "🛠 手动补跑"],
-            label_visibility="collapsed",
+    else:
+        st.markdown(
+            """
+            <style>
+              html, body, [data-testid="stAppViewContainer"], .stApp { overflow: auto !important; height: auto !important; max-height: none !important; }
+              section.main, .main .block-container { overflow: visible !important; height: auto !important; max-height: none !important; }
+              .main .block-container {
+                padding-top: 52px !important;
+              }
+              div[data-testid="stMainBlockContainer"] > div[data-testid="stVerticalBlock"] {
+                gap: 0.35rem !important;
+              }
+            </style>
+            """,
+            unsafe_allow_html=True,
         )
-        st.divider()
-        st.markdown("**数据源**")
-        for label, p in [
-            ("trade_review.csv", CSV_PATH),
-            ("trade_review_cn.csv", CSV_CN_PATH),
-            ("总表 xlsx", XLSX_PATH),
-            ("今日报告.md", DAILY_MD),
-        ]:
-            status_emoji = "✅" if p.exists() else "❌"
-            st.caption(f"{status_emoji} {label}　{last_modified(p)}")
-        if st.button("🔄 重新加载数据", width="stretch"):
-            load_trade_review.clear()
-            st.rerun()
 
     # —— 📈 做 T 观察 也不依赖 trade_review.csv（独立读 t_signal_latest.csv）——
-    if "做 T" in page:
+    if page == "做T观察":
         page_t_signal()
         return
 
-    # —— ⭐ 自选股票池 不依赖 trade_review.csv ——
-    if "自选" in page:
+    # —— ⭐ 我的自选 独立读写 custom_stock_pool.csv，不依赖 trade_review.csv —— 
+    if page == "⭐ 我的自选":
         page_watchlist()
         return
 
     # —— 🛠 手动补跑 不依赖 CSV，且即使 CSV 为空时也应该可用（用来手动跑 run.py 生成 CSV）——
-    if page.startswith("🛠"):
+    if page == "手动补跑":
         page_manual_rerun()
         return
 
     # —— 📌 明日交易计划 也不依赖 trade_review.csv（独立读 tomorrow_plan_latest.csv）──
     # 必须在 df_all.empty 检查之前 dispatch，否则空 CSV 时进不来
-    if "明日交易计划" in page:
+    if page == "明日计划":
         page_tomorrow_plan()
         return
 
@@ -6509,17 +8075,17 @@ def main() -> None:
 
     # ⚠️ 用 "in" 精确匹配关键词，避免两个 📌 页面冲突（📌 今日总览 vs 📌 明日交易计划）
     # 📌 明日交易计划 / 🛠 手动补跑 已在上方提前 dispatch + return
-    if "今日总览" in page:
+    if page == "今日总览":
         page_today(df_all)
-    elif page.startswith("✅"):
+    elif page == "买入确认":
         page_buy_check(df_all)
-    elif page.startswith("🔄"):
+    elif page == "T+1 复盘":
         page_t1_review(df_all)
-    elif page.startswith("👁"):
+    elif page == "未买入跟踪":
         page_not_bought(df_all)
-    elif page.startswith("📅"):
+    elif page == "周月复盘":
         page_period_review(df_all)
-    elif page.startswith("📒"):
+    elif page == "候选复盘":
         page_candidate_lifecycle()
 
 
