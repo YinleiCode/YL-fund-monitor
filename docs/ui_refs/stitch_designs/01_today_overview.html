@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>RADAR_TERMINAL V2 | 量化交易终端</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;700;800&amp;family=Inter:wght@300;400;500;600&amp;family=JetBrains+Mono:wght@400;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        :root {
+            --primary: #00DAF3;
+            --secondary: #00E479;
+            --accent: #FF3D8A;
+            --bg-deep: #070A12;
+            --bg-main: #0A0E17;
+            --bg-side: #0F141B;
+            --text-main: #DEE2EC;
+            --text-dim: #8A95AB;
+            --border: rgba(255, 255, 255, 0.06);
+        }
+
+        body {
+            background-color: var(--bg-deep);
+            color: var(--text-main);
+            font-family: 'Inter', 'PingFang SC', sans-serif;
+            overflow-x: hidden;
+        }
+
+        .font-headline { font-family: 'Space Grotesk', sans-serif; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+        .glass-card {
+            background: rgba(20, 28, 40, 0.65);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+        }
+
+        .glow-cyan { box-shadow: 0 0 12px rgba(0, 218, 243, 0.25); }
+        .glow-green { box-shadow: 0 0 12px rgba(0, 228, 121, 0.25); }
+
+        .pulse-dot {
+            animation: pulse 1.4s infinite cubic-bezier(0.4, 0, 0.6, 1);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.9); }
+        }
+
+        .scanline {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(to bottom, transparent 50%, rgba(0, 218, 243, 0.02) 50%);
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        /* Material Icons sizing */
+        .material-symbols-outlined {
+            font-size: 18px;
+            vertical-align: middle;
+        }
+
+        /* Hide scrollbars but keep functionality */
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#00DAF3",
+                        secondary: "#00E479",
+                        accent: "#FF3D8A",
+                        warning: "#FFB627",
+                        surface: "#0A0E17",
+                        sidebar: "#0F141B"
+                    },
+                    fontFamily: {
+                        headline: ["Space Grotesk", "sans-serif"],
+                        mono: ["JetBrains Mono", "monospace"],
+                        body: ["Inter", "sans-serif"]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="antialiased">
+<div class="scanline"></div>
+<!-- TopNavBar -->
+<nav class="fixed top-0 left-0 w-full z-50 flex items-center justify-between px-6 bg-[#0A0E17] border-b border-white/5 backdrop-blur-md h-[44px] shadow-[0_0_15px_rgba(0,0,0,0.5)]">
+<div class="flex items-center gap-6">
+<div class="font-headline text-lg font-black tracking-tighter text-[#00DAF3] flex items-center gap-2">
+<span class="material-symbols-outlined pulse-dot" style="font-variation-settings: 'FILL' 1;">radar</span>
+                RADAR_TERMINAL
+            </div>
+<div class="hidden lg:flex items-center gap-1">
+<!-- Navigation Tabs based on JSON Strings -->
+<a class="px-3 h-[44px] flex items-center text-sm font-headline tracking-wider font-bold uppercase text-[#00DAF3] border-b-2 border-[#00DAF3] shadow-[0_0_12px_rgba(0,218,243,0.45)]" href="#">TODAY</a>
+<a class="px-3 h-[44px] flex items-center text-sm font-headline tracking-wider font-bold uppercase text-[#8A95AB] hover:text-[#DEE2EC] transition-colors" href="#">TRADE</a>
+<a class="px-3 h-[44px] flex items-center text-sm font-headline tracking-wider font-bold uppercase text-[#8A95AB] hover:text-[#DEE2EC] transition-colors" href="#">T+1</a>
+<a class="px-3 h-[44px] flex items-center text-sm font-headline tracking-wider font-bold uppercase text-[#8A95AB] hover:text-[#DEE2EC] transition-colors" href="#">TRACK</a>
+<a class="px-3 h-[44px] flex items-center text-sm font-headline tracking-wider font-bold uppercase text-[#8A95AB] hover:text-[#DEE2EC] transition-colors" href="#">WEEKLY</a>
+<a class="px-3 h-[44px] flex items-center text-sm font-headline tracking-wider font-bold uppercase text-[#8A95AB] hover:text-[#DEE2EC] transition-colors" href="#">CANDIDATE</a>
+<a class="px-3 h-[44px] flex items-center text-sm font-headline tracking-wider font-bold uppercase text-[#8A95AB] hover:text-[#DEE2EC] transition-colors" href="#">PLAN</a>
+<a class="px-3 h-[44px] flex items-center text-sm font-headline tracking-wider font-bold uppercase text-[#8A95AB] hover:text-[#DEE2EC] transition-colors" href="#">WATCH</a>
+<a class="px-3 h-[44px] flex items-center text-sm font-headline tracking-wider font-bold uppercase text-[#8A95AB] hover:text-[#DEE2EC] transition-colors" href="#">MANUAL</a>
+<a class="px-3 h-[44px] flex items-center text-sm font-headline tracking-wider font-bold uppercase text-[#8A95AB] hover:text-[#DEE2EC] transition-colors" href="#">SYS</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="font-mono text-sm text-[#00DAF3] font-bold" id="clock">09:41:05</div>
+<div class="flex items-center gap-1.5 px-2 py-0.5 rounded border border-secondary/20 bg-secondary/5">
+<div class="w-1.5 h-1.5 rounded-full bg-secondary pulse-dot"></div>
+<span class="text-[10px] font-mono text-secondary font-bold">SYS_ONLINE</span>
+</div>
+<div class="w-7 h-7 rounded-full overflow-hidden border border-white/20">
+<img alt="User Terminal Profile" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDjEWlRwItfeA6RiM5EqgJbzu7G79nYSgSxvf0Gm8fBv0sClzR6ViAoXa3637Nen2RYleS3yo9kEdhbXKAgdl8v2vx1JCTvBCbTimU55tKbYhmCOR7liOowrI7CfemrZ0nRE-G8nmK_5zUc28rodP1nTVIV-hsrUYajjaOGw7hDloQWQOFSo9RPeZDDlUcRWTKRqaCkMyGMm9eEx-zvx_c9Vd-7OqCjlkizLk5ublf7TThPwmOknDGIiz5cMcIIGS_-PuDnvFxiB4HR"/>
+</div>
+</div>
+</nav>
+<!-- SideNavBar (Right) -->
+<aside class="fixed right-0 top-[44px] h-[calc(100vh-44px)] w-64 bg-[#0F141B] border-l border-white/10 flex flex-col z-40">
+<div class="p-4 border-b border-white/5">
+<div class="flex items-center justify-between mb-1">
+<span class="text-[#DEE2EC] font-headline font-bold uppercase tracking-widest text-xs">QUANT_ENGINE</span>
+<span class="text-[10px] font-mono text-[#4B5670]">V2.0.48_STABLE</span>
+</div>
+<div class="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+<div class="h-full bg-primary w-2/3 shadow-[0_0_8px_rgba(0,218,243,0.6)]"></div>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto p-4 space-y-6">
+<!-- Market Stats (Right Side Content) -->
+<section>
+<h4 class="text-[10px] font-mono font-bold text-[#4B5670] uppercase tracking-widest mb-3">Capital Metrics</h4>
+<div class="space-y-3">
+<div class="flex justify-between items-center text-xs">
+<span class="text-[#8A95AB]">北向资金</span>
+<span class="font-mono text-secondary font-bold">+18.3B</span>
+</div>
+<div class="flex justify-between items-center text-xs">
+<span class="text-[#8A95AB]">总成交额</span>
+<span class="font-mono text-[#DEE2EC]">924.7B</span>
+</div>
+<div class="flex justify-between items-center text-xs">
+<span class="text-[#8A95AB]">涨停/跌停</span>
+<div class="flex gap-2">
+<span class="font-mono text-secondary">87</span>
+<span class="text-[#4B5670]">/</span>
+<span class="font-mono text-accent">12</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Algorithm Confidence -->
+<section>
+<h4 class="text-[10px] font-mono font-bold text-[#4B5670] uppercase tracking-widest mb-3">Algo Confidence</h4>
+<div class="space-y-4">
+<div>
+<div class="flex justify-between text-[10px] font-mono mb-1">
+<span class="text-[#8A95AB]">REPLAY_PLANNING</span>
+<span class="text-primary">100%</span>
+</div>
+<div class="h-1 bg-white/5 rounded-full"><div class="h-full bg-primary" style="width: 100%"></div></div>
+</div>
+<div>
+<div class="flex justify-between text-[10px] font-mono mb-1">
+<span class="text-[#8A95AB]">CAPITAL_CONDITION</span>
+<span class="text-secondary">67%</span>
+</div>
+<div class="h-1 bg-white/5 rounded-full"><div class="h-full bg-secondary" style="width: 67%"></div></div>
+</div>
+<div>
+<div class="flex justify-between text-[10px] font-mono mb-1">
+<span class="text-[#8A95AB]">9:36_CONFIRMATION</span>
+<span class="text-accent">33%</span>
+</div>
+<div class="h-1 bg-white/5 rounded-full"><div class="h-full bg-accent" style="width: 33%"></div></div>
+</div>
+</div>
+</section>
+<!-- Top 3 -->
+<section>
+<h4 class="text-[10px] font-mono font-bold text-[#4B5670] uppercase tracking-widest mb-3">Top Momentum</h4>
+<div class="space-y-2">
+<div class="flex items-center gap-3 p-2 rounded bg-white/5 border border-white/5">
+<span class="font-mono text-secondary font-bold">01</span>
+<div class="flex flex-col">
+<span class="text-xs font-bold">赛力斯</span>
+<span class="text-[10px] font-mono text-[#4B5670]">601127</span>
+</div>
+</div>
+<div class="flex items-center gap-3 p-2 rounded bg-white/5 border border-white/5">
+<span class="font-mono text-primary font-bold">02</span>
+<div class="flex flex-col">
+<span class="text-xs font-bold">贵州茅台</span>
+<span class="text-[10px] font-mono text-[#4B5670]">600519</span>
+</div>
+</div>
+<div class="flex items-center gap-3 p-2 rounded bg-white/5 border border-white/5">
+<span class="font-mono text-primary font-bold">03</span>
+<div class="flex flex-col">
+<span class="text-xs font-bold">宁德时代</span>
+<span class="text-[10px] font-mono text-[#4B5670]">300750</span>
+</div>
+</div>
+</div>
+</section>
+</div>
+<div class="p-4 bg-[#0A0E17]/50 border-t border-white/5 mt-auto">
+<button class="w-full py-2 bg-transparent border border-primary text-primary font-headline text-xs font-bold tracking-widest hover:bg-primary hover:text-black transition-all active:opacity-80">
+                EXECUTE_TRADE
+            </button>
+<div class="flex justify-around mt-4">
+<button class="flex flex-col items-center gap-1 text-[#4B5670] hover:text-primary transition-colors">
+<span class="material-symbols-outlined">settings</span>
+<span class="text-[9px] font-mono">SETTINGS</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-[#4B5670] hover:text-primary transition-colors">
+<span class="material-symbols-outlined">terminal</span>
+<span class="text-[9px] font-mono">LOGS</span>
+</button>
+</div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="mt-[44px] mr-64 p-6 min-h-[calc(100vh-44px)]">
+<!-- KPI Dashboard -->
+<div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-6">
+<!-- Card 1 -->
+<div class="glass-card p-4 rounded-xl relative overflow-hidden group">
+<div class="absolute top-0 right-0 w-16 h-16 bg-primary/5 -mr-8 -mt-8 rounded-full blur-2xl"></div>
+<div class="text-[10px] font-mono text-dim uppercase tracking-wider mb-1">今日候选</div>
+<div class="flex items-end gap-2">
+<span class="text-3xl font-headline font-bold text-white leading-none">12</span>
+<span class="text-[10px] font-mono text-secondary mb-1">(+2 vs YST)</span>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="glass-card p-4 rounded-xl border-primary/20 bg-primary/5">
+<div class="text-[10px] font-mono text-primary uppercase tracking-wider mb-1">确认买入</div>
+<div class="flex items-center gap-2">
+<span class="text-3xl font-headline font-bold text-primary leading-none">4</span>
+<span class="px-1.5 py-0.5 rounded bg-primary text-black text-[9px] font-bold font-mono pulse-dot">ACTIVE</span>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="glass-card p-4 rounded-xl overflow-hidden flex flex-col justify-between">
+<div>
+<div class="text-[10px] font-mono text-dim uppercase tracking-wider mb-1">模拟收益</div>
+<div class="flex items-end gap-2">
+<span class="text-2xl font-headline font-bold text-secondary leading-none">+¥2,847</span>
+<span class="text-xs font-mono text-secondary mb-0.5">1.83%</span>
+</div>
+</div>
+<div class="h-6 w-full mt-2">
+<svg class="w-full h-full" preserveaspectratio="none" viewbox="0 0 100 20">
+<path d="M0,15 Q20,10 40,12 T80,5 T100,10" fill="none" stroke="#00E479" stroke-width="1.5"></path>
+</svg>
+</div>
+</div>
+<!-- Card 4 -->
+<div class="glass-card p-4 rounded-xl">
+<div class="text-[10px] font-mono text-dim uppercase tracking-wider mb-1">自选池</div>
+<div class="flex items-end gap-2">
+<span class="text-3xl font-headline font-bold text-white leading-none">13</span>
+<span class="text-[10px] font-mono text-dim mb-1">STABLE</span>
+</div>
+</div>
+<!-- Card 5 -->
+<div class="glass-card p-4 rounded-xl overflow-hidden">
+<div class="text-[10px] font-mono text-dim uppercase tracking-wider mb-1">市场情绪</div>
+<div class="flex items-end justify-between">
+<div class="flex items-end gap-2">
+<span class="text-3xl font-headline font-bold text-secondary leading-none">0.72</span>
+<span class="text-[10px] font-mono text-secondary mb-1">强势</span>
+</div>
+</div>
+<div class="w-full h-1 bg-white/5 rounded-full mt-3 overflow-hidden">
+<div class="h-full bg-secondary w-[72%] shadow-[0_0_8px_rgba(0,228,121,0.5)]"></div>
+</div>
+</div>
+</div>
+<!-- Stock Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+<!-- Card Template -->
+<script>
+                const stocks = [
+                    { name: '贵州茅台', code: '600519', price: '1,684.20', change: '+0.45%', trend: 'up' },
+                    { name: '宁德时代', code: '300750', price: '189.42', change: '+2.14%', trend: 'up' },
+                    { name: '平安银行', code: '000001', price: '10.24', change: '-0.12%', trend: 'down' },
+                    { name: '赛力斯', code: '601127', price: '94.38', change: '+5.67%', trend: 'up' },
+                    { name: '东方财富', code: '300059', price: '12.87', change: '+1.33%', trend: 'up' },
+                    { name: '隆基绿能', code: '601012', price: '18.44', change: '-2.45%', trend: 'down' },
+                    { name: '长江电力', code: '600900', price: '25.66', change: '+0.11%', trend: 'up' },
+                    { name: '海康威视', code: '002415', price: '32.18', change: '-0.89%', trend: 'down' }
+                ];
+
+                document.addEventListener('DOMContentLoaded', () => {
+                    const grid = document.getElementById('stock-grid');
+                    stocks.forEach(s => {
+                        const card = document.createElement('div');
+                        card.className = 'glass-card rounded-xl p-4 hover:translate-y-[-2px] transition-all cursor-pointer hover:border-primary/40 group relative';
+                        const isUp = s.trend === 'up';
+                        const colorClass = isUp ? 'text-secondary' : 'text-accent';
+                        const arrow = isUp ? '▲' : '▼';
+                        
+                        card.innerHTML = `
+                            <div class="flex justify-between items-start mb-3">
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <h3 class="font-bold text-sm text-[#DEE2EC]">${s.name}</h3>
+                                        <span class="text-[10px] font-mono text-dim tracking-tighter">${s.code}</span>
+                                    </div>
+                                    <div class="flex items-center gap-2 mt-1">
+                                        <span class="text-xl font-headline font-bold text-white tracking-tight leading-none">${s.price}</span>
+                                        <span class="text-[11px] font-mono font-bold ${colorClass}">${arrow} ${s.change}</span>
+                                    </div>
+                                </div>
+                                <div class="w-16 h-10">
+                                    <svg viewBox="0 0 100 40" class="w-full h-full overflow-visible">
+                                        <path d="M0,30 Q20,25 40,35 T80,10 T100,20" fill="none" stroke="${isUp ? '#00E479' : '#FF3D8A'}" stroke-width="2" />
+                                        <path d="M0,30 Q20,25 40,35 T80,10 T100,20 L100,40 L0,40 Z" fill="url(#grad-${s.code})" opacity="0.1" />
+                                        <defs>
+                                            <linearGradient id="grad-${s.code}" x1="0%" y1="0%" x2="0%" y2="100%">
+                                                <stop offset="0%" style="stop-color:${isUp ? '#00E479' : '#FF3D8A'};stop-opacity:1" />
+                                                <stop offset="100%" style="stop-color:transparent;stop-opacity:0" />
+                                            </linearGradient>
+                                        </defs>
+                                    </svg>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-1 gap-1.5 pt-3 border-t border-white/5">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex gap-1.5">
+                                        <span class="h-[18px] px-1.5 flex items-center rounded bg-black border border-secondary/40 text-[9px] font-mono text-secondary">复盘计划层_PASS</span>
+                                        <span class="h-[18px] px-1.5 flex items-center rounded bg-black border border-secondary/40 text-[9px] font-mono text-secondary">资金条件层_PASS</span>
+                                        <span class="h-[18px] px-1.5 flex items-center rounded bg-black border border-secondary/40 text-[9px] font-mono text-secondary">9:36确认层_PASS</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="absolute inset-0 border border-primary opacity-0 group-hover:opacity-10 rounded-xl pointer-events-none transition-opacity"></div>
+                        `;
+                        grid.appendChild(card);
+                    });
+                });
+            </script>
+<div class="contents" id="stock-grid"></div>
+</div>
+<!-- Section Header -->
+<div class="mt-8 mb-4 flex items-center justify-between">
+<h2 class="font-headline text-xs font-bold tracking-widest text-[#4B5670] uppercase flex items-center gap-2">
+<span class="w-1.5 h-1.5 bg-primary rounded-full"></span>
+                LIVE_SIGNAL_STREAM
+            </h2>
+<div class="text-[10px] font-mono text-dim flex gap-4">
+<span>BUFFER: 12ms</span>
+<span>DATA_SOURCE: KAFKA_LOCAL</span>
+</div>
+</div>
+<!-- Data Table Grid (Mock-up for high density) -->
+<div class="glass-card rounded-xl overflow-hidden">
+<table class="w-full text-left text-[11px] font-mono border-collapse">
+<thead class="bg-white/5 text-dim border-b border-white/10 uppercase tracking-tighter">
+<tr>
+<th class="py-2 px-4 font-normal">Timestamp</th>
+<th class="py-2 px-4 font-normal">Security</th>
+<th class="py-2 px-4 font-normal">Trigger_Signal</th>
+<th class="py-2 px-4 font-normal">Price</th>
+<th class="py-2 px-4 font-normal">Vol_Delta</th>
+<th class="py-2 px-4 font-normal text-right">Status</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-white/[0.02]">
+<tr class="hover:bg-primary/[0.03] transition-colors cursor-pointer group">
+<td class="py-2 px-4 text-dim">09:41:02.482</td>
+<td class="py-2 px-4 font-bold text-primary">赛力斯 (601127)</td>
+<td class="py-2 px-4"><span class="px-1 bg-secondary/10 text-secondary border border-secondary/20 rounded">突破20日线</span></td>
+<td class="py-2 px-4">94.38</td>
+<td class="py-2 px-4 text-secondary">+14.2%</td>
+<td class="py-2 px-4 text-right"><span class="text-secondary">ALGO_TRACKING</span></td>
+</tr>
+<tr class="bg-white/[0.01] hover:bg-primary/[0.03] transition-colors cursor-pointer group">
+<td class="py-2 px-4 text-dim">09:40:58.129</td>
+<td class="py-2 px-4 font-bold text-white">隆基绿能 (601012)</td>
+<td class="py-2 px-4"><span class="px-1 bg-accent/10 text-accent border border-accent/20 rounded">急跌确认</span></td>
+<td class="py-2 px-4">18.44</td>
+<td class="py-2 px-4 text-accent">-5.8%</td>
+<td class="py-2 px-4 text-right"><span class="text-dim">REJECTED</span></td>
+</tr>
+<tr class="hover:bg-primary/[0.03] transition-colors cursor-pointer group">
+<td class="py-2 px-4 text-dim">09:40:55.771</td>
+<td class="py-2 px-4 font-bold text-primary">宁德时代 (300750)</td>
+<td class="py-2 px-4"><span class="px-1 bg-secondary/10 text-secondary border border-secondary/20 rounded">量价齐升</span></td>
+<td class="py-2 px-4">189.42</td>
+<td class="py-2 px-4 text-secondary">+8.4%</td>
+<td class="py-2 px-4 text-right"><span class="text-secondary">ALGO_TRACKING</span></td>
+</tr>
+<tr class="bg-white/[0.01] hover:bg-primary/[0.03] transition-colors cursor-pointer group">
+<td class="py-2 px-4 text-dim">09:40:50.002</td>
+<td class="py-2 px-4 font-bold text-white">平安银行 (000001)</td>
+<td class="py-2 px-4"><span class="px-1 bg-white/5 text-dim border border-white/10 rounded">窄幅震荡</span></td>
+<td class="py-2 px-4">10.24</td>
+<td class="py-2 px-4 text-dim">+0.2%</td>
+<td class="py-2 px-4 text-right"><span class="text-dim">WATCHING</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+</main>
+<script>
+        // Update live clock
+        function updateClock() {
+            const now = new Date();
+            const h = String(now.getHours()).padStart(2, '0');
+            const m = String(now.getMinutes()).padStart(2, '0');
+            const s = String(now.getSeconds()).padStart(2, '0');
+            document.getElementById('clock').textContent = `${h}:${m}:${s}`;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // Simulate some minor movement on numbers
+        setInterval(() => {
+            const prices = document.querySelectorAll('.font-headline.tracking-tight');
+            if (prices.length > 0) {
+                const randomStock = prices[Math.floor(Math.random() * prices.length)];
+                randomStock.classList.add('opacity-50');
+                setTimeout(() => randomStock.classList.remove('opacity-50'), 100);
+            }
+        }, 3000);
+    </script>
+</body></html>
