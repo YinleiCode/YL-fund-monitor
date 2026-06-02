@@ -100,6 +100,25 @@ COLUMNS = [
     "custom_pool_theme",           # 调研主题
     "custom_pool_reason",          # 入池理由
     "custom_pool_status",          # active / watch / paused
+    # ── 2026-06-02 朱哥需求：持仓持续追踪（不再强制 T+1 卖出）+ 止损后 30 天跟踪 ──
+    # 适用于 entry_date >= 20260603 的新买入。老数据（≤ 20260602）保留 t1_close 强制卖逻辑。
+    "holding_status",                  # holding / stopped / post_stop_done / manual_sell / legacy_t1_sell
+    "latest_tracking_date",            # 最后一次 update_review 处理的日期 YYYYMMDD
+    "days_held",                       # 从买入到现在的交易日天数（含 T+1 当天起算）
+    "latest_close",                    # 最新收盘价
+    "latest_return_pct",               # 最新相对 adj_buy_price 收益（例 0.025 = +2.5%）
+    "peak_high",                       # 持仓期间最高价
+    "peak_low",                        # 持仓期间最低价
+    "peak_return_pct",                 # 持仓期间历史最高收益（vs adj_buy）
+    "peak_drawdown_pct",               # 持仓期间历史最大回撤（vs adj_buy）
+    "exit_date",                       # 卖出日（止损 / 手动）YYYYMMDD
+    "exit_price",                      # 卖出价（已含滑点）
+    "exit_reason",                     # stop_loss / manual_sell（手动改 csv 触发）
+    # 止损后 30 个交易日追踪（用于判断"止损是否卖飞"）
+    "post_stop_max_return_pct",        # 止损后最高反弹（相对 exit_price，正数=反弹上去了 = 卖飞）
+    "post_stop_max_drawdown_pct",      # 止损后最低回撤（继续跌了多少）
+    "post_stop_days_tracked",          # 止损后已追踪的交易日数
+    "post_stop_tracking_done_date",    # 30 天追踪完成日 YYYYMMDD
 ]
 
 
@@ -628,26 +647,29 @@ def _calc_row(row: pd.Series, slippage_rate: float, apply_sell_slippage: bool) -
     if any(v is None for v in [t1_open, t1_high, t1_low, t1_close]):
         return row
 
+    # 2026-06-02 朱哥需求：T+1 不再强制卖
+    # 老逻辑：T+1 必卖（开盘/盘中触止损/收盘）
+    # 新逻辑：只有触发止损才卖（low ≤ stop），否则进入持仓追踪
+    #   持仓追踪由 _update_holding_rows() 每天更新 peak_* / latest_* / days_held
+    #   止损触发后进入 post_stop 30 天追踪
     if t1_open <= stop:
+        # T+1 开盘就跌破止损 → 开盘价止损
         stop_triggered = True
         sim_sell = t1_open
     elif t1_low <= stop:
+        # T+1 盘中触发止损 → 止损价卖
         stop_triggered = True
         sim_sell = stop
     else:
         stop_triggered = False
-        sim_sell = t1_close
+        sim_sell = None   # 不强制卖了
 
     row["stop_loss_triggered"]  = "true" if stop_triggered else "false"
-    row["simulated_sell_price"] = str(round(sim_sell, 4))
 
-    adj_sell = sim_sell * (1 - slippage_rate) if apply_sell_slippage else sim_sell
-    row["adjusted_sell_price"] = str(round(adj_sell, 4))
-
+    # T+1 滚动统计字段（无论是否止损都填）
     t1_max_ret   = t1_high / adj_buy - 1
     t1_close_ret = t1_close / adj_buy - 1
     max_dd       = t1_low / adj_buy - 1
-    trade_ret    = adj_sell / adj_buy - 1
 
     def _bs(b: bool) -> str:
         return "true" if b else "false"
@@ -655,12 +677,51 @@ def _calc_row(row: pd.Series, slippage_rate: float, apply_sell_slippage: bool) -
     row["t1_max_return"]          = str(round(t1_max_ret, 4))
     row["t1_close_return"]        = str(round(t1_close_ret, 4))
     row["max_drawdown"]           = str(round(max_dd, 4))
-    row["simulated_trade_return"] = str(round(trade_ret, 4))
     row["is_active_success"]       = _bs(t1_max_ret >= 0.03)
     row["is_strong_surge"]         = _bs(t1_max_ret >= 0.05)
     row["is_close_success"]        = _bs(t1_close_ret > 0)
     row["risk_adjusted_success"]   = _bs(t1_max_ret >= 0.03 and max_dd > -0.03)
     row["ambiguous_path"]          = _bs(t1_high >= adj_buy * 1.03 and t1_low <= stop)
+
+    # 兼容老数据：entry_date <= 20260602 仍按"T+1 必卖"老逻辑写
+    # 新数据：entry_date >= 20260603 → 持仓追踪逻辑（由 _update_holding_rows 接管）
+    entry_date_str = str(row.get("report_date", "")).strip()
+    is_legacy = (entry_date_str and entry_date_str <= "20260602")
+
+    if stop_triggered:
+        # 止损触发：写 exit_date / exit_price / 进入 post_stop 追踪
+        from data_fetcher import next_trading_date as _next_td
+        row["simulated_sell_price"] = str(round(sim_sell, 4))
+        adj_sell = sim_sell * (1 - slippage_rate) if apply_sell_slippage else sim_sell
+        row["adjusted_sell_price"]    = str(round(adj_sell, 4))
+        trade_ret = adj_sell / adj_buy - 1
+        row["simulated_trade_return"] = str(round(trade_ret, 4))
+        row["exit_date"]              = _next_td(entry_date_str) if entry_date_str else ""
+        row["exit_price"]             = str(round(adj_sell, 4))
+        row["exit_reason"]            = "stop_loss"
+        row["holding_status"]         = "stopped"
+        row["post_stop_days_tracked"] = "0"
+    elif is_legacy:
+        # 老数据：T+1 没止损 → 走老逻辑 T+1 收盘卖出
+        sim_sell = t1_close
+        row["simulated_sell_price"]   = str(round(sim_sell, 4))
+        adj_sell = sim_sell * (1 - slippage_rate) if apply_sell_slippage else sim_sell
+        row["adjusted_sell_price"]    = str(round(adj_sell, 4))
+        trade_ret = adj_sell / adj_buy - 1
+        row["simulated_trade_return"] = str(round(trade_ret, 4))
+        row["holding_status"]         = "legacy_t1_sell"
+    else:
+        # 新数据 + 没止损 → 进入持仓追踪
+        row["holding_status"]              = "holding"
+        row["latest_tracking_date"]        = entry_date_str  # 等下次 _update_holding_rows 更新
+        row["days_held"]                   = "1"  # T+1 起算
+        row["latest_close"]                = str(round(t1_close, 3))
+        row["latest_return_pct"]           = str(round(t1_close_ret, 4))
+        row["peak_high"]                   = str(round(t1_high, 3))
+        row["peak_low"]                    = str(round(t1_low, 3))
+        row["peak_return_pct"]             = str(round(t1_max_ret, 4))
+        row["peak_drawdown_pct"]           = str(round(max_dd, 4))
+        # simulated_trade_return / adjusted_sell_price 留空，等真卖出再填
 
     return row
 
@@ -1531,6 +1592,165 @@ def second_check(cfg: dict) -> list:
     return results
 
 
+# =================== 持仓持续追踪 + 止损后 30 天跟踪（2026-06-02 朱哥需求）===================
+
+POST_STOP_TRACKING_DAYS = 30   # 止损后跟踪 30 个交易日
+
+def _update_holding_rows(df: pd.DataFrame, cfg: dict) -> tuple:
+    """对所有 holding_status='holding' 或 'stopped' 的行做每日滚动追踪。
+
+    holding 状态：
+      - 拉今日 K 线，更新 latest_close / latest_return_pct / peak_high / peak_low /
+        peak_return_pct / peak_drawdown_pct / days_held
+      - 检查 today_low ≤ stop_price → 触发止损，切换到 stopped 状态
+
+    stopped 状态（post_stop_tracking）：
+      - 拉今日 K 线，相对 exit_price 算 post_stop_max_return / max_drawdown
+      - 满 POST_STOP_TRACKING_DAYS 天 → 切换到 post_stop_done
+
+    Returns: (n_holding_updated, n_stop_triggered, n_post_stop_updated, n_post_stop_done)
+    """
+    from data_fetcher import fetch_stock_history, next_trading_date
+    from datetime import datetime as _dt
+
+    today_str = _date.today().strftime("%Y%m%d")
+    now_hour = _dt.now().hour
+
+    slip = cfg.get("review", {}).get("slippage_rate", 0.001)
+    apply_sell = cfg.get("review", {}).get("apply_sell_slippage", False)
+
+    n_holding_updated = 0
+    n_stop_triggered  = 0
+    n_post_stop_updated = 0
+    n_post_stop_done = 0
+
+    for idx, row in df.iterrows():
+        status = str(row.get("holding_status", "")).strip().lower()
+        if status not in ("holding", "stopped"):
+            continue   # 跳过：legacy_t1_sell / manual_sell / post_stop_done / 空（未买入）
+
+        # 已经今天更新过的跳过
+        if str(row.get("latest_tracking_date", "")).strip() == today_str:
+            continue
+
+        code = str(row.get("stock_code", "")).zfill(6)
+        if not code:
+            continue
+
+        # 拉今日历史K线
+        try:
+            hist = fetch_stock_history(code, days=5, trade_date=today_str, cfg=cfg)
+        except Exception as e:
+            logger.warning(f"[holding_track] {code} 拉历史失败: {e}")
+            continue
+        if hist is None or hist.empty:
+            continue
+
+        today_fmt = f"{today_str[:4]}-{today_str[4:6]}-{today_str[6:8]}"
+        today_rows = hist[hist["date"].dt.strftime("%Y-%m-%d") == today_fmt]
+        if today_rows.empty:
+            # 今天不是交易日或还没收盘
+            continue
+        if now_hour < 15:
+            # 今天还没收盘，不算
+            continue
+
+        td = today_rows.iloc[0]
+        today_high  = float(td["high"])
+        today_low   = float(td["low"])
+        today_close = float(td["close"])
+
+        if status == "holding":
+            # 持仓追踪：更新 peak_* / latest_*
+            adj_buy = _gf(row.get("adjusted_buy_price"))
+            stop    = _gf(row.get("stop_price"))
+            if adj_buy is None or stop is None or adj_buy <= 0:
+                continue
+
+            # 历史 peak（取已有值 max/min）
+            prev_peak_high = _gf(row.get("peak_high")) or today_high
+            prev_peak_low  = _gf(row.get("peak_low"))  or today_low
+            new_peak_high = max(prev_peak_high, today_high)
+            new_peak_low  = min(prev_peak_low,  today_low)
+            new_peak_ret  = new_peak_high / adj_buy - 1
+            new_peak_dd   = new_peak_low  / adj_buy - 1
+
+            # 检查止损：今日 low ≤ stop
+            if today_low <= stop:
+                # 触发止损
+                # 止损价 = max(stop, today_open)；保守用 stop（盘中可能在 stop 价就卖出）
+                exit_price = stop
+                adj_sell = exit_price * (1 - slip) if apply_sell else exit_price
+                trade_ret = adj_sell / adj_buy - 1
+
+                df.at[idx, "holding_status"]         = "stopped"
+                df.at[idx, "stop_loss_triggered"]    = "true"
+                df.at[idx, "simulated_sell_price"]   = str(round(exit_price, 4))
+                df.at[idx, "adjusted_sell_price"]    = str(round(adj_sell, 4))
+                df.at[idx, "simulated_trade_return"] = str(round(trade_ret, 4))
+                df.at[idx, "exit_date"]              = today_str
+                df.at[idx, "exit_price"]             = str(round(adj_sell, 4))
+                df.at[idx, "exit_reason"]            = "stop_loss"
+                df.at[idx, "post_stop_days_tracked"] = "0"
+                df.at[idx, "latest_tracking_date"]   = today_str
+                n_stop_triggered += 1
+                logger.info(
+                    f"[holding_track] {code} 触发止损 today_low={today_low:.3f} ≤ stop={stop:.3f} "
+                    f"→ exit_price={exit_price:.3f}, ret={trade_ret*100:+.2f}%"
+                )
+            else:
+                # 继续持仓
+                days_held = int(_gf(row.get("days_held")) or 1) + 1
+                df.at[idx, "days_held"]            = str(days_held)
+                df.at[idx, "latest_tracking_date"] = today_str
+                df.at[idx, "latest_close"]         = str(round(today_close, 3))
+                df.at[idx, "latest_return_pct"]    = str(round(today_close / adj_buy - 1, 4))
+                df.at[idx, "peak_high"]            = str(round(new_peak_high, 3))
+                df.at[idx, "peak_low"]             = str(round(new_peak_low, 3))
+                df.at[idx, "peak_return_pct"]      = str(round(new_peak_ret, 4))
+                df.at[idx, "peak_drawdown_pct"]    = str(round(new_peak_dd, 4))
+                n_holding_updated += 1
+                logger.info(
+                    f"[holding_track] {code} 持仓 day={days_held}, ret={today_close/adj_buy-1:+.2%}, "
+                    f"peak_ret={new_peak_ret:+.2%}, peak_dd={new_peak_dd:+.2%}"
+                )
+
+        elif status == "stopped":
+            # 止损后追踪：相对 exit_price 算 max_return / max_drawdown
+            exit_price = _gf(row.get("exit_price"))
+            if exit_price is None or exit_price <= 0:
+                continue
+
+            prev_max_ret  = _gf(row.get("post_stop_max_return_pct"))   or 0.0
+            prev_max_dd   = _gf(row.get("post_stop_max_drawdown_pct")) or 0.0
+            days_tracked  = int(_gf(row.get("post_stop_days_tracked")) or 0) + 1
+
+            new_max_ret = max(prev_max_ret, today_high  / exit_price - 1)
+            new_max_dd  = min(prev_max_dd,  today_low   / exit_price - 1)
+
+            df.at[idx, "post_stop_days_tracked"]      = str(days_tracked)
+            df.at[idx, "post_stop_max_return_pct"]    = str(round(new_max_ret, 4))
+            df.at[idx, "post_stop_max_drawdown_pct"]  = str(round(new_max_dd, 4))
+            df.at[idx, "latest_tracking_date"]        = today_str
+
+            if days_tracked >= POST_STOP_TRACKING_DAYS:
+                df.at[idx, "holding_status"]              = "post_stop_done"
+                df.at[idx, "post_stop_tracking_done_date"] = today_str
+                n_post_stop_done += 1
+                logger.info(
+                    f"[holding_track] {code} 止损后 30 天追踪完成 "
+                    f"max_ret={new_max_ret:+.2%} max_dd={new_max_dd:+.2%}"
+                )
+            else:
+                n_post_stop_updated += 1
+                logger.info(
+                    f"[holding_track] {code} 止损追踪 day={days_tracked}/30 "
+                    f"max_ret={new_max_ret:+.2%} max_dd={new_max_dd:+.2%}"
+                )
+
+    return n_holding_updated, n_stop_triggered, n_post_stop_updated, n_post_stop_done
+
+
 # =================== T+1 自动补全 ===================
 
 def update_review(cfg: dict) -> dict:
@@ -1688,6 +1908,14 @@ def update_review(cfg: dict) -> dict:
             "not_bought_tracking": True,
         })
 
+    # ── 2026-06-02 朱哥需求：持仓滚动追踪 + 止损后 30 天追踪 ──
+    n_hold, n_stop, n_post, n_done = _update_holding_rows(df, cfg)
+    if n_hold or n_stop or n_post or n_done:
+        logger.info(
+            f"[holding_track] 滚动追踪：持仓更新 {n_hold}，新触发止损 {n_stop}，"
+            f"止损追踪 {n_post}，30 天完成 {n_done}"
+        )
+
     df.to_csv(CSV_PATH, index=False, encoding="utf-8-sig")
     cn_display.generate_cn_csv()
     logger.info(f"[update_review] 更新{updated}条，跳过{skipped}条，失败{failed}条")
@@ -1696,6 +1924,12 @@ def update_review(cfg: dict) -> dict:
         "skipped": skipped,
         "failed":  failed,
         "rows":    updated_row_data + nb_row_data,
+        "holding_tracking": {
+            "n_holding_updated":   n_hold,
+            "n_stop_triggered":    n_stop,
+            "n_post_stop_updated": n_post,
+            "n_post_stop_done":    n_done,
+        },
     }
 
 
