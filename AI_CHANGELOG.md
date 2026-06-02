@@ -1164,3 +1164,67 @@ launchctl load ~/Library/LaunchAgents/com.zhuge.stock.teod.plist
   - 6/3 09:36 check_buy 后，`trade_review.csv` 候选不应再带"已回退 V1.4/V1.5"。
 - 不要自作主张改 V1.4 门槛或自选池逻辑，等用户决策。
 - 不要改 launchd plist，等用户确认 WakeUp 策略。
+
+---
+
+## 2026-06-02 Claude（第二轮代码扫描：3 处一致性 bug）
+
+### 本次任务
+
+- 用户要求"再扫一遍代码"。本轮系统扫描 8 类高危模式，发现 6 个新 bug。
+- 选 3 个一致性 bug 修复（小范围、低风险），其余 3 个待用户决策。
+
+### 修改文件
+
+- `trade_review.py`
+  - **Bug #4**（~1429-1434 行 second_check）：加 `math.isfinite(cur_price/open_p_rt/prev_close)` 三连检查，与 check_buy(1115-1118) 对齐。原版本只查 `<=0`，nan/inf 跟数字比较都是 False 绕过校验。
+  - **Bug #6**（1616 行）：`not_bought_tracking` 比较加 `.strip().lower()`。同文件 419/1359 行已经 `.lower()`，这里漏了，CSV 写大写就会失效。
+  - **Bug #7**（524 行 `_gf`）：增加 `math.isinf(f)` 检查，与 nan 一视同仁兜底 None。
+
+- `periodic_review.py`
+  - **Bug #7**（115 行 `_gf`）：同上，加 `math.isinf(f)`。inf 进周/月统计聚合 `mean/sum/max` 会被永远拉到 inf。
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- run.py：未改。（Bug #3 已被 5e1f752 indicators 下游兜底完全覆盖，不需要再改。）
+- trade_review.py：本轮改了，但仅动 helper / 校验 / 字符串模式，**未动任何决策公式**。
+- output/trade_review.csv：未改。
+- config/version_flags.yaml：未改。
+- launchd/*.plist：未改。
+- 自动下单逻辑：未新增。
+- 券商连接逻辑：未新增。
+
+### 是否运行 python run.py
+
+- 否。仅本地 mock 单元测试。
+
+### 验收
+
+- `python -m py_compile trade_review.py` 通过。
+- `python -m py_compile periodic_review.py` 通过。
+- `_gf` 兜底单元测试 14/14 通过：覆盖 `nan/inf/-inf/None/''/'nan'/'inf'/'NaN'/非数字字符串/正常数字/布尔/0`。
+- `second_check` 价格校验 6/6 通过：覆盖正常 / nan close / inf open / nan prev_close / 零价格 / 负价格。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：`82e3375 fix: 2026-06-02 第二轮扫描发现的 3 处一致性 bug`
+- status：仅 2 个文件被改；Codex 工作区脏文件保持不动。
+
+### 本轮发现但未修的 3 个问题（待用户决策）
+
+1. **Bug #3（watchlist 补回 nan 污染）**：经分析已被 5e1f752 indicators 下游兜底完全覆盖。spot 自带 `amount/change_pct/high/low/turnover_rate`，watchlist 补回时不会缺，所以不需要再改 run.py。
+2. **Bug #5（节假日识别，真实坑）**：`data_fetcher.next/prev_trading_date` 仅排除周末。现在 update_review 自动生成 plan（5e1f752），春节/国庆前后会指向非交易日。修复方向 A1 内置节假日列表 / A2 调 akshare 真实交易日历 / A3 节假日人工 check，待用户决策。
+3. **Bug #8（notifier 全局节流用本地时间）**：理论 edge case，凌晨跑会跨日重置。实际生产 launchd 不会凌晨跑，**本轮判定不修**。
+
+### 给所有协作 AI 的关键提示
+
+- 主干 commit 时间线（最新在上）：`82e3375` → `730a6fe` → `5e1f752` → `3df6d1d` → `bf9ce11` → `36f5a97` → `ee5d2c7` → `0145717` → `588d3c1`
+- nan/inf 三层防线已就位：bf9ce11 notifier 文案 / 5e1f752 indicators 数据源 / 82e3375 _gf + second_check helper
+- **请 Codex 同步**：dashboard_app.py 的 `_gf`（~251 行）也只查 nan 不查 inf，请在你下一次提交时一并加 `math.isinf(f)`。
+- Codex 工作区脏文件：`dashboard_app.py` / `scripts/build_t_signal_observer.py` / `scripts/build_t_trade_tracker.py` / `scripts/run_t_eod.py`，本轮未触碰。
+- 不要自作主张改 V1.4 门槛、自选池逻辑、launchd plist、节假日识别 — 等用户决策。

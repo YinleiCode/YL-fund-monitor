@@ -1312,3 +1312,148 @@ cat output/state/t_summary_20260602.json 2>/dev/null
 3. **明早 09:36 check_buy 后**，请确认 `trade_review.csv` 里候选不再带 `已回退 V1.4/V1.5`，而是出现真实的 v16_trade_permission 等字段值。
 4. **V1.4 门槛问题（遗留 #1）**：用户尚未决策，请不要自作主张改 V1.4 门槛或自选池逻辑。
 5. **launchd 睡眠（遗留 #2）**：plist 改动建议先和用户确认硬件唤醒策略再动。
+
+---
+
+## 2026-06-02 Claude（第二轮代码扫描：3 处一致性 bug）
+
+### 本次任务背景
+
+修完 5e1f752（Bug #1 + Bug #2）后用户要求"再扫一遍代码"。本轮系统性排查 8 类潜在 bug 模式，发现 6 个新问题，按风险与影响面，选 3 个一致性 bug 修复，其余 3 个待用户决策。
+
+### 修改文件
+
+#### 1. `trade_review.py` — Bug #4（second_check 与 check_buy 校验不一致）
+
+- **位置**：~1429-1434 行 `second_check()`。
+- **现象**：
+  ```python
+  cur_price  = float(rt["close"])
+  open_p_rt  = float(rt["open"])
+  prev_close = float(rt["prev_close"])
+  if cur_price <= 0 or open_p_rt <= 0 or prev_close <= 0:  # ← 没查 isfinite
+  ```
+  `nan` / `inf` 跟任何数字比较都是 `False`，会绕过 `<= 0` 检查，进入第 1456 行 `(open_p_rt / prev_close - 1) * 100` 产 nan/inf，再传染下游所有判断。
+- **对比**：同文件 `check_buy()` 第 1115-1118 行已经加了 `math.isfinite` 三连，**second_check 没同步**。
+- **修复**：加 `math.isfinite(cur_price)` / `math.isfinite(open_p_rt)` / `math.isfinite(prev_close)` 三连检查，对齐 check_buy。
+
+#### 2. `trade_review.py` — Bug #6（not_bought_tracking 大小写不敏感）
+
+- **位置**：1616 行。
+- **现象**：
+  ```python
+  if str(row.get("not_bought_tracking", "")).strip() == "true":  # 缺 .lower()
+  ```
+  当前 CSV 写入端用小写 `"true"` 没触发，但同文件 419、1359 行都用了 `.strip().lower()`，这里漏了。任何写入端改成 `"True"`/`"TRUE"`（包括人工编辑、Codex 改 UI 时不小心改文案）就会让"未买入 T+1 追踪"逻辑失效，同一行被反复处理。
+- **修复**：改成 `str(...).strip().lower() == "true"`。
+
+#### 3. `trade_review.py` + `periodic_review.py` — Bug #7（_gf 只查 NaN 不查 Inf）
+
+- **现象**：两个文件的 `_gf()` 都只有 `math.isnan(f)` 检查，缺 `math.isinf(f)`。
+- **后果**：
+  - inf 进 V1.4 预闸 (tot < 78) 等比较运算会产生 inf 假阳性
+  - inf 进文案层（之前 bf9ce11 修了 notifier 的 `_fmt_num/_fmt_pct`）会显示 `'inf%'`
+  - inf 进周/月统计聚合 `mean/sum/max` 会被永远拉到 inf（inf 永远是 max）
+- **修复**：两个 `_gf` 一并加 `math.isinf(f)` 检查，与 nan 一视同仁兜底为 `None`。
+- **说明**：`dashboard_app.py` 的 `_gf` 同样有此 bug，但属于 Codex 工作区脏文件，**本轮不动**，等 Codex 同步修复。
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- `run.py`：未改。**确认过 Bug #3（watchlist 补回 nan 污染）已被 5e1f752 的 indicators 下游兜底完全覆盖**，spot 自带字段（amount/change_pct/high/low/turnover_rate）watchlist 补回时不会缺，所以不需要再改 run.py。
+- `trade_review.py`：本轮改了，但只动 `_gf` / `second_check` 价格校验 / `not_bought_tracking` 大小写，属于公认的 helper 与一致性修复，**没动任何决策公式（V1.4 预闸 / 9:36 判定 / V1.5 资金 / V1.6 plan）**。
+- `output/trade_review.csv`：未改。
+- `config/version_flags.yaml`：未改。
+- `launchd/*.plist`：未改。
+
+### 是否运行 python run.py
+
+- 否。仅本地 mock 单元测试。
+
+### 验收
+
+- `python -m py_compile trade_review.py` 通过。
+- `python -m py_compile periodic_review.py` 通过。
+- `_gf` 兜底单元测试 14/14 通过：覆盖 `nan/inf/-inf/None/''/'nan'/'inf'/'NaN'/非数字字符串/正常数字/布尔/0`。
+- `second_check` 价格校验 6/6 通过：覆盖正常 / nan close / inf open / nan prev_close / 零价格 / 负价格。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：`82e3375 fix: 2026-06-02 第二轮扫描发现的 3 处一致性 bug`
+- status：仅 2 个文件被改；Codex 工作区脏文件全部保持不动。
+
+### 第二轮代码扫描全景（给所有 AI 看）
+
+本轮覆盖 8 类高危模式：
+
+1. ✅ `spot_row.get(..., fallback) + float()` 模式（Bug #2 已修） 
+2. ✅ `_gf / _safe_float` 的 nan/inf 兜底（Bug #7 本轮修了 2 个，dashboard_app 1 个留给 Codex）
+3. ✅ 数值比较涉及 None/nan/inf 风险（无新 bug）
+4. ✅ V1.4 决策核心 / 9:36 价格校验（check_buy 已对齐，**second_check 未对齐 → Bug #4 本轮修**）
+5. ✅ `_load_v15_flags / _load_v16_flags / _load_v16_plan` 容错（结构 ok，但暴露 Bug #1 plan 不更新源头已修）
+6. ✅ 除法 / 比例计算潜在除零（已经覆盖 Bug #2 / second_check 用 isfinite）
+7. ✅ 文件落地/读取编码（pandas 处理 BOM OK）
+8. ✅ 关键 bool 字符串比较的大小写（Bug #6 本轮修）
+
+#### 本轮发现但未修的 3 个潜在问题（待用户决策）
+
+##### A. Bug #3：watchlist 补回污染（已被下游覆盖，可不修）
+
+- 链路：自选股被 `history_filter` 剔除 → `_keep_watchlist_after_rank` 从 `candidate_df`（无 ma20/below_ma20_pct）补回 → pandas concat 取列并集 → ma20/below_ma20_pct = NaN
+- 经分析：**5e1f752 的 indicators 下游兜底已完全覆盖这条链路**。spot 自带的 `amount/change_pct/high/low/turnover_rate` 不会因 concat 缺失。
+- 是否要源头治理：可选项。源头治理可避免下游再多兜底，但要动 `run.py:163-200 _keep_watchlist_after_rank`，会让 watchlist 补回主动算 ma20/below_ma20_pct。**当前下游已经稳定，建议不动。**
+
+##### B. Bug #5：节假日识别（影响 plan 自动化，**真实坑**）
+
+- `data_fetcher.py:141 next_trading_date` 注释明确"**仅排除周末，不含节假日**"。
+- 现在 update_review 自动生成 plan（5e1f752 修复后），节假日会指向非交易日：
+  - 春节前最后交易日 → plan.next_trade_date 写春节首日（非交易日）
+  - 春节后第一交易日 check_buy 拿不到匹配 plan → 回退 V1.4
+- 同样影响 update_review 的 T+1 数据等待逻辑（trade_review.py:1550, 1626）。
+- **修复方向**（待用户拍板）：
+  - A1. 内置 2026 节假日列表（最简单，但每年要维护）
+  - A2. 调 akshare `tool_trade_date_hist_sina` 拿真实交易日历（需要网络）
+  - A3. 维持现状，节假日前后两天人工 check（不推荐）
+
+##### C. Bug #8：notifier 全局节流标记用本地时间，未走 calc_dates
+
+- `notifier.py:31-35` 用 `datetime.now().strftime("%Y%m%d")` 作为标记文件名
+- 理论 edge case：凌晨 0:00 前后跑任务会跨日重置
+- 实际生产 launchd 不会凌晨跑业务任务，**本轮判定不修**。
+
+### 给所有协作 AI 的状态板
+
+#### 已合入主干（最新在上）
+
+| commit | 内容 | 谁做 |
+|---|---|---|
+| `82e3375` | second_check isfinite + not_bought_tracking lower + _gf isinf | Claude（本轮）|
+| `730a6fe` | md 状态板 + 9 步排查路径 + 给所有 AI 的提示 | Claude |
+| `5e1f752` | tomorrow_plan 不更新 + indicators nan 兜底 | Claude |
+| `3df6d1d` | md 更新 + 实战观察 + Codex 接力清单 | Claude |
+| `bf9ce11` | notifier _fmt_num/_fmt_pct 增加 math.isnan/isinf | Claude |
+| `36f5a97` | 自选池优先 + T 模块跨日字段 | Codex |
+| `ee5d2c7` | 2026-06-01 push 合并 + T 模块文档 | Codex |
+| `0145717` | T 模块实时 B/S + EOD | Codex |
+| `588d3c1` | fetch_minute_today | Codex |
+
+#### Codex 工作区脏文件（本轮未触碰，由 Codex 自己负责提交）
+
+- `dashboard_app.py`（UI 安全文案 + RADAR 风格统一 + **`_gf` 的 isinf 修复也请 Codex 同步**）
+- `scripts/build_t_signal_observer.py`
+- `scripts/build_t_trade_tracker.py`
+- `scripts/run_t_eod.py`
+- `AI_HANDOFF.md` / `AI_CHANGELOG.md` 内 Codex 段（备份在 `/tmp/handoff_codex_round3.md.bak` 与 `/tmp/changelog_codex_round3.md.bak`，已恢复到本文件）
+
+#### 给下一个 AI 的注意事项
+
+1. **不要重复扫 nan/inf**：bf9ce11（notifier）+ 5e1f752（indicators）+ 82e3375（_gf / second_check）三层防线已就位。dashboard_app.py 的 _gf 是 Codex 改动范围，请提醒 Codex 同步加 isinf。
+2. **明天 19:00 update_review 后**：核对 `output/tomorrow_plan/tomorrow_plan_20260602.csv` 是否生成、`tomorrow_plan_latest.csv` 是否指向 20260603。
+3. **明早 09:36 check_buy 后**：确认候选不再 `已回退 V1.4/V1.5`。
+4. **V1.4 门槛问题**（遗留 #1，5e1f752 提出的）：用户尚未决策，不要自作主张改门槛或自选池逻辑。
+5. **launchd 睡眠**（遗留 #2，5e1f752 提出的）：plist 改动建议先和用户确认硬件唤醒策略。
+6. **节假日识别**（本轮 Bug #5）：影响 plan 自动化与 T+1 等待，遇春节/国庆等节假日前后建议人工 check `tomorrow_plan_latest.csv` 是否正确。
