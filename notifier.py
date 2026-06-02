@@ -1163,11 +1163,17 @@ def format_combined_review_message(
         n_sig = t_summary.get("signal_count", 0)
         n_b   = t_summary.get("b_count", 0)
         n_s   = t_summary.get("s_count", 0)
-        pnl   = t_summary.get("pnl_total")
+        pnl_pct = t_summary.get("pnl_total_pct")
+        if pnl_pct is None:
+            pnl_raw = t_summary.get("pnl_total")
+            pnl_pct = (pnl_raw or 0) * 100
+        status = str(t_summary.get("status", "ok") or "ok")
         lines.append(
             f"T 信号 {n_sig} 个 · B 点 {n_b} · S 点 {n_s} · "
-            f"累计模拟盈亏 {('+' if (pnl or 0) >= 0 else '')}{_fmt_num(pnl, 2)}"
+            f"累计模拟收益率 {('+' if (pnl_pct or 0) >= 0 else '')}{_fmt_num(pnl_pct, 2)}%"
         )
+        if status != "ok":
+            lines.append(f"> T 模块状态：{status}；本段摘要可能不完整，请看 logs/auto_run.log。")
         # 安全字段（确保用户知道是模拟）
         lines.append(
             "> execution_mode=simulate · can_execute_live=False · "

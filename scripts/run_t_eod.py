@@ -22,9 +22,9 @@ from pathlib import Path
 PROJECT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT))
 
-# 复用 intraday 脚本的 _today_codes_from_review
+# 复用 intraday 脚本的候选读取和 observer 参数补齐
 sys.path.insert(0, str(PROJECT / "scripts"))
-from run_t_intraday import _today_codes_from_review  # noqa: E402
+from run_t_intraday import _append_signal_overrides, _today_candidates_from_review  # noqa: E402
 
 
 def _aggregate_summary(today: str) -> dict:
@@ -47,6 +47,8 @@ def _aggregate_summary(today: str) -> dict:
         "b_count":      0,
         "s_count":      0,
         "pnl_total":    0.0,
+        "pnl_total_pct": 0.0,
+        "status":       "ok",
     }
 
     if bs_log.exists():
@@ -74,12 +76,14 @@ def _aggregate_summary(today: str) -> dict:
         except Exception as e:
             print(f"[t_eod] 读 t_trade 失败: {e}")
 
+    summary["pnl_total_pct"] = round(float(summary["pnl_total"]) * 100, 2)
     return summary
 
 
 def main() -> int:
     today = date.today().strftime("%Y%m%d")
-    codes = _today_codes_from_review()
+    candidates = _today_candidates_from_review()
+    codes = [r["code"] for r in candidates]
     if not codes:
         print(f"[t_eod] {today} 无当日候选，跳过")
         return 0
@@ -111,6 +115,8 @@ def main() -> int:
         print(f"[t_eod] 全部拉取失败，跳过")
         # 仍然算 summary（可能盘中跑的已经有部分数据）
         summary = _aggregate_summary(today)
+        summary["status"] = "minute_data_missing"
+        summary["note"] = "T EOD minute data fetch failed for all candidates."
         _write_summary(today, summary)
         return 0
 
@@ -123,11 +129,18 @@ def main() -> int:
     ]
     for code in fetched:
         cmd1 += ["--input-minute-csv", str(minute_dir / f"{today}_{code}.csv")]
+    _append_signal_overrides(cmd1, candidates, fetched)
     print(f"[t_eod] 跑 build_t_signal_observer ...")
     r1 = subprocess.run(cmd1, capture_output=True, text=True, cwd=str(PROJECT))
     print(f"  observer exit={r1.returncode}")
     if r1.stderr:
         print(f"  observer stderr: {r1.stderr[:300]}")
+    if r1.returncode != 0:
+        summary = _aggregate_summary(today)
+        summary["status"] = "observer_failed"
+        summary["note"] = "T EOD observer failed; summary may be stale or incomplete."
+        _write_summary(today, summary)
+        return 0
 
     # 3. 跑 trade tracker（配对 B/S + 算盈亏）
     tracker = PROJECT / "scripts" / "build_t_trade_tracker.py"
@@ -142,6 +155,12 @@ def main() -> int:
     print(f"  tracker exit={r2.returncode}")
     if r2.stderr:
         print(f"  tracker stderr: {r2.stderr[:300]}")
+    if r2.returncode != 0:
+        summary = _aggregate_summary(today)
+        summary["status"] = "tracker_failed"
+        summary["note"] = "T EOD tracker failed; summary may be stale or incomplete."
+        _write_summary(today, summary)
+        return 0
 
     # 4. 算 summary + 写 state JSON
     summary = _aggregate_summary(today)

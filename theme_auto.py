@@ -98,6 +98,52 @@ def _keep_watchlist_after_rank(
     return merged
 
 
+def _apply_watchlist_priority_to_results(results: List[dict], active_watchlist: List[dict]) -> List[dict]:
+    """朱哥要求：龙头 3 只也按自选池 P1/P2/P3 硬优先，再按主题龙头分排序。"""
+    if not results:
+        return results
+
+    wl_by_code = {
+        str(r.get("stock_code", "")).strip().zfill(6): r
+        for r in active_watchlist
+        if str(r.get("stock_code", "")).strip()
+    }
+
+    for item in results:
+        code = str(item.get("code", "")).strip().zfill(6)
+        wl = wl_by_code.get(code)
+        priority = 0
+        if wl:
+            try:
+                priority = int(str(wl.get("priority", "3")).strip())
+            except (TypeError, ValueError):
+                priority = 3
+            item["is_custom_pool"] = True
+            item["custom_pool_priority"] = priority
+            item["custom_pool_theme"] = wl.get("theme", "")
+            item["custom_pool_reason"] = wl.get("reason", "")
+            item["custom_pool_status"] = wl.get("status", "")
+        else:
+            item["is_custom_pool"] = False
+            item["custom_pool_priority"] = 0
+            item["custom_pool_theme"] = ""
+            item["custom_pool_reason"] = ""
+            item["custom_pool_status"] = ""
+
+        if item.get("is_custom_pool") and priority == 1:
+            item["_wl_tier"] = 0
+        elif item.get("is_custom_pool") and priority == 2:
+            item["_wl_tier"] = 1
+        elif item.get("is_custom_pool") and priority == 3:
+            item["_wl_tier"] = 2
+        else:
+            item["_wl_tier"] = 3
+            item["is_custom_pool"] = False
+
+    results.sort(key=lambda x: (x.get("_wl_tier", 3), -float(x.get("theme_auto_score", 0) or 0)))
+    return results
+
+
 # ─────────────────── 板块行情磁盘缓存 ────────────────────────────
 
 def _board_cache_path(ds: str) -> Path:
@@ -726,13 +772,18 @@ def run_theme_auto(cfg: dict) -> tuple:
             seen.add(r["code"])
             deduped.append(r)
 
+    # 朱哥要求：龙头 3 只与全票 3 只一样，自选池优先。
+    # 注意：这一步只改变已通过前序过滤/评分股票的排序，不绕过 V1.6 过滤链路。
+    deduped = _apply_watchlist_priority_to_results(deduped, active_wl)
     top3 = deduped[:cfg["scoring"].get("output_top_n", 3)]
 
     for r in top3:
+        pool = "⭐" if r.get("is_custom_pool") else " "
         logger.info(
-            f"  {r['code']} {r['name']}  主题:{r['theme_name']}  "
+            f"  {pool} {r['code']} {r['name']}  主题:{r['theme_name']}  "
             f"强度:{r['theme_strength']}  系统分:{r['scores']['total']}  "
-            f"主题分:{r['theme_auto_score']}"
+            f"主题分:{r['theme_auto_score']}  "
+            f"自选tier:{r.get('_wl_tier', 3)} priority:{r.get('custom_pool_priority', 0)}"
         )
 
     # ── 市场情绪 ──────────────────────────────────────────────────

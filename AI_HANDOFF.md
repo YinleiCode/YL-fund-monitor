@@ -937,6 +937,139 @@ cat output/state/t_summary_20260602.json 2>/dev/null
 3. **9 个其他 dashboard 页面 UI 改造**：方案 A 推送层合并完成后，仍剩 9 页待 V2.2 视觉化（我的自选 / 买入确认 / T+1 复盘 / 等）
 4. **T 模块 dashboard 月度统计**：现在 page_t_signal 只展示当日，可以加月度 trends 图
 
+## 2026-06-02 Codex 逻辑修复：合并复盘 + T 模块记录
+
+### 本次修复背景
+
+在最新提交基础上只读审查后发现：交易安全边界正常，但合并推送/复盘/T 模块记录层存在几个会误导用户的字段对齐问题。
+
+### 已修复
+
+- `run.py`
+  - 修复 `--second-check` 写 `output/state/second_check_<date>.json` 的统计口径。
+  - 原代码读不存在的 `verdict` 字段，导致 10:00 二次确认在 19:00 合并复盘中通过数可能永远为 0。
+  - 新逻辑使用 `second_check_passed`，并排除实时行情缺失等 error 行。
+- `trade_review.py`
+  - `update_review()` 返回给合并复盘的 `rows` 增加 `mode`。
+  - 修复 theme_auto / 龙头观察 T+1 复盘被默认归到 full 主策略的问题。
+- `scripts/run_t_intraday.py`
+  - 新增 `_today_candidates_from_review()`，从 `trade_review.csv` 同时读取 `stock_code / stock_name / ma10`。
+  - 调 `build_t_signal_observer.py` 时追加 `--name-override` 和 `--ma10-override`，避免真实 T 记录显示“名称未获取”。
+- `scripts/run_t_eod.py`
+  - 同步使用候选名称和 MA10 override。
+  - observer/tracker 失败时写入明确 `status=observer_failed/tracker_failed`，不再装作正常摘要。
+  - 分钟数据全失败时写 `status=minute_data_missing`。
+  - T 摘要新增 `pnl_total_pct`，供推送展示百分比口径。
+- `scripts/build_t_signal_observer.py`
+  - MA10 缺失时 T 信号不再通过，写 `fail_reason=ma10_missing`。
+  - 说明：当前仍未计算真实 MA10 斜率，只是确保有有效 MA10 参考值；真实“MA10 斜率向上”需要后续接日线序列。
+- `notifier.py`
+  - 合并复盘的 T 摘要从“累计模拟盈亏 0.03”改为“累计模拟收益率 +3.00%”口径。
+  - 如果 T 摘要状态不是 `ok`，推送会提示摘要可能不完整。
+
+### 验收
+
+- `.venv/bin/python3 -m py_compile run.py trade_review.py notifier.py scripts/run_t_intraday.py scripts/run_t_eod.py scripts/build_t_signal_observer.py scripts/build_t_trade_tracker.py data_fetcher.py dashboard_app.py`：通过。
+- 函数级验证：
+  - second_check state 统计：`total=2, passed=1, failed=1`。
+  - T 信号无 MA10：返回 `rule_pass=False, fail_reason=ma10_missing`。
+  - T 信号有 MA10：样例仍能出现通过信号。
+  - T observer 命令补齐：能生成 `--name-override 300476:胜宏科技` 和 `--ma10-override 300476:88.88`。
+  - 合并复盘 T 摘要：展示 `累计模拟收益率 +1.50%`。
+
+### 安全边界
+
+- 未运行 `python run.py` 或任何 `run.py` 子命令。
+- 未修改 `output/trade_review.csv` 历史记录。
+- 未修改 `config/version_flags.yaml`。
+- 未修改 `launchd/*.plist`。
+- 未新增自动下单或券商连接逻辑。
+- T 模块仍然保持 simulate / not_submitted / not_connected。
+
+### 遗留问题
+
+- T 模块仍需 2026-06-02 实盘验证 akshare 1 分钟 K 是否稳定。
+- `ma10_slope_up` 字段当前只代表“有 MA10 参考值”，不代表真实斜率向上。后续如要严谨，应在 T pipeline 中读取日线，计算 MA10 最近两日差值。
+- 09:05 morning-digest 是否会遇到 pick/themeauto 未写完，需要看当天 `logs/auto_run.log`。
+
+## 2026-06-02 Codex 朱哥要求：自选池优先 + 做 T 跨日追踪
+
+### 本次业务要求
+
+朱哥明确要求当前选股和做 T 逻辑改成：
+
+- 选股推送是 3 龙头 + 3 全票，一次推送 6 只。
+- 3 龙头和 3 全票都必须优先自选池。
+- 自选池 P1/P2/P3 都排在普通候选前，但仍不绕过基础过滤、历史过滤、评分、V1.6 计划层、资金条件层、9:36 技术确认层。
+- 做 T 使用 1 分钟 K 延迟记录，保持模拟观察。
+- 做 T 必须记录 B/S 点、止盈止损、盈亏。
+- 做 T 没有止盈止损时不能当天过期，要保持 open，后续交易日继续追踪，直到止盈或止损。
+
+### 已完成改动
+
+- `run.py`
+  - full 全票最终排序改为：自选 P1 → 自选 P2 → 自选 P3 → 普通候选。
+  - 仍然只改变最终排序，不绕过前序过滤链路。
+- `theme_auto.py`
+  - 龙头模式新增 `_apply_watchlist_priority_to_results()`。
+  - 龙头最终 top3 也改为：自选 P1 → 自选 P2 → 自选 P3 → 普通候选。
+  - 日志会标出是否自选池、tier、priority。
+- `scripts/build_t_trade_tracker.py`
+  - 新增 `output/t_trade/t_open_positions.csv` 状态文件。
+  - 当低吸/高抛 T 未触发止盈止损时，`trade_status=open`，不再写 `expired/no_exit_before_close`。
+  - open 单只写入场 B/S 点；后续交易日触发退出时再写对应 S/B 点和盈亏。
+  - 每次 tracker 会先续扫历史 open 单，再处理当天新信号，并按 `trade_id` 去重。
+  - 关闭或止损后自动从 `t_open_positions.csv` 移除。
+- `scripts/run_t_intraday.py`
+  - 盘中 T 追踪池合并当天 3+3 候选 + 历史 open T 单。
+  - 每分钟识别 T 信号后，立即调用 `build_t_trade_tracker.py` 更新 T 交易记录 / B/S 点 / 盈亏。
+  - 仍然只做 simulate，不推送、不下单。
+- `scripts/run_t_eod.py`
+  - 复用盘中候选读取，因此盘后也会继续追踪历史 open T 单。
+
+### 验收
+
+- `py_compile` 通过：
+  - `run.py`
+  - `theme_auto.py`
+  - `trade_review.py`
+  - `notifier.py`
+  - `scripts/run_t_intraday.py`
+  - `scripts/run_t_eod.py`
+  - `scripts/build_t_signal_observer.py`
+  - `scripts/build_t_trade_tracker.py`
+  - `dashboard_app.py`
+- 样例 T 交易复核通过：
+  - `300011 low_absorb_tp` → `take_profit_1_5 / closed / 0.015`
+  - `300012 low_absorb_sl` → `stop_loss_1_5 / stopped / -0.015`
+  - `300013 high_throw_buyback` → `buyback_1_5 / closed / 0.015`
+  - `300014 high_throw_stopbuyback` → `stop_buyback_1_5 / stopped / -0.015`
+- 新增跨日 open 验证通过：
+  - Day1 未触发止盈止损 → `trade_status=open`，只写 B 点。
+  - Day2 达到 +1.5% → `trade_status=closed`，写 S 点，`return_pct=0.015`。
+  - open 状态文件 Day1 有 1 条，Day2 关闭后清空。
+- 自选池排序验证通过：
+  - 即使普通候选分数更高，排序仍为 P1 → P2 → P3 → 普通候选。
+
+### 安全边界
+
+- 未运行 `python run.py` 或任何 `run.py` 子命令。
+- 未修改 `output/trade_review.csv` 历史记录。
+- 未修改 `config/version_flags.yaml`。
+- 未修改 `launchd/*.plist`。
+- 未新增自动下单或券商连接逻辑。
+- T 模块仍然保持：
+  - `execution_mode=simulate`
+  - `can_execute_live=False`
+  - `order_status=not_submitted`
+  - `broker_status=not_connected`
+
+### 当前遗留问题
+
+- 这轮生成了 sample 验证用的 `output/t_trade/*` 运行产物，但 `output/` 被 `.gitignore` 忽略，不应提交。
+- 真正盘中每分钟 T 记录效果仍需等真实交易日 launchd 跑后看 `logs/auto_run.log` 和 `output/t_trade/`。
+- `ma10_slope_up` 仍未做真实斜率，只是要求有有效 MA10 参考值。
+
 ## 禁止事项
 
 详细规则见 `AI_RULES.md`。

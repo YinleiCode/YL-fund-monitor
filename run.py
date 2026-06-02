@@ -382,18 +382,19 @@ def main() -> None:
             import json as _json
             state_dir = Path(__file__).resolve().parent / "output" / "state"
             state_dir.mkdir(parents=True, exist_ok=True)
+            clean_results = [r for r in (results or []) if not r.get("error")]
             sc_summary = {
-                "total": len(results or []),
-                "passed": sum(1 for r in (results or []) if r.get("verdict") == "pass"),
-                "failed": sum(1 for r in (results or []) if r.get("verdict") != "pass"),
+                "total": len(clean_results),
+                "passed": sum(1 for r in clean_results if r.get("second_check_passed") is True),
+                "failed": sum(1 for r in clean_results if r.get("second_check_passed") is not True),
                 "details": [
                     {
                         "code": r.get("code", ""),
                         "name": r.get("name", ""),
-                        "verdict": r.get("verdict", ""),
-                        "reason": r.get("reason", ""),
+                        "verdict": "通过" if r.get("second_check_passed") is True else "未通过",
+                        "reason": r.get("second_check_reason", "") or ";".join(r.get("fail_reasons", []) or []),
                     }
-                    for r in (results or [])
+                    for r in clean_results
                 ],
             }
             (state_dir / f"second_check_{report_date}.json").write_text(
@@ -838,10 +839,11 @@ def main() -> None:
         sys.exit(0)
 
     # ── 自选股票池标记 + 硬分层排序 ────────────────────────────────
+    #   朱哥要求：全票 3 只优先从自选池排序，自选池 P1/P2/P3 都排在普通候选前。
     #   Tier 1: priority=1 active/watch → 最前
     #   Tier 2: priority=2             → 第二
-    #   Tier 3: 普通候选               → 第三
-    #   Tier 4: priority=3（仅标记，不强提权）
+    #   Tier 3: priority=3             → 第三
+    #   Tier 4: 普通候选               → 第四
     #   每层内部按 full_score 降序
     wl_by_code = {
         str(r.get("stock_code", "")).strip().zfill(6): r
@@ -876,9 +878,9 @@ def main() -> None:
         elif item.get("is_custom_pool") and priority == 2:
             item["_wl_tier"] = 1  # Tier 2: priority=2 第二
         elif item.get("is_custom_pool") and priority == 3:
-            item["_wl_tier"] = 3  # Tier 4: priority=3 仅标记，不提权
+            item["_wl_tier"] = 2  # Tier 3: priority=3 第三
         else:
-            item["_wl_tier"] = 2  # Tier 3: 普通候选第三
+            item["_wl_tier"] = 3  # Tier 4: 普通候选第四
             item["is_custom_pool"] = False
 
         if item.get("is_custom_pool"):

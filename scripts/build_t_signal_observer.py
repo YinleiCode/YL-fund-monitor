@@ -232,10 +232,15 @@ def evaluate_t_signals(
         }]
 
     # MA10 check
+    if ma10_override is None or ma10_override <= 0:
+        return [{
+            "stock_code": stock_code,
+            "rule_pass": False,
+            "fail_reason": "ma10_missing",
+        }]
     ma10_slope_up = False
-    if ma10_override is not None and ma10_override > 0:
-        # For testing: assume slope is up if ma10 > 0
-        ma10_slope_up = True
+    # 第一版没有完整日线序列计算 MA10 斜率；这里先确保有有效 MA10 参考值。
+    ma10_slope_up = True
 
     signals = []
 

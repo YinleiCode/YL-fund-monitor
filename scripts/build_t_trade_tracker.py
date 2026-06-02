@@ -35,6 +35,7 @@ T_SIGNAL_DIR = BASE_DIR / "output" / "t_signal"
 T_TRADE_DIR = BASE_DIR / "output" / "t_trade"
 
 T_SIGNAL_LATEST = T_SIGNAL_DIR / "t_signal_latest.csv"
+T_OPEN_POSITIONS = T_TRADE_DIR / "t_open_positions.csv"
 
 EXECUTION_MODE = "simulate"
 CAN_EXECUTE_LIVE = False
@@ -282,17 +283,20 @@ def _make_bs_row(trade: dict, point_type: str, point_reason: str, point_time: st
     }
 
 
-def _data_missing_trade(row: dict, reason: str = "data_missing") -> tuple[dict, list[dict]]:
+def _data_missing_trade(row: dict, reason: str = "data_missing", include_entry_bs: bool = True) -> tuple[dict, list[dict]]:
     trade = _build_base_trade(row)
     trade.update({
         "trade_status": "data_missing",
         "exit_reason": reason,
         "note": f"{trade['note']}｜缺少后续真实分钟数据",
     })
-    return trade, [_make_bs_row(trade, trade["entry_point"], f"{trade['signal_type']}_entry", trade["entry_time"], trade["entry_price"])]
+    bs_rows = []
+    if include_entry_bs:
+        bs_rows.append(_make_bs_row(trade, trade["entry_point"], f"{trade['signal_type']}_entry", trade["entry_time"], trade["entry_price"]))
+    return trade, bs_rows
 
 
-def _scan_low_absorb(row: dict, bars: list[dict]) -> tuple[dict, list[dict]]:
+def _scan_low_absorb(row: dict, bars: list[dict], include_entry_bs: bool = True) -> tuple[dict, list[dict]]:
     trade = _build_base_trade(row)
     entry_dt = _parse_dt(trade["entry_time"])
     entry_price = float(trade["entry_price"] or 0)
@@ -301,7 +305,7 @@ def _scan_low_absorb(row: dict, bars: list[dict]) -> tuple[dict, list[dict]]:
     stop_loss_price = float(trade["stop_loss_price"] or 0)
     post_bars = [b for b in bars if entry_dt and b["datetime"] > entry_dt]
     if not post_bars or entry_price <= 0:
-        return _data_missing_trade(row)
+        return _data_missing_trade(row, include_entry_bs=include_entry_bs)
 
     max_fav = max((float(b["high"]) / entry_price) - 1 for b in post_bars)
     max_adv = min((float(b["low"]) / entry_price) - 1 for b in post_bars)
@@ -336,11 +340,27 @@ def _scan_low_absorb(row: dict, bars: list[dict]) -> tuple[dict, list[dict]]:
         break
 
     if exit_dt is None:
-        last_bar = post_bars[-1]
-        exit_dt = last_bar["datetime"]
-        exit_price = float(last_bar["close"])
-        exit_reason = "no_exit_before_close"
-        trade_status = "expired"
+        # 朱哥要求：做 T 未触发止盈/止损时不再当天过期，而是继续 open 跨日追踪。
+        trade.update({
+            "exit_side": "",
+            "exit_point": "",
+            "exit_time": "",
+            "exit_price": "",
+            "exit_reason": "",
+            "trade_status": "open",
+            "return_pct": "",
+            "pnl_amount": "",
+            "max_favorable_pct": _fmt_num(max_fav, 4),
+            "max_adverse_pct": _fmt_num(max_adv, 4),
+            "max_target_hit": max_target_hit,
+            "deep_target_hit": False,
+            "stop_hit": False,
+            "note": f"{trade.get('note', TRACKER_NOTE)}｜未触发止盈止损，保持 open，后续交易日继续跟踪",
+        })
+        bs_rows = []
+        if include_entry_bs:
+            bs_rows.append(_make_bs_row(trade, "B", "low_absorb_entry", trade["entry_time"], trade["entry_price"]))
+        return trade, bs_rows
 
     return_pct = (float(exit_price) / entry_price) - 1
     pnl_amount = return_pct * entry_price * int(trade["sim_t_qty"])
@@ -361,21 +381,23 @@ def _scan_low_absorb(row: dict, bars: list[dict]) -> tuple[dict, list[dict]]:
         "stop_hit": exit_reason == "stop_loss_1_5",
     })
 
-    bs_rows = [
-        _make_bs_row(trade, "B", "low_absorb_entry", trade["entry_time"], trade["entry_price"]),
+    bs_rows = []
+    if include_entry_bs:
+        bs_rows.append(_make_bs_row(trade, "B", "low_absorb_entry", trade["entry_time"], trade["entry_price"]))
+    bs_rows.append(
         _make_bs_row(
             trade,
             "S",
-            "take_profit_exit" if exit_reason == "take_profit_1_5" else ("stop_loss_exit" if exit_reason == "stop_loss_1_5" else "no_exit_before_close"),
+            "take_profit_exit" if exit_reason == "take_profit_1_5" else "stop_loss_exit",
             trade["exit_time"],
             trade["exit_price"],
             trade["return_pct"],
-        ),
-    ]
+        )
+    )
     return trade, bs_rows
 
 
-def _scan_high_throw(row: dict, bars: list[dict]) -> tuple[dict, list[dict]]:
+def _scan_high_throw(row: dict, bars: list[dict], include_entry_bs: bool = True) -> tuple[dict, list[dict]]:
     trade = _build_base_trade(row)
     entry_dt = _parse_dt(trade["entry_time"])
     entry_price = float(trade["entry_price"] or 0)
@@ -384,7 +406,7 @@ def _scan_high_throw(row: dict, bars: list[dict]) -> tuple[dict, list[dict]]:
     stop_buyback_price = float(trade["stop_buyback_price"] or 0)
     post_bars = [b for b in bars if entry_dt and b["datetime"] > entry_dt]
     if not post_bars or entry_price <= 0:
-        return _data_missing_trade(row)
+        return _data_missing_trade(row, include_entry_bs=include_entry_bs)
 
     max_fav = max((entry_price - float(b["low"])) / entry_price for b in post_bars)
     max_adv = min((entry_price - float(b["high"])) / entry_price for b in post_bars)
@@ -419,11 +441,27 @@ def _scan_high_throw(row: dict, bars: list[dict]) -> tuple[dict, list[dict]]:
         break
 
     if exit_dt is None:
-        last_bar = post_bars[-1]
-        exit_dt = last_bar["datetime"]
-        exit_price = float(last_bar["close"])
-        exit_reason = "no_exit_before_close"
-        trade_status = "expired"
+        # 朱哥要求：高抛 T 没有回补/踏空止损时继续 open，不再收盘强制过期。
+        trade.update({
+            "exit_side": "",
+            "exit_point": "",
+            "exit_time": "",
+            "exit_price": "",
+            "exit_reason": "",
+            "trade_status": "open",
+            "return_pct": "",
+            "pnl_amount": "",
+            "max_favorable_pct": _fmt_num(max_fav, 4),
+            "max_adverse_pct": _fmt_num(max_adv, 4),
+            "max_target_hit": False,
+            "deep_target_hit": deep_target_hit,
+            "stop_hit": False,
+            "note": f"{trade.get('note', TRACKER_NOTE)}｜未触发回补/踏空止损，保持 open，后续交易日继续跟踪",
+        })
+        bs_rows = []
+        if include_entry_bs:
+            bs_rows.append(_make_bs_row(trade, "S", "high_throw_entry", trade["entry_time"], trade["entry_price"]))
+        return trade, bs_rows
 
     return_pct = (entry_price - float(exit_price)) / entry_price
     pnl_amount = return_pct * entry_price * int(trade["sim_t_qty"])
@@ -444,26 +482,110 @@ def _scan_high_throw(row: dict, bars: list[dict]) -> tuple[dict, list[dict]]:
         "stop_hit": exit_reason == "stop_buyback_1_5",
     })
 
-    bs_rows = [
-        _make_bs_row(trade, "S", "high_throw_entry", trade["entry_time"], trade["entry_price"]),
+    bs_rows = []
+    if include_entry_bs:
+        bs_rows.append(_make_bs_row(trade, "S", "high_throw_entry", trade["entry_time"], trade["entry_price"]))
+    bs_rows.append(
         _make_bs_row(
             trade,
             "B",
-            "buyback_exit" if exit_reason == "buyback_1_5" else ("stop_buyback_exit" if exit_reason == "stop_buyback_1_5" else "no_exit_before_close"),
+            "buyback_exit" if exit_reason == "buyback_1_5" else "stop_buyback_exit",
             trade["exit_time"],
             trade["exit_price"],
             trade["return_pct"],
-        ),
-    ]
+        )
+    )
     return trade, bs_rows
 
 
-def build_trade_rows(signal_rows: list[dict], minute_by_code: dict[str, list[dict]]) -> tuple[list[dict], list[dict]]:
+def _load_open_positions() -> list[dict]:
+    """读取未完成 T 单。该文件只服务模拟追踪，不进入主买入链路。"""
+    if not T_OPEN_POSITIONS.exists():
+        return []
+    try:
+        df = pd.read_csv(T_OPEN_POSITIONS, dtype=str, keep_default_na=False)
+    except Exception:
+        return []
+    if df.empty:
+        return []
+    rows = []
+    for row in df.to_dict("records"):
+        if str(row.get("trade_status", "")).strip() == "open":
+            rows.append(row)
+    return rows
+
+
+def _open_trade_to_signal_row(trade: dict) -> dict:
+    """把 open trade 转成扫描器可复用的 signal row。"""
+    return {
+        "trade_id": str(trade.get("trade_id", "")).strip(),
+        "report_date": str(trade.get("report_date", "")).strip(),
+        "stock_code": str(trade.get("stock_code", "")).strip(),
+        "stock_name": str(trade.get("stock_name", "")).strip(),
+        "data_mode": str(trade.get("data_mode", "real")).strip() or "real",
+        "source": str(trade.get("source", "")).strip() or "open_position",
+        "signal_type": str(trade.get("signal_type", "")).strip(),
+        "signal_side": str(trade.get("entry_side", "")).strip(),
+        "signal_time": str(trade.get("entry_time", "")).strip(),
+        "signal_price": str(trade.get("entry_price", "")).strip(),
+        "t_ratio": str(trade.get("t_ratio", "")).strip(),
+        "sim_t_qty": str(trade.get("sim_t_qty", "")).strip(),
+        "note": str(trade.get("note", TRACKER_NOTE)).strip(),
+        "rule_pass": True,
+    }
+
+
+def _scan_existing_open_trade(trade: dict, bars: list[dict]) -> tuple[dict, list[dict]]:
+    """继续扫描历史 open T 单；不重复写入场 B/S 点，只在退出时写新 B/S 点。"""
+    row = _open_trade_to_signal_row(trade)
+    sig_type = str(row.get("signal_type", "")).strip()
+    if not bars:
+        kept = {k: trade.get(k, "") for k in T_TRADE_FIELDS}
+        kept["trade_status"] = "open"
+        kept["note"] = f"{kept.get('note', TRACKER_NOTE)}｜本轮缺少分钟数据，继续保持 open"
+        return kept, []
+    if sig_type == "low_absorb":
+        return _scan_low_absorb(row, bars, include_entry_bs=False)
+    if sig_type == "high_throw":
+        return _scan_high_throw(row, bars, include_entry_bs=False)
+    kept = {k: trade.get(k, "") for k in T_TRADE_FIELDS}
+    kept["trade_status"] = "open"
+    kept["note"] = f"{kept.get('note', TRACKER_NOTE)}｜未知 signal_type，继续保持 open"
+    return kept, []
+
+
+def _write_open_positions(trade_rows: list[dict]) -> None:
+    open_rows = [
+        {k: row.get(k, "") for k in T_TRADE_FIELDS}
+        for row in trade_rows
+        if str(row.get("trade_status", "")).strip() == "open"
+    ]
+    _write_csv(T_OPEN_POSITIONS, T_TRADE_FIELDS, open_rows)
+
+
+def build_trade_rows(
+    signal_rows: list[dict],
+    minute_by_code: dict[str, list[dict]],
+    existing_open_rows: Optional[list[dict]] = None,
+) -> tuple[list[dict], list[dict]]:
     trade_rows: list[dict] = []
     bs_rows: list[dict] = []
+    seen_trade_ids: set[str] = set()
+
+    for open_trade in existing_open_rows or []:
+        trade_id = str(open_trade.get("trade_id", "")).strip()
+        code = str(open_trade.get("stock_code", "")).strip()
+        trade, bs = _scan_existing_open_trade(open_trade, minute_by_code.get(code, []))
+        if trade_id:
+            seen_trade_ids.add(trade_id)
+        trade_rows.append(trade)
+        bs_rows.extend(bs)
 
     for row in signal_rows:
         if not _parse_bool(row.get("rule_pass")):
+            continue
+        row_trade_id = _trade_id(row)
+        if row_trade_id in seen_trade_ids:
             continue
         code = str(row.get("stock_code", "")).strip()
         sig_type = str(row.get("signal_type", "")).strip()
@@ -474,6 +596,7 @@ def build_trade_rows(signal_rows: list[dict], minute_by_code: dict[str, list[dic
             trade, bs = _scan_high_throw(row, bars)
         else:
             trade, bs = _data_missing_trade(row, reason="data_missing")
+        seen_trade_ids.add(str(trade.get("trade_id", row_trade_id)))
         trade_rows.append(trade)
         bs_rows.extend(bs)
     return trade_rows, bs_rows
@@ -496,6 +619,7 @@ def write_outputs(report_date: str, trade_rows: list[dict], bs_rows: list[dict])
     _write_csv(dated_trade, T_TRADE_FIELDS, trade_rows)
     _write_csv(latest_trade, T_TRADE_FIELDS, trade_rows)
     _write_csv(dated_bs, T_BS_FIELDS, bs_rows)
+    _write_open_positions(trade_rows)
     return dated_trade, latest_trade, dated_bs
 
 
@@ -518,21 +642,27 @@ def main() -> None:
 
     signal_path = resolve_signal_path(args.report_date, args.signal_csv)
     signal_rows = _load_signal_rows(signal_path)
-    if not signal_rows:
+    existing_open_rows = _load_open_positions()
+    if not signal_rows and not existing_open_rows:
         report_date = args.report_date or datetime.now().strftime("%Y%m%d")
         trade_rows, bs_rows = [], []
         write_outputs(report_date, trade_rows, bs_rows)
         print(f"⚠️ 未读取到信号记录：{signal_path}")
         return
 
-    report_date = args.report_date or str(signal_rows[0].get("report_date", "")).strip() or datetime.now().strftime("%Y%m%d")
+    report_date = (
+        args.report_date
+        or (str(signal_rows[0].get("report_date", "")).strip() if signal_rows else "")
+        or datetime.now().strftime("%Y%m%d")
+    )
     minute_by_code = _minute_map(args.input_minute_csv)
-    trade_rows, bs_rows = build_trade_rows(signal_rows, minute_by_code)
+    trade_rows, bs_rows = build_trade_rows(signal_rows, minute_by_code, existing_open_rows)
     dated_trade, latest_trade, dated_bs = write_outputs(report_date, trade_rows, bs_rows)
 
     print(f"✅ 已写入：{dated_trade}")
     print(f"✅ 已写入：{latest_trade}")
     print(f"✅ 已写入：{dated_bs}")
+    print(f"✅ 已更新：{T_OPEN_POSITIONS}")
     print(f"📋 T 交易记录：{len(trade_rows)} 笔 | B/S 点：{len(bs_rows)} 条")
 
 

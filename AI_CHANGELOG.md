@@ -830,6 +830,155 @@ launchctl load ~/Library/LaunchAgents/com.zhuge.stock.teod.plist
 
 **给后续 AI 的提醒**：每次任务结束**必须**更新 HANDOFF / CHANGELOG，即使任务被打断也要保留完整状态文档，否则下一个 AI 接手就只能翻 commit messages 拼凑。
 
+## 2026-06-02 Codex（逻辑修复：合并复盘 + T 模块记录）
+
+### 本次任务
+
+- 读取最新 AI 交接文档后，继续审查当前代码逻辑问题。
+- 修复合并推送 / 复盘 / T 模块记录层的字段错配和展示误导问题。
+
+### 修改文件
+
+- `run.py`
+- `trade_review.py`
+- `notifier.py`
+- `scripts/run_t_intraday.py`
+- `scripts/run_t_eod.py`
+- `scripts/build_t_signal_observer.py`
+- `AI_HANDOFF.md`
+- `AI_CHANGELOG.md`
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- `output/trade_review.csv`：未改。
+- `config/version_flags.yaml`：未改。
+- `launchd/*.plist`：未改。
+- 自动下单逻辑：未新增。
+- 券商连接逻辑：未新增。
+
+### 是否运行 python run.py
+
+- 没有。
+- 未运行任何 `python run.py` 子命令。
+
+### 验收
+
+- `py_compile` 通过：
+  - `run.py`
+  - `trade_review.py`
+  - `notifier.py`
+  - `scripts/run_t_intraday.py`
+  - `scripts/run_t_eod.py`
+  - `scripts/build_t_signal_observer.py`
+  - `scripts/build_t_trade_tracker.py`
+  - `data_fetcher.py`
+  - `dashboard_app.py`
+- 函数级验证：
+  - `second_check` state 统计字段修正后，可正确得到 `total=2, passed=1, failed=1`。
+  - T 信号无 MA10 时返回 `ma10_missing`，不会通过。
+  - T 信号有 MA10 时样例仍可通过。
+  - T observer 命令可补齐 `--name-override` 与 `--ma10-override`。
+  - 合并复盘 T 摘要显示为百分比：`累计模拟收益率 +1.50%`。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：未提交。
+- status：待用户确认后再提交。
+
+### 遗留问题
+
+- 真实 MA10 斜率尚未计算；当前只是要求 T 信号必须有有效 MA10 参考值。
+- 仍需观察 2026-06-02 实盘日志确认 akshare 1 分钟 K 是否稳定。
+- 09:05 morning-digest 与 08:50/08:55 两条选股任务之间的时序，仍需看真实运行日志。
+
+## 2026-06-02 Codex（朱哥要求：自选池优先 + 做 T 跨日追踪）
+
+### 本次任务
+
+- 按朱哥确认的业务逻辑优化选股和做 T 记录：
+  - 3 龙头 + 3 全票都优先自选池。
+  - 自选 P1/P2/P3 都排在普通候选前。
+  - 做 T 使用 1 分钟 K 延迟记录 B/S 和盈亏。
+  - 未止盈止损不再当天过期，保持 open，后续交易日继续追踪直到止盈或止损。
+
+### 修改文件
+
+- `run.py`
+- `theme_auto.py`
+- `scripts/build_t_trade_tracker.py`
+- `scripts/run_t_intraday.py`
+- `AI_HANDOFF.md`
+- `AI_CHANGELOG.md`
+
+### 关联上一轮未提交修改
+
+- 本次是在上一轮逻辑修复 dirty 状态基础上继续：
+  - `trade_review.py`
+  - `notifier.py`
+  - `scripts/run_t_eod.py`
+  - `scripts/build_t_signal_observer.py`
+- 这些文件仍保留上一轮修复内容，未回滚。
+
+### 新增文件
+
+- 无新增受 git 管理文件。
+- 运行时会维护 `output/t_trade/t_open_positions.csv`，但 `output/` 被 `.gitignore` 忽略，不应提交。
+
+### 禁改文件检查
+
+- `run.py`：已按用户明确授权修改最终排序，不新增真实交易。
+- `trade_review.py`：保留上一轮字段修复，本轮未继续扩大。
+- `output/trade_review.csv`：未改。
+- `config/version_flags.yaml`：未改。
+- `launchd/*.plist`：未改。
+- 自动下单逻辑：未新增。
+- 券商连接逻辑：未新增。
+
+### 是否运行 python run.py
+
+- 没有。
+- 未运行任何 `python run.py` 子命令。
+
+### 验收
+
+- `py_compile` 通过：
+  - `run.py`
+  - `theme_auto.py`
+  - `trade_review.py`
+  - `notifier.py`
+  - `scripts/run_t_intraday.py`
+  - `scripts/run_t_eod.py`
+  - `scripts/build_t_signal_observer.py`
+  - `scripts/build_t_trade_tracker.py`
+  - `dashboard_app.py`
+- 既有四个 T 样例通过：
+  - 低吸止盈：`take_profit_1_5 / closed / 0.015`
+  - 低吸止损：`stop_loss_1_5 / stopped / -0.015`
+  - 高抛回补：`buyback_1_5 / closed / 0.015`
+  - 高抛踏空止损：`stop_buyback_1_5 / stopped / -0.015`
+- 新增跨日 open 验证通过：
+  - Day1 未触发 → open，只写入场点。
+  - Day2 触发 +1.5% → closed，写退出点和收益。
+- 自选池排序验证通过：
+  - 排序为 P1 → P2 → P3 → 普通候选，即使普通候选分数更高。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：未提交，等用户确认。
+- status：dirty。
+
+### 遗留问题
+
+- 盘中真实效果仍需等真实交易日 launchd 跑后确认。
+- `output/t_trade/*` 样例验证产物被 `.gitignore` 忽略，不要提交。
+- `ma10_slope_up` 仍然只是有效 MA10 参考，不是真实斜率。
+
 ## 后续记录模板
 
 ```markdown
