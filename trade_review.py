@@ -522,12 +522,19 @@ def _ensure_columns(df: pd.DataFrame, extra_cols: list = None) -> pd.DataFrame:
 # =================== 类型转换工具 ===================
 
 def _gf(v) -> Optional[float]:
-    """安全浮点转换；NaN/None/空字符串均返回 None。"""
+    """安全浮点转换；NaN/Inf/None/空字符串均返回 None。
+
+    2026-06-02 修复：原本只查 isnan，inf 会被当作正常 float 返回，
+    传到下游比较运算（如 V1.4 预闸 tot < 78）会产生 inf 假阳性，
+    或在文案层显示成 'inf%'。inf 与 nan 一视同仁，统一兜底为 None。
+    """
     if v is None:
         return None
     try:
         f = float(v)
-        return None if math.isnan(f) else f
+        if math.isnan(f) or math.isinf(f):
+            return None
+        return f
     except (ValueError, TypeError):
         return None
 
@@ -1431,7 +1438,14 @@ def second_check(cfg: dict) -> list:
         prev_close = float(rt["prev_close"])
         vol_lots   = float(rt.get("volume", 0))
 
-        if cur_price <= 0 or open_p_rt <= 0 or prev_close <= 0:
+        # 2026-06-02 修复：与 check_buy(1115-1118) 对齐，加 math.isfinite 三连。
+        # 旧代码只查 <=0，nan/inf 跟数字比较都是 False，会绕过校验，
+        # 进 (open_p_rt / prev_close - 1) * 100 产 nan/inf，再传染下游所有判断。
+        if (
+            (not math.isfinite(cur_price)) or (not math.isfinite(open_p_rt))
+            or (not math.isfinite(prev_close))
+            or cur_price <= 0 or open_p_rt <= 0 or prev_close <= 0
+        ):
             logger.warning(f"[second_check] {code} 价格无效（停牌或未开盘）")
             df.at[idx, "second_check_time"]   = now_str
             df.at[idx, "second_check_passed"] = "false"
@@ -1613,7 +1627,9 @@ def update_review(cfg: dict) -> dict:
     for idx, row in df.iterrows():
         if _gb(row.get("buy_signal_0935")) is not False:
             continue
-        if str(row.get("not_bought_tracking", "")).strip() == "true":
+        # 2026-06-02 修复：原来缺 .lower()，CSV 若写 "True"/"TRUE" 会绕过跳过逻辑，
+        # 导致同一行被 update_review 重复处理。与本文件 419/1359 行一致改成 .strip().lower()。
+        if str(row.get("not_bought_tracking", "")).strip().lower() == "true":
             continue
         if str(row.get("t1_open", "")).strip():  # 已有 T+1 数据，跳过
             continue

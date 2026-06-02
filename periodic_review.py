@@ -113,11 +113,19 @@ def _pctnum(v, na: str = "—") -> str:
 # ── type helpers ──────────────────────────────────────────────────────────────
 
 def _gf(v) -> Optional[float]:
+    """安全浮点转换；NaN/Inf/None/空字符串均返回 None。
+
+    2026-06-02 修复：与 trade_review._gf 同步——补 math.isinf 检查。
+    inf 进入周/月统计聚合会污染 mean/sum/max（inf 永远是 max），导致复盘
+    数据失真，统一兜底为 None。
+    """
     if v is None:
         return None
     try:
         f = float(v)
-        return None if math.isnan(f) else f
+        if math.isnan(f) or math.isinf(f):
+            return None
+        return f
     except (ValueError, TypeError):
         return None
 
