@@ -1596,3 +1596,70 @@ sudo pmset repeat wake MTWRF 09:25:00
 3. **md 里你的 6 段直接在工作区**：`git add AI_*.md && git commit`
 4. **5 个低危 T bug 可接手**：#4 缩量阈值 / #6 09:33 窗口 / #7 文件并发 / #8 跨日统计 / #9 trade_id fallback
 5. **不要改 trade_review.py 决策公式 / run.py / launchd plist / fetch_market_spot 主链路**
+
+---
+
+## 2026-06-02 Claude（持仓持续追踪 + 止损后 30 天跟踪）
+
+### 本次任务
+
+朱哥拍板核心策略改动：
+- 买入后只要没卖（包括未触发止损）就一直每天记录盈亏（不是只记 T+1）
+- 止损卖出的股票，止损后 30 个交易日继续跟踪涨跌
+
+### 修改文件
+
+`trade_review.py` 一处大改（+241 / −7）：
+
+1. `COLUMNS` 末尾新增 16 个字段（10 持仓 + 4 止损后 + 2 共用）
+2. `_calc_row()` 按 entry_date 分流：≤20260602 走 legacy_t1_sell；≥20260603 走新逻辑
+3. 新增 `_update_holding_rows(df, cfg)` 函数处理每日滚动追踪
+4. `update_review()` 主流程末尾调用滚动函数
+
+### 新增字段（trade_review.csv schema）
+
+**持仓追踪**：`holding_status` / `latest_tracking_date` / `days_held` / `latest_close` / `latest_return_pct` / `peak_high` / `peak_low` / `peak_return_pct` / `peak_drawdown_pct` / `exit_date` / `exit_price` / `exit_reason`
+
+**止损后追踪**：`post_stop_max_return_pct` / `post_stop_max_drawdown_pct` / `post_stop_days_tracked` / `post_stop_tracking_done_date`
+
+### 新增文件
+
+- 无
+
+### 禁改文件检查
+
+- run.py：未改
+- output/trade_review.csv：未改（新字段兼容追加）
+- config/version_flags.yaml：未改
+- launchd/*.plist：未改
+- 自动下单 / 券商：未新增
+
+### 是否运行 python run.py
+
+- 否
+
+### 验收
+
+4/4 mock 测试通过：
+- 新数据 T+1 涨 +2% → `holding`，peak_return=+2.9%，未卖
+- 新数据 T+1 盘中跌穿止损 → `stopped`，止损价 97.097 卖出
+- 新数据 T+1 开盘跌破止损 → `stopped`，开盘价 96.0 止损
+- 老数据 entry_date=20260602 → `legacy_t1_sell`（保留老逻辑兼容）
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：`bddfcfd feat(holding): 持仓持续追踪 + 止损后 30 天跟踪（朱哥需求）`
+
+### 给 Codex 的 dashboard 配套需求
+
+1. 新增"持仓中"页面（显示 holding_status=holding）
+2. 新增"止损追踪"页面（显示 holding_status=stopped，含止损后 30 天反弹数据）
+3. 历史已完成页面（post_stop_done / legacy_t1_sell / manual_sell）
+4. 手动卖出按钮（写 exit_date / exit_price / exit_reason=manual_sell / holding_status=manual_sell）
+
+### 明天验证清单
+
+- 19:00 update_review 跑完后，`logs/auto_run.log` 应有 `[holding_track]` 日志
+- `output/trade_review.csv` 中今日新买入的行 `holding_status` 应是 `holding` 或 `stopped`，不再立即填 `simulated_trade_return`
+- weekly/monthly 复盘统计基于 simulated_trade_return，老数据继续累计，新数据等止损/手动卖触发后再计入

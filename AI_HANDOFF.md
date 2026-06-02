@@ -2148,3 +2148,158 @@ pmset -g sched
 | 5 个低危 T bug | ⚠️ 等 Codex 接手 |
 
 至此 Claude 当日工作完毕。
+
+---
+
+## 2026-06-02 Claude（持仓持续追踪 + 止损后 30 天跟踪 — 朱哥重大策略改动）
+
+### 朱哥拍板的需求
+
+**原话**：
+> 现在需要只改逻辑 只要我买了 一直没有卖 。那就一直记录盈亏 。不是只记录一天 。
+> 其次 止损的股票也要做记录 看止损后一个月内的涨跌
+
+### 老逻辑（T+1 强制卖）的问题
+
+- T 日买入 → T+1 收盘**必卖**（不管涨跌）
+- 持仓时间固定 1 天
+- 没法体现"持有 3-5 天的中线"和"短线被止损但实际是好票"两种情况
+
+### 新逻辑
+
+1. **持仓追踪**：买入后只要没触发止损就一直持有，每天 update_review 滚动更新
+2. **止损后 30 天跟踪**：止损卖出的股票，继续记录 30 个交易日内的反弹/继续跌
+
+→ 可以**事后回测**："如果当时没止损，这只票后续涨/跌多少？" "止损卖飞了几次？"
+
+### 修改文件
+
+`trade_review.py` 一处大改：
+
+#### A. COLUMNS 新增 16 个字段（向后兼容）
+
+持仓追踪字段（10 个）：
+```
+holding_status         holding/stopped/post_stop_done/manual_sell/legacy_t1_sell
+latest_tracking_date   最后一次 update_review 处理的日期
+days_held              持仓交易日数
+latest_close           最新收盘价
+latest_return_pct      最新相对 adj_buy 的收益（含滑点）
+peak_high              持仓期间最高价
+peak_low               持仓期间最低价
+peak_return_pct        持仓期间历史最高收益
+peak_drawdown_pct      持仓期间历史最大回撤
+exit_date / exit_price / exit_reason   卖出三件套
+```
+
+止损后追踪字段（4 个）：
+```
+post_stop_max_return_pct      止损后最高反弹 vs exit_price（正数 = 反弹了 = 卖飞）
+post_stop_max_drawdown_pct    止损后最低回撤（继续跌多深）
+post_stop_days_tracked        已追踪天数（最多 30）
+post_stop_tracking_done_date  30 天追踪完成日
+```
+
+#### B. `_calc_row()` 改成按 entry_date 分流
+
+```python
+if entry_date <= 20260602:
+    → legacy_t1_sell（保留老逻辑，老数据全部走这路径）
+else:
+    if stop_triggered:
+        → stopped + 进入 post_stop 追踪
+    else:
+        → holding + 初始化 peak_*/latest_*/days_held
+```
+
+#### C. 新增 `_update_holding_rows(df, cfg)` 滚动追踪函数
+
+每天 19:00 update_review 调一次，处理所有 holding / stopped 状态的行：
+
+- **holding 状态**：拉今日 K 线，更新 peak_* / latest_* / days_held；检查 today_low ≤ stop → 切到 stopped
+- **stopped 状态**：拉今日 K 线，相对 exit_price 算 post_stop_max_return / max_drawdown；满 30 天 → 切到 post_stop_done
+
+#### D. `update_review()` 主流程末尾调用
+
+返回值新增 `holding_tracking` 字段：
+```python
+{
+    "n_holding_updated":   N,   # 今日持仓中更新了几只
+    "n_stop_triggered":    N,   # 今日新触发止损几只
+    "n_post_stop_updated": N,   # 止损追踪中更新几只
+    "n_post_stop_done":    N,   # 完成 30 天追踪几只
+}
+```
+
+### 向后兼容性
+
+| 老 CSV 行（report_date ≤ 20260602） | 走 `legacy_t1_sell` 路径，保留 simulated_trade_return / adjusted_sell_price 等老字段 |
+| 新 CSV 行（report_date ≥ 20260603）| 走新持仓追踪路径，simulated_trade_return 只在止损或手动卖时填 |
+| weekly/monthly 复盘统计 | 基于 simulated_trade_return，不受影响 |
+| 16 个新字段在老 CSV 中 | 空字符串（_ensure_columns 自动补） |
+
+### 是否运行 python run.py
+
+- 否，仅本地 mock 单元测试
+
+### 验收
+
+4/4 场景全通过：
+
+| 场景 | 期望结果 | 实际 |
+|---|---|---|
+| 新数据 T+1 涨 2% 未止损 | holding, peak_return +2.9%, 未卖 | ✅ |
+| 新数据 T+1 盘中跌穿止损 | stopped, exit_price=97.097, ret=-3% | ✅ |
+| 新数据 T+1 开盘就跌破 | stopped, 开盘价止损 96.0, ret=-4.1% | ✅ |
+| 老数据 entry_date=20260602 | legacy_t1_sell, simulated_trade_return=+2.99% | ✅ |
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：`bddfcfd feat(holding): 持仓持续追踪 + 止损后 30 天跟踪（朱哥需求）`
+- 248 行改动（+241 / −7），仅改 trade_review.py 一个文件
+
+### 禁改文件检查
+
+- `run.py`：未改
+- `output/trade_review.csv`：未改（schema 兼容新字段）
+- `config/version_flags.yaml`：未改
+- `launchd/*.plist`：未改
+- 自动下单：未新增
+- 券商连接：未新增
+
+### 给 Codex 的接力（dashboard UI 配套需求）
+
+朱哥这套新逻辑生效后，dashboard 应该新增 / 修改这些展示：
+
+1. **持仓中页面** — 显示所有 `holding_status=holding` 的行
+   - 列：股票、买入日、买入价、当前价、当前收益、最高收益、最大回撤、持仓天数、止损价
+2. **已卖出 / 止损追踪页面** — 显示 `holding_status=stopped` 的行
+   - 额外列：止损日、止损价、止损后最高反弹、止损后最低回撤、追踪进度（X/30 天）
+3. **历史已完成页面** — 显示 `holding_status=post_stop_done` 或 `legacy_t1_sell` / `manual_sell`
+4. **手动卖出按钮**（朱哥的实操路径） — dashboard 加按钮"标记已卖出"
+   - 写 `exit_date=今日 / exit_price=今收 / exit_reason=manual_sell / holding_status=manual_sell`
+
+### 给所有 AI 的明日验证清单（新增）
+
+明天 06-03 19:00 update_review 跑完后：
+- 看 `output/trade_review.csv`，如果今日有买入：
+  - report_date=20260603 的行 `holding_status` 应该是 `holding` 或 `stopped`
+  - 不再是 `simulated_trade_return` 立即填值（除非止损）
+- 看 `logs/auto_run.log` 应该出现 `[holding_track]` 日志
+
+### 主干 commit 时间线（最新在上）
+
+| commit | 内容 | 谁做 |
+|---|---|---|
+| `bddfcfd` | **持仓持续追踪 + 止损 30 天跟踪** | Claude（本轮）|
+| `6f076d7` | 当日总收尾 md | Claude |
+| `0996cba` | 中危 bug md | Claude |
+| `c26faf3` | gitignore | Claude |
+| `8607ae2` | 中危 #1 + #2 | Claude |
+| `2968143` / `9b2a583` | 规则 3b 1.3% | Claude |
+| `b296183` / `e3a8987` | 规则 3 升级 0.7% + VWAP | Claude |
+| `789fb29` / `e4fef60` | T 模块 5 条规则重写 | Claude |
+| `d7ecb77` / `82e3375` | 第二轮扫描 | Claude |
+| `730a6fe` / `5e1f752` | tomorrow_plan + indicators nan | Claude |
+| `3df6d1d` / `bf9ce11` | notifier nan/inf | Claude |
