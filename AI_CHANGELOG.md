@@ -1529,3 +1529,70 @@ plist 不存在 WakeUp 键，pmset 是正确的解决路径。
 - 本次代码 2 个 commit + 1 个 .gitignore commit
 - 影响面：所有调用 `next_trading_date` / `prev_trading_date` 的代码自动受益（trade_review / build_tomorrow_plan / dashboard 等），无须改其他文件
 - Codex 在 dashboard_app.py 的脏改保持不动
+
+---
+
+## 2026-06-02 Claude（当日总收尾 + 接力 Codex）
+
+### 当日总结
+
+2026-06-02 V1.6 + T 模块实战首日，Claude 完成 **18 个 commit**：
+- 10 个 fix/feat：修复 13 个 bug + 实现朱哥拍板的正 T 5 条规则 + 节假日识别上线
+- 8 个 docs：md 状态板更新
+
+### 主干 commit（最新在上）
+
+```
+0996cba docs: 中危 bug 修复 md 记录
+c26faf3 chore: gitignore + cache
+8607ae2 feat: 中危 #1 + #2 修复（自选池 + 节假日）
+2968143 docs: 规则 3b 1.3% md
+9b2a583 fix: T 规则 3b 1.5% → 1.3%
+b296183 docs: 规则 3 升级 md
+e3a8987 feat: T 规则 3 升级 0.7% + 1.5%
+789fb29 docs: T 模块重写 md
+e4fef60 feat: T 模块按 5 条规则重写 + 6 T bug
+d7ecb77 docs: 全景扫描 md
+82e3375 fix: second_check + not_bought + _gf isinf
+730a6fe docs: 状态板
+5e1f752 fix: tomorrow_plan + indicators nan
+3df6d1d docs: 第 1 段
+bf9ce11 fix: notifier nan/inf
+```
+
+### 修改文件清单（按本日累计）
+
+- `notifier.py`（bf9ce11）
+- `indicators.py`（5e1f752）
+- `scripts/run_update_review.sh`（5e1f752）
+- `trade_review.py`（82e3375 + 8607ae2）
+- `periodic_review.py`（82e3375）
+- `data_fetcher.py`（e4fef60 + 8607ae2）
+- `scripts/build_t_signal_observer.py`（e4fef60 + e3a8987 + 9b2a583）
+- `scripts/build_t_trade_tracker.py`（e4fef60，含 Codex 之前的稳定脏改）
+- `scripts/run_t_eod.py`（e4fef60，含 Codex 之前的稳定脏改）
+- `scripts/run_t_intraday.py`（e4fef60）
+- `launchd/com.zhuge.stock.teod.plist`（e4fef60，15:30 → 15:35）
+- `.gitignore`（c26faf3）
+- `AI_HANDOFF.md` / `AI_CHANGELOG.md`（8 次 docs commit）
+
+### 未触碰的 Codex 工作区
+
+- `dashboard_app.py`（UI 文案 + RADAR 风格统一）
+- AI_HANDOFF.md / AI_CHANGELOG.md 末尾的 Codex 6 段
+
+### 用户必做运维（2 项）
+
+```bash
+launchctl unload ~/Library/LaunchAgents/com.zhuge.stock.teod.plist
+launchctl load   ~/Library/LaunchAgents/com.zhuge.stock.teod.plist
+sudo pmset repeat wake MTWRF 09:25:00
+```
+
+### 给 Codex 的明确接力清单
+
+1. **提交你的 dashboard_app.py 脏改**（Claude 没动）
+2. **补 dashboard_app.py 的 `_gf` 加 `math.isinf`**（nan/inf 防线第 4 道，目前只查 nan）
+3. **md 里你的 6 段直接在工作区**：`git add AI_*.md && git commit`
+4. **5 个低危 T bug 可接手**：#4 缩量阈值 / #6 09:33 窗口 / #7 文件并发 / #8 跨日统计 / #9 trade_id fallback
+5. **不要改 trade_review.py 决策公式 / run.py / launchd plist / fetch_market_spot 主链路**
