@@ -1014,3 +1014,76 @@ launchctl load ~/Library/LaunchAgents/com.zhuge.stock.teod.plist
 ### 遗留问题
 -
 ```
+
+---
+
+## 2026-06-02 Claude（notifier nan/inf 修复 + 实战首日观察）
+
+### 本次任务
+
+- 修复 morning-digest 推送中"总分 nan / 空间 nan"格式化 bug。
+- 记录 2026-06-02 实战首日 launchd 链路真实表现，并为 Codex 留下接力清单。
+
+### 修改文件
+
+- `notifier.py`
+  - 新增 `import math`。
+  - `_fmt_num(v, digits=2, na="—")`：`float(v)` 成功后追加 `math.isnan(f) or math.isinf(f)` 判断，命中返回 `na`。
+  - `_fmt_pct(v, na="—")`：同上。
+  - 根因：`float("nan")` 不抛 `TypeError/ValueError`，旧版 `try/except` 兜底无效，NaN 直接进文案。
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- run.py：未改。
+- trade_review.py：未改。
+- output/trade_review.csv：未改。
+- config/version_flags.yaml：未改。
+- launchd/*.plist：未改。
+
+### 是否运行 python run.py
+
+- 否。盘中所有 `run.py` 子命令均由 launchd 驱动，我没有手工触发。
+
+### 验收
+
+- 本地 mock 测试：`_fmt_num` 12 例 + `_fmt_pct` 8 例，覆盖 `float("nan")` / `float("inf")` / 字符串 `"nan"` / `None` / 正常浮点，20/20 通过。
+- `git show bf9ce11 --stat`：仅 `notifier.py` 一处改动，+18 / −4。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：`bf9ce11 fix(notifier): handle NaN/Inf in _fmt_num and _fmt_pct`
+- status：`dashboard_app.py`、`scripts/build_t_trade_tracker.py`、`scripts/run_t_eod.py` 为 Codex 在改的脏文件，本轮不动；`data/minute_today/` 是 T 模块今日真实数据，未追踪。
+
+### 2026-06-02 实战首日观察记录
+
+- 08:30 morning-digest：成功推送；龙头池字段曾出现 nan（次日生效修复）。
+- 08:55 theme-auto：东方财富 `RemoteDisconnected` 临时抖动，fallback 写空 CSV，节流 alert 推送 1 次。
+- 09:30+ T 模块：`stock_zh_a_hist_min_em` 1-min K 真实拉取成功，3 只观察标的连续入库 → `data/minute_today/`。
+- 09:44 check-buy：比预期 09:36 晚 8 分钟；pre-gate 全数未过，无买入信号。
+- 全天 alert 节流：1 次，未触 ServerChan 5/天上限。
+
+### 遗留问题
+
+- `notifier.py` nan 修复需 2026-06-03 08:30 morning-digest 真实推送复核。
+- `launchd/check_buy_v16.plist` 触发延迟（09:36 → 09:44）需排查。
+- T 模块 EOD（15:30）首日产出待 Codex 核对。
+
+### 给 Codex 的接力清单
+
+我已完成：
+
+1. 提交 `bf9ce11`（仅 notifier.py）。
+2. 在 `AI_HANDOFF.md` / `AI_CHANGELOG.md` 末尾追加本轮记录，未触碰你正在改的内容。
+
+请你接力：
+
+1. 提交你正在改的 3 个文件：`dashboard_app.py`、`scripts/build_t_trade_tracker.py`、`scripts/run_t_eod.py`。
+2. 你的 md 段落仍在 `/tmp/handoff_with_codex.md.bak` 与 `/tmp/changelog_with_codex.md.bak`，可追加到我这段之后（请不要覆盖我这段）。
+3. 15:30 后核对 `output/t_trade/eod_summary_*.csv` 与 `logs/auto_run.log`。
+4. 评估是否把 `check_buy_v16.plist` 触发时间前移 1–2 分钟。
+5. 明早确认 morning-digest 龙头池字段不再出现 `nan`。

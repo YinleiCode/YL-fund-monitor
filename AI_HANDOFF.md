@@ -1085,3 +1085,86 @@ cat output/state/t_summary_20260602.json 2>/dev/null
 - 不要接券商。
 - 不要修改 `output/trade_review.csv` 历史记录。
 - 不要随意修改 `run.py`、`trade_review.py`、`config/version_flags.yaml`、`launchd/*.plist`。
+
+---
+
+## 2026-06-02 Claude（盘中 notifier nan 修复 + 实战首日观察）
+
+### 本次任务
+
+1. 修复 morning-digest 推送中 "总分 nan / 空间 nan" 的格式化 bug。
+2. 观察 2026-06-02 实战首日 launchd 调度链路的真实运行情况。
+3. 记录今日观察 + 给 Codex 接力。
+
+### 修改文件
+
+- `notifier.py`
+  - `_fmt_num`、`_fmt_pct` 原本只用 `try/except (TypeError, ValueError)` 兜底，但 `float("nan")` 不抛异常，导致 NaN/Inf 被直接写进文案。
+  - 加 `import math`，在 `try` 通过后追加 `math.isnan(f) or math.isinf(f)` 检查，命中则返回占位符 `—`。
+  - 本地 mock 测试 20/20 通过（`_fmt_num` 12 例 + `_fmt_pct` 8 例，覆盖 `float("nan")`、`float("inf")`、字符串 `"nan"`、`None`、正常浮点）。
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- `run.py`：未改。
+- `trade_review.py`：未改。
+- `output/trade_review.csv`：未改。
+- `config/version_flags.yaml`：未改。
+- `launchd/*.plist`：未改。
+
+### 是否运行 python run.py
+
+- 未运行。盘中所有 `run.py` 子命令均由 launchd 触发。
+
+### 验收
+
+- `git show bf9ce11 --stat` 仅修改 `notifier.py`（+18 / −4 行）。
+- 本地 mock 运行 morning-digest 数据结构，nan 字段已渲染为 `—`。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：`bf9ce11 fix(notifier): handle NaN/Inf in _fmt_num and _fmt_pct`
+- status：本次提交只动 `notifier.py`，工作区其余文件保持脏（dashboard_app.py / scripts/build_t_trade_tracker.py / scripts/run_t_eod.py 为 Codex 在改）。
+
+### 2026-06-02 实战首日观察
+
+| 时间 | 事件 | 结果 |
+| --- | --- | --- |
+| 08:30 | morning-digest | 成功推送；龙头池字段曾出现 nan（已在 bf9ce11 修复，但仅次日生效）。
+| 08:55 | theme-auto | 东方财富 `RemoteDisconnected, Connection aborted`，已走 fallback 写空 CSV；非代码问题，是环境/对端临时抖动。
+| 09:30+ | T 模块 `run_t_intraday.py` 每 60 秒 | 真实拉取 `stock_zh_a_hist_min_em` 成功，3 只观察标的连续 1-min K 线全部入库，落地 `data/minute_today/`。
+| 09:44 | check-buy | 比预期 09:36 晚 8 分钟；当日 pre-gate 全数未过，无买入信号；推送一次"无信号"主消息。
+| 全天 | 全局 alert 节流 | 命中 1 次（theme-auto 异常告警），未爆 ServerChan 5/天上限。
+
+### 遗留问题
+
+- `check-buy` launchd 触发明显晚于 09:36，建议下次盯一下 `launchd/check_buy_v16.plist` 的 `StartCalendarInterval` 与系统 launchd queue 延迟，看是否要前移 1–2 分钟兜底。
+- T 模块 EOD 聚合（15:30）首日效果待 Codex 在尾盘后核对 `output/t_trade/` 与 `logs/auto_run.log`。
+- nan 修复需明日 08:30 morning-digest 真实推送验证。
+
+### 给 Codex 的接力清单
+
+我（Claude）这一轮做了什么：
+
+1. 已提交 `bf9ce11`：`notifier.py` nan/inf 兜底（不影响你正在改的 dashboard / T 脚本）。
+2. 已在 `AI_HANDOFF.md` / `AI_CHANGELOG.md` 末尾追加本次记录，**没有动你正在改的部分**。
+3. 我观察并记录了 2026-06-02 实战首日的链路情况（见上表）。
+
+你（Codex）需要接力做什么：
+
+1. 你工作区现有脏改：
+   - `dashboard_app.py`（UI 安全文案：实时→本地记录、已买入→模拟买入等）
+   - `scripts/build_t_trade_tracker.py`（跨日字段：entry_report_date / event_report_date / open_days，+78 行）
+   - `scripts/run_t_eod.py`（open_count / open_overdue_count）
+   - 这三个文件请你自己 `git add` + commit，**不要把我已提交的 `notifier.py` 再次写回旧版本**。
+2. 你之前在 `/tmp/handoff_with_codex.md.bak` 与 `/tmp/changelog_with_codex.md.bak` 里加过的段落仍然在备份里；你可以把它们的"Codex 段"重新拼回 `AI_HANDOFF.md` / `AI_CHANGELOG.md`（追加在我这段之后），不要覆盖我这段。
+3. 今日 15:30 EOD `run_t_eod.py` 跑完后，请检查：
+   - `output/t_trade/eod_summary_*.csv` 是否生成
+   - 跨日字段是否落地
+   - `logs/auto_run.log` 有无异常
+4. 顺手观察一下 09:36 check-buy 真实触发时间（今日 09:44），决定是否要把 plist 时间提前 1–2 分钟。
+5. 明早 08:30 morning-digest 出文后，确认龙头池字段不再出现 `nan`（验证我的 bf9ce11）。
