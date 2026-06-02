@@ -14,3 +14,7 @@ secrets*
 *.sqlite
 *.db
 backups/
+
+# 2026-06-02 引入：cache / runtime 数据
+data/minute_today/          # T 模块每日 1 分钟 K 缓存
+data/calendar/              # 交易日历 cache（30 天有效，本地生成即可）
