@@ -1432,3 +1432,27 @@ ee5d2c7 T 模块文档                              Codex
 0145717 T 模块实时 B/S + EOD                    Codex
 588d3c1 fetch_minute_today                     Codex
 ```
+
+---
+
+## 2026-06-02 Claude（T 规则 3b 阈值 1.5% → 1.3%）
+
+### 本次任务
+
+朱哥拍板：3b 触发时位置低于分时均线阈值从 1.5% 改成 ≥ 1.3%。
+
+### 修改文件
+
+- `scripts/build_t_signal_observer.py`
+  - 常量 `BELOW_VWAP_PCT`: 0.015 → 0.013
+  - 同步注释 3 处 1.5% 文案为 1.3%
+
+### 验收
+
+- `py_compile` 通过
+- 边界 mock 测试：1.0% diff 不触发；1.327% diff 触发 `sim_buy / rule_pass=True`
+
+### Git
+
+- commit：`9b2a583 fix(t-rule): BELOW_VWAP_PCT 1.5% → 1.3%（朱哥拍板）`
+- status：仅 1 个文件改动 5+/6−，Codex dashboard_app.py 保持不动

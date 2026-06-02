@@ -1751,3 +1751,58 @@ SHRINK_RATIO_MAX = 0.5   # 规则 5: 缩量比 ≤ 0.5
 
 - `dashboard_app.py`（UI 文案 + RADAR 风格统一）— 本轮**完整保留**未触碰
 - AI 文档中 Codex 段 — 备份在 `/tmp/{handoff,changelog}_round5.md.bak`，恢复脚本在 commit 之后会自动跑
+
+---
+
+## 2026-06-02 Claude（T 规则 3b 阈值微调：1.5% → 1.3%）
+
+### 朱哥拍板
+
+3b（触发时位置低于分时均线）阈值从 **1.5%** 改成 **≥ 1.3%**。
+
+其余 4 条规则全部不变。
+
+### 修改文件
+
+- `scripts/build_t_signal_observer.py`
+  - `BELOW_VWAP_PCT`: 0.015 → **0.013**
+  - 同步更新第 130/261/352 行 docstring/注释里的 1.5% 文案为 1.3%
+
+### 完整规则常量表（当前生效）
+
+```python
+# scripts/build_t_signal_observer.py:128-135
+BELOW_VWAP_PCT   = 0.013   # 规则 3b: 触发分钟 close 比 VWAP 低 ≥ 1.3%
+DROP_PCT_MIN     = 0.007   # 规则 3a: 1-3 分钟急跌 ≥ 0.7%
+VOL_MULTIPLE_MIN = 2.0     # 规则 4:  触发量 / 前绿K均量 ≥ 2.0
+SHRINK_RATIO_MAX = 0.5     # 规则 5:  下一根缩量比 ≤ 0.5
+```
+
+### 验收
+
+- `py_compile` 通过
+- 边界 mock 测试：
+  - vwap 距离 1.0% diff → 不触发（旧 1.5% / 新 1.3% 都拦下）
+  - vwap 距离 1.327% diff → 触发 `sim_buy / rule_pass=True`
+    - 旧 1.5% 拦下，新 1.3% 放过 → 阈值确实生效
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：`9b2a583 fix(t-rule): BELOW_VWAP_PCT 1.5% → 1.3%（朱哥拍板）`
+
+### 主干 commit 时间线（最新在上）
+
+| commit | 内容 | 谁做 |
+|---|---|---|
+| `9b2a583` | 规则 3b 阈值 1.3% | Claude（本轮）|
+| `b296183` | md：T 规则 3 升级 0.7%+1.5% | Claude |
+| `e3a8987` | T 规则 3 升级 0.7%+1.5%（被本轮覆盖到 1.3%） | Claude |
+| `789fb29` | md：T 模块重写 + 6 T bug | Claude |
+| `e4fef60` | T 模块按 5 条规则重写 | Claude |
+| `d7ecb77` | md 全景扫描 | Claude |
+| `82e3375` | second_check / not_bought / _gf isinf | Claude |
+| `730a6fe` | md 第 2 段 | Claude |
+| `5e1f752` | tomorrow_plan + indicators nan | Claude |
+| `3df6d1d` | md 第 1 段 | Claude |
+| `bf9ce11` | notifier nan/inf | Claude |
