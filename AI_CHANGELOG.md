@@ -1663,3 +1663,771 @@ sudo pmset repeat wake MTWRF 09:25:00
 - 19:00 update_review 跑完后，`logs/auto_run.log` 应有 `[holding_track]` 日志
 - `output/trade_review.csv` 中今日新买入的行 `holding_status` 应是 `holding` 或 `stopped`，不再立即填 `simulated_trade_return`
 - weekly/monthly 复盘统计基于 simulated_trade_return，老数据继续累计，新数据等止损/手动卖触发后再计入
+
+---
+
+## 2026-06-02 Codex（T 跨日记录口径修复）
+
+### 本次任务
+
+- 修复 T 模块跨日 open 单记录口径：未止盈/未止损的 T 单需要每日继续追踪，直到触发退出或人工复核。
+- 为 T 交易记录和 B/S 点补齐入场日、事件日、持仓天数等字段。
+
+### 修改文件
+
+- `scripts/build_t_trade_tracker.py`
+- `dashboard_app.py`
+- `scripts/run_t_eod.py`
+- `AI_HANDOFF.md`
+- `AI_CHANGELOG.md`
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- `run.py`：未改。
+- `trade_review.py`：未改。
+- `output/trade_review.csv`：未改。
+- `config/version_flags.yaml`：未改。
+- `launchd/*.plist`：未改。
+- 自动下单逻辑：未新增。
+- 券商连接逻辑：未新增。
+
+### 是否运行 python run.py
+
+- 没有。
+- 未运行任何 `python run.py` 子命令。
+
+### 验收
+
+- `py_compile` 曾通过：`scripts/build_t_trade_tracker.py`、`scripts/run_t_eod.py`、`dashboard_app.py`。
+- 四个原 T 样例曾通过：低吸止盈、低吸止损、高抛回补、高抛踏空止损。
+- 跨日 open 验证曾通过：Day1 open，Day2 触发止盈并写入正确的入场日、事件日和 B/S 点。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：上一批已提交 `36f5a97`；本批未提交，等用户确认。
+- status：dirty。
+
+### 遗留问题
+
+- 还需要真实交易日验证 launchd 盘中每分钟 T 追踪是否稳定。
+- 数据源健康检查和重试机制尚未做。
+- `ma10_slope_up` 仍待真实斜率计算。
+
+## 2026-06-02 Codex（dashboard UI 安全文案修正）
+
+### 本次任务
+
+- 按用户要求逐页审查 dashboard 的按钮、文字、假指标和误导展示。
+- 做第一批低风险 UI 修正：只改前端展示口径，不改后端选股、买入、做 T、卖出、记录逻辑。
+
+### 修改文件
+
+- `dashboard_app.py`
+- `AI_HANDOFF.md`
+- `AI_CHANGELOG.md`
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- `run.py`：未改。
+- `trade_review.py`：未改。
+- `output/trade_review.csv`：未改。
+- `config/version_flags.yaml`：未改。
+- `launchd/*.plist`：未改。
+- 自动下单逻辑：未新增。
+- 券商连接逻辑：未新增。
+
+### 是否运行 python run.py
+
+- 没有。
+- 未运行任何 `python run.py` 子命令。
+
+### 验收
+
+- `py_compile dashboard_app.py` 曾通过。
+- `git diff --check` 曾通过。
+- Streamlit AppTest non-crash 曾通过全部 10 个页面。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：未提交，等用户确认。
+- status：dirty。
+
+### 遗留问题
+
+- 本轮只做 UI 安全文案和假指标修正，没有继续改页面整体布局。
+- 候选复盘页仍有部分开发者排查命令和原始字段，后续建议折叠到“开发者排查”区域。
+- 首页股票卡 mini 折线已标注为“趋势示意”；后续如有真实分时数据，可替换为真实趋势。
+
+## 2026-06-02 Codex（dashboard UI 第二批清理）
+
+### 本次任务
+
+- 接收 Claude 的 `notifier.py` nan/inf 修复后，检查 AI 交接文档是否连续。
+- 把 `/tmp/*.bak` 中 Codex 之前未提交的交接段追加回当前 md。
+- 继续做 dashboard UI 安全清理：把开发者命令从主界面收进折叠区，减少误导文案。
+
+### 修改文件
+
+- `dashboard_app.py`
+- `AI_HANDOFF.md`
+- `AI_CHANGELOG.md`
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- `run.py`：未改。
+- `trade_review.py`：未改。
+- `output/trade_review.csv`：未改。
+- `config/version_flags.yaml`：未改。
+- `launchd/*.plist`：未改。
+- 自动下单逻辑：未新增。
+- 券商连接逻辑：未新增。
+
+### 是否运行 python run.py
+
+- 没有。
+- 未运行任何 `python run.py` 子命令。
+
+### 验收
+
+- `py_compile` 通过：
+  - `dashboard_app.py`
+  - `scripts/build_t_trade_tracker.py`
+  - `scripts/run_t_eod.py`
+- `git diff --check` 通过。
+- Streamlit AppTest non-crash 通过全部 10 个页面。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：未提交，等用户确认。
+- status：dirty；`data/minute_today/` 为未追踪真实分钟数据，不建议提交。
+
+### 遗留问题
+
+- `data/minute_today/` 是否需要清理或加入忽略规则，待用户决定。
+- `check_buy_v16.plist` 今日触发漂移（09:36 → 09:44）仍待排查。
+- `notifier.py` nan 修复需 2026-06-03 08:30 morning-digest 真实推送复核。
+
+## 2026-06-02 Codex（逐页 UI 审查与 T 展示修复）
+
+### 本次任务
+
+- 按用户要求调用 Chrome/本地页面逐页检查 dashboard。
+- 记录并修复误导文案、假指标显示、英文工具栏、做T样例展示失效和 T 安全字段误报。
+
+### 修改文件
+
+- `dashboard_app.py`
+- `scripts/build_t_signal_observer.py`
+- `AI_HANDOFF.md`
+- `AI_CHANGELOG.md`
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- `run.py`：未改。
+- `trade_review.py`：未改。
+- `output/trade_review.csv`：未改。
+- `config/version_flags.yaml`：未改。
+- `launchd/*.plist`：未改。
+- 自动下单逻辑：未新增。
+- 券商连接逻辑：未新增。
+
+### 是否运行 python run.py
+
+- 没有。
+- 未运行任何 `python run.py` 子命令。
+
+### 验收
+
+- `py_compile` 通过：
+  - `dashboard_app.py`
+  - `scripts/build_t_signal_observer.py`
+  - `scripts/build_t_trade_tracker.py`
+  - `scripts/run_t_eod.py`
+- `git diff --check` 通过。
+- Streamlit AppTest non-crash 通过全部 10 个页面。
+- 做T样例 fallback 验证通过：
+  - sample signals rows: 8
+  - sample trades rows: 4
+  - B/S rows: 8
+  - safety: 无可实盘异常；历史真实信号存在空安全字段，新生成记录已修复。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：未提交，等用户确认。
+- status：dirty；`data/minute_today/` 为未追踪真实分钟数据，不建议提交。
+
+### 遗留问题
+
+- 当前 dashboard 仍有部分 `st.dataframe` 自带英文工具栏，若要彻底移除，需要把关键表格改成自渲染 HTML 表格。
+- Chrome 无障碍树/截图偶尔不同步；建议后续大 UI 改造时使用 AppTest + 浏览器截图双重验收。
+- `check_buy_v16.plist` 触发漂移仍待排查。
+
+## 2026-06-02 Codex（UI 假指标/英文/误导控件清理）
+
+### 本次任务
+
+- 继续修 dashboard UI。
+- 清理假数字、假指标、不能点击但像按钮的元素，以及残留英文可视字段。
+
+### 修改文件
+
+- `dashboard_app.py`
+- `AI_HANDOFF.md`
+- `AI_CHANGELOG.md`
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- `run.py`：未改。
+- `trade_review.py`：未改。
+- `output/trade_review.csv`：未改。
+- `config/version_flags.yaml`：未改。
+- `launchd/*.plist`：未改。
+- 自动下单逻辑：未新增。
+- 券商连接逻辑：未新增。
+
+### 是否运行 python run.py
+
+- 没有。
+- 未运行任何 `python run.py` 子命令。
+
+### 验收
+
+- `py_compile` 通过：
+  - `dashboard_app.py`
+  - `scripts/build_t_signal_observer.py`
+  - `scripts/build_t_trade_tracker.py`
+  - `scripts/run_t_eod.py`
+- `git diff --check` 通过。
+- Streamlit AppTest non-crash 通过全部 10 个页面。
+- 浏览器刷新 `http://localhost:8501/` 后确认：
+  - `MARKET SENTIMENT`、`WATCHLIST RESEARCH`、`RESEARCH CONSOLE`、`趋势示意` 均未出现在可视文本中。
+  - 首页候选信号显示 `待 9:36 检查`，不再误显示 `未通过`。
+  - 无收益字段时显示 `— / 暂无模拟收益记录`。
+  - 情绪卡显示 `本地情绪分 / 本地评分`。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：未提交，等用户确认。
+- status：dirty；`data/minute_today/` 为未追踪真实分钟数据，不建议提交。
+
+### 遗留问题
+
+- `data/minute_today/` 仍为未追踪真实分钟数据，不建议提交。
+- 若后续发现某些 `st.dataframe` 工具栏仍露出，需要把对应表格改成自渲染 HTML 表格才能彻底控制所有按钮。
+- `check_buy_v16.plist` 触发漂移仍待排查。
+
+## 2026-06-02 Codex（跨页面 RADAR 风格统一）
+
+### 本次任务
+
+- 修复“今日总览已是 Stitch/RADAR 风格，但其它页面仍旧版 Streamlit 风格”的割裂问题。
+- 只做前端风格统一，不改后端交易逻辑。
+
+### 修改文件
+
+- `dashboard_app.py`
+- `AI_HANDOFF.md`
+- `AI_CHANGELOG.md`
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- `run.py`：未改。
+- `trade_review.py`：未改。
+- `output/trade_review.csv`：未改。
+- `config/version_flags.yaml`：未改。
+- `launchd/*.plist`：未改。
+- 自动下单逻辑：未新增。
+- 券商连接逻辑：未新增。
+
+### 是否运行 python run.py
+
+- 没有。
+- 未运行任何 `python run.py` 子命令。
+
+### 验收
+
+- `py_compile dashboard_app.py` 通过。
+- `git diff --check` 通过。
+- Streamlit AppTest non-crash 通过全部 10 个页面。
+- 浏览器刷新 `http://localhost:8501/` 后实测：
+  - `买入确认`
+  - `未买入跟踪`
+  - `候选复盘`
+  - `手动补跑`
+- 确认新 Hero 右侧说明卡正常渲染，不再显示原始 `<div style=...>`。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：未提交，等用户确认。
+- status：dirty；`data/minute_today/` 为未追踪真实分钟数据，不建议提交。
+
+### 遗留问题
+
+- 本轮是跨页面基础统一；若要达到今日总览同级别，需要后续逐页把大表格改为自渲染终端表格/卡片。
+- `data/minute_today/` 是否保留在工作区，待用户决定。
+
+## 2026-06-02 Codex（买入确认页深度卡片化）
+
+### 本次任务
+
+- 读取最新 AI 文档，确认 Claude 底层改动未影响当前 UI 工作边界。
+- 继续 dashboard UI 深化，优先处理 `买入确认` 页面。
+
+### 修改文件
+
+- `dashboard_app.py`
+- `AI_HANDOFF.md`
+- `AI_CHANGELOG.md`
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- `run.py`：未改。
+- `trade_review.py`：未改。
+- `output/trade_review.csv`：未改。
+- `config/version_flags.yaml`：未改。
+- `launchd/*.plist`：未改。
+- 自动下单逻辑：未新增。
+- 券商连接逻辑：未新增。
+
+### 是否运行 python run.py
+
+- 没有。
+- 未运行任何 `python run.py` 子命令。
+
+### 验收
+
+- `py_compile dashboard_app.py` 通过。
+- `git diff --check` 通过。
+- Streamlit AppTest non-crash 通过全部 10 个页面。
+- 浏览器刷新 `http://localhost:8501/` 后点击 `买入确认`，确认：
+  - `三段结果总览` 正常渲染。
+  - `只读统计` 正常显示。
+  - 不再出现 `<div style=...>` 原始 HTML。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：未提交，等用户确认。
+- status：dirty；`data/calendar/`、`data/minute_today/` 为未追踪数据目录，本轮未处理。
+
+### 遗留问题
+
+- 下一步建议继续深度改 `做T观察`，把 T 交易记录 / B/S 点表格改为终端风格卡片或自渲染表格。
+- `data/calendar/`、`data/minute_today/` 是否保留或忽略，待用户决定。
+
+## 2026-06-02 Codex（做T观察页终端卡片化）
+
+### 本次任务
+
+- 继续 dashboard UI 风格统一。
+- 优先处理 `做T观察` 页面，把 T 信号、T 交易记录、B/S 点展示从普通表格改为 RADAR 终端卡片风格。
+
+### 修改文件
+
+- `dashboard_app.py`
+- `AI_HANDOFF.md`
+- `AI_CHANGELOG.md`
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- `run.py`：未改。
+- `trade_review.py`：未改。
+- `output/trade_review.csv`：未改。
+- `config/version_flags.yaml`：未改。
+- `launchd/*.plist`：未改。
+- 自动下单逻辑：未新增。
+- 券商连接逻辑：未新增。
+
+### 是否运行 python run.py
+
+- 没有。
+- 未运行任何 `python run.py` 子命令。
+
+### 验收
+
+- `py_compile dashboard_app.py` 通过。
+- `git diff --check` 通过。
+- Streamlit AppTest non-crash 通过全部 10 个页面。
+- 浏览器刷新 `http://localhost:8501/` 后点击 `做T观察`，确认：
+  - `T 信号流` 正常显示。
+  - `只读观察` 正常显示。
+  - 页面没有 `nan`。
+  - 页面没有 `<div style=...>` 原始 HTML。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：未提交，等用户确认。
+- status：dirty；`data/calendar/`、`data/minute_today/` 为未追踪数据目录，本轮未处理。
+
+### 遗留问题
+
+- 当前真实 T 交易记录为空时，页面会显示暂无真实 T 交易记录；默认不显示 sample，因此不会伪造 B/S 记录。
+- 下一步建议继续深度改 `明日计划`、`候选复盘`、`T+1复盘`、`未买入跟踪`。
+
+## 2026-06-02 Codex（明日计划页前端安全视觉优化）
+
+### 本次任务
+
+- 继续逐页统一 dashboard UI。
+- 优先处理 `明日计划` 页面中普通 dataframe、按钮说明不够醒目、终端风格不足的问题。
+
+### 修改文件
+
+- `dashboard_app.py`
+- `AI_HANDOFF.md`
+- `AI_CHANGELOG.md`
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- `run.py`：未改。
+- `trade_review.py`：未改。
+- `output/trade_review.csv`：未改。
+- `config/version_flags.yaml`：未改。
+- `launchd/*.plist`：未改。
+- 自动下单逻辑：未新增。
+- 券商连接逻辑：未新增。
+
+### 是否运行 python run.py
+
+- 没有。
+- 未运行任何 `python run.py` 子命令。
+
+### 验收
+
+- `py_compile dashboard_app.py` 通过。
+- `git diff --check` 通过。
+- Streamlit AppTest 打开 `明日计划` 无异常。
+- 浏览器刷新 `http://localhost:8501/` 后点击 `明日计划`，确认：
+  - `LOCAL SCRIPT CONTROL` 正常显示。
+  - `FOCUS NODE` 正常显示。
+  - `CONFIG SNAPSHOT` 正常显示。
+  - 页面没有 `nan`。
+  - 页面没有 `<div style=...>` 原始 HTML。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：未提交，等用户确认。
+- status：dirty；`data/calendar/`、`data/minute_today/` 为未追踪数据目录，本轮未处理。
+
+### 遗留问题
+
+- 下一步建议继续深度改 `候选复盘`、`T+1复盘`、`未买入跟踪`。
+- `明日计划` 页面仍保留真实按钮功能；这些按钮会运行对应 `scripts/*.py`，但不会运行 `run.py`，也不会接券商或自动下单。
+
+## 2026-06-02 Codex（候选复盘页主线板块与文案优化）
+
+### 本次任务
+
+- 继续逐页统一 dashboard UI。
+- 处理 `候选复盘` 页面里的普通表格感、开发字段露出、原因文案误拆问题。
+
+### 修改文件
+
+- `dashboard_app.py`
+- `AI_HANDOFF.md`
+- `AI_CHANGELOG.md`
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- `run.py`：未改。
+- `trade_review.py`：未改。
+- `output/trade_review.csv`：未改。
+- `config/version_flags.yaml`：未改。
+- `launchd/*.plist`：未改。
+- 自动下单逻辑：未新增。
+- 券商连接逻辑：未新增。
+
+### 是否运行 python run.py
+
+- 没有。
+- 未运行任何 `python run.py` 子命令。
+
+### 验收
+
+- `py_compile dashboard_app.py` 通过。
+- `git diff --check` 通过。
+- Streamlit AppTest 打开 `候选复盘` 无异常。
+- 浏览器刷新 `http://localhost:8501/` 后点击 `候选复盘`，确认：
+  - 页面无 `nan`。
+  - 页面无 `<div style=...>` 原始 HTML。
+  - `未知原因：V1.5` 已消失。
+  - 原因文案正常显示为 `已回退 V1.4/V1.5`。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：未提交，等用户确认。
+- status：dirty；`data/watchlist/custom_stock_pool.csv` 为用户新增自选股，用户已确认可保留；`data/calendar/`、`data/minute_today/` 为未追踪数据目录，本轮未处理。
+
+### 遗留问题
+
+- 下一步建议继续深度改 `T+1复盘`、`未买入跟踪`、`周月复盘`。
+
+## 2026-06-02 Codex（T+1复盘页结算卡片化）
+
+### 本次任务
+
+- 继续逐页统一 dashboard UI。
+- 处理 `T+1 复盘` 页面已完成明细普通 dataframe 风格割裂的问题。
+
+### 修改文件
+
+- `dashboard_app.py`
+- `AI_HANDOFF.md`
+- `AI_CHANGELOG.md`
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- `run.py`：未改。
+- `trade_review.py`：未改。
+- `output/trade_review.csv`：未改。
+- `config/version_flags.yaml`：未改。
+- `launchd/*.plist`：未改。
+- 自动下单逻辑：未新增。
+- 券商连接逻辑：未新增。
+
+### 是否运行 python run.py
+
+- 没有。
+- 未运行任何 `python run.py` 子命令。
+
+### 验收
+
+- `py_compile dashboard_app.py` 通过。
+- `git diff --check` 通过。
+- Streamlit AppTest 打开 `T+1 复盘` 无异常。
+- 浏览器刷新 `http://localhost:8501/` 后点击 `T+1 复盘`，确认：
+  - `T+1 SETTLEMENT` 正常显示。
+  - 页面没有 `nan`。
+  - 页面没有 `<div style=...>` 原始 HTML。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：未提交，等用户确认。
+- status：dirty；`data/watchlist/custom_stock_pool.csv` 为用户新增自选股，用户已确认可保留；`data/calendar/`、`data/minute_today/` 为未追踪数据目录，本轮未处理。
+
+### 遗留问题
+
+- 下一步建议继续深度改 `未买入跟踪`、`周月复盘`。
+
+## 2026-06-02 Codex（未买入跟踪页原因与机会成本卡片化）
+
+### 本次任务
+
+- 继续逐页统一 dashboard UI。
+- 处理 `未买入跟踪` 页面中普通表格过多、机会成本容易被误解为补买建议的问题。
+
+### 修改文件
+
+- `dashboard_app.py`
+- `AI_HANDOFF.md`
+- `AI_CHANGELOG.md`
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- `run.py`：未改。
+- `trade_review.py`：未改。
+- `output/trade_review.csv`：未改。
+- `config/version_flags.yaml`：未改。
+- `launchd/*.plist`：未改。
+- 自动下单逻辑：未新增。
+- 券商连接逻辑：未新增。
+
+### 是否运行 python run.py
+
+- 没有。
+- 未运行任何 `python run.py` 子命令。
+
+### 验收
+
+- `py_compile dashboard_app.py` 通过。
+- `git diff --check` 通过。
+- Streamlit AppTest 打开 `未买入跟踪` 无异常。
+- 浏览器刷新 `http://localhost:8501/` 后点击 `未买入跟踪`，确认：
+  - `BLOCK REASON` 正常显示。
+  - `MISSED SURGE` 正常显示。
+  - 页面没有 `nan`。
+  - 页面没有 `<div style=...>` 原始 HTML。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：未提交，等用户确认。
+- status：dirty；`data/watchlist/custom_stock_pool.csv` 为用户新增自选股，用户已确认可保留；`data/calendar/`、`data/minute_today/` 为未追踪数据目录，本轮未处理。
+
+### 遗留问题
+
+- 下一步建议继续深度改 `周月复盘`。
+
+## 2026-06-02 Codex（周月复盘页模式对比卡片化）
+
+### 本次任务
+
+- 继续逐页统一 dashboard UI。
+- 处理 `周月复盘` 页面中核心模式对比仍为普通 dataframe 的问题。
+
+### 修改文件
+
+- `dashboard_app.py`
+- `AI_HANDOFF.md`
+- `AI_CHANGELOG.md`
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- `run.py`：未改。
+- `trade_review.py`：未改。
+- `output/trade_review.csv`：未改。
+- `config/version_flags.yaml`：未改。
+- `launchd/*.plist`：未改。
+- 自动下单逻辑：未新增。
+- 券商连接逻辑：未新增。
+
+### 是否运行 python run.py
+
+- 没有。
+- 未运行任何 `python run.py` 子命令。
+
+### 验收
+
+- `py_compile dashboard_app.py` 通过。
+- `git diff --check` 通过。
+- Streamlit AppTest 打开 `周月复盘` 无异常。
+- AppTest 文本断言确认：
+  - `MODE SCORECARD` 已渲染。
+  - 页面无 `nan`。
+- 浏览器自动化点击该页时本轮曾出现工具超时，但 AppTest 页面级验收通过；未发现代码异常。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：未提交，等用户确认。
+- status：dirty；`data/watchlist/custom_stock_pool.csv` 为用户新增自选股，用户已确认可保留；`data/calendar/`、`data/minute_today/` 为未追踪数据目录，本轮未处理。
+
+### 遗留问题
+
+- 主要页面已完成第一轮风格统一；后续建议做全局收口、完整 AppTest、再按文件边界提交。
+
+## 2026-06-03 Codex（UI 提交前边界复核）
+
+### 本次任务
+
+- 继续昨天的 dashboard UI 工作，做提交前边界整理与验收。
+- 确认当前工作区只剩 UI 和 AI 文档待提交，后端与自选池改动已在此前提交中落地。
+
+### 修改文件
+
+- `AI_HANDOFF.md`
+- `AI_CHANGELOG.md`
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- `run.py`：未改。
+- `trade_review.py`：未改，当前工作区不再 dirty。
+- `output/trade_review.csv`：未改。
+- `config/version_flags.yaml`：未改。
+- `launchd/*.plist`：未改。
+- 自动下单逻辑：未新增。
+- 券商连接逻辑：未新增。
+
+### 是否运行 python run.py
+
+- 没有。
+- 未运行任何 `python run.py` 子命令。
+
+### 验收
+
+- `py_compile dashboard_app.py` 通过。
+- `git diff --check` 通过。
+- 10 个页面 Streamlit AppTest 全部无异常：
+  - 今日总览
+  - 买入确认
+  - T+1 复盘
+  - 未买入跟踪
+  - 周月复盘
+  - 候选复盘
+  - 明日计划
+  - 做T观察
+  - ⭐ 我的自选
+  - 手动补跑
+- 浏览器刷新 `http://localhost:8501/`，确认：
+  - `RADAR_TERMINAL` 顶部导航存在。
+  - 页面无 `nan`。
+  - 页面无 `<div style=...>` 原始 HTML。
+  - 主要导航项存在。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：未提交，等用户确认。
+- status：dirty；当前待提交文件为 `dashboard_app.py`、`AI_HANDOFF.md`、`AI_CHANGELOG.md`。
+- 未追踪：`data/calendar/`、`data/minute_today/`，不建议随 UI 提交。
+
+### 遗留问题
+
+- 如果用户确认 UI 可接受，建议提交 `dashboard_app.py`、`AI_HANDOFF.md`、`AI_CHANGELOG.md`。
+- 不建议提交 `data/calendar/`、`data/minute_today/`。

@@ -37,7 +37,6 @@ from typing import Optional, Tuple
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-import streamlit.components.v1 as components
 
 
 # ─── 路径 ────────────────────────────────────────────────────────────────────
@@ -90,7 +89,7 @@ COLOR_BOUGHT      = "#00E479"          # 已买入 — 霓虹绿 (secondary-fixe
 COLOR_WAIT_T1     = "#00DAF3"          # 等待 T+1 — 电光青 (tertiary)
 COLOR_SECOND      = "#00DAF3"          # 二次观察/链接 — 电光青
 COLOR_NO_BUY      = "#909096"          # 未买入 — 极淡灰
-COLOR_DROP        = "#FFB4AB"          # 直接放弃 — 柔玫瑰 (error)
+COLOR_DROP        = "#FFB4AB"          # 未通过 — 柔玫瑰 (error)
 COLOR_ERROR       = "#FFB4AB"          # 错误 — 柔玫瑰
 
 # 状态横幅背景（玻璃态透明）
@@ -155,10 +154,13 @@ def _plotly_terminal_layout(**extra) -> dict:
     return base
 
 
+PLOTLY_SAFE_CONFIG = {"displayModeBar": False}
+
+
 # ─── 状态文案（V1.6 展示口径）────────────────────────────────────────────
-STATUS_BOUGHT_DONE  = "已买入｜已完成T+1复盘"
-STATUS_BOUGHT_WAIT  = "已买入｜等待T+1复盘"
-STATUS_BOUGHT_LIMIT = "已买入｜涨停未成交"
+STATUS_BOUGHT_DONE  = "模拟买入｜已完成T+1复盘"
+STATUS_BOUGHT_WAIT  = "模拟买入｜等待T+1复盘"
+STATUS_BOUGHT_LIMIT = "模拟买入｜涨停未成交"
 STATUS_NOBUY_DONE   = "未买入｜T+1已观察"
 STATUS_NOBUY_WAIT   = "未买入｜T+1待跟踪"
 STATUS_NOBUY_DATA_FAIL = "未买入｜行情失败"
@@ -815,23 +817,25 @@ def render_page_header(
     badge_html = "".join(
         f"<span style='display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;"
         f"background:rgba(255,255,255,0.03);border:1px solid {COLOR_BORDER_SOFT};"
-        f"font-size:11px;font-weight:700;color:{COLOR_MUTED};'>{_eh(b)}</span>"
+        f"font-family:{FONT_MONO};font-size:11px;font-weight:700;color:{COLOR_MUTED};"
+        f"letter-spacing:0.04em;'>{_eh(b)}</span>"
         for b in badges
     )
     aside_html = ""
     if aside_title or aside_body:
-        aside_html = f"""
-        <div style="width:320px;max-width:100%;background:rgba(22,27,34,0.5);
-                    backdrop-filter:blur(12px);
-                    border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px 18px;
-                    box-shadow:inset 0 1px 0 rgba(255,255,255,0.03);">
-          <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.16em;color:{COLOR_MUTED};font-family:'JetBrains Mono',monospace;">{_eh(aside_title)}</div>
-          <div style="margin-top:8px;font-size:13px;line-height:1.8;color:{COLOR_TEXT};">{aside_body}</div>
-        </div>
-        """
+        aside_html = (
+            f"<div style='width:320px;max-width:100%;background:rgba(22,27,34,0.5);"
+            f"backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.08);"
+            f"border-radius:12px;padding:16px 18px;"
+            f"box-shadow:inset 0 1px 0 rgba(255,255,255,0.03);'>"
+            f"<div style='font-size:10px;letter-spacing:0.16em;color:{COLOR_MUTED};"
+            f"font-family:\"JetBrains Mono\",monospace;'>{_eh(aside_title)}</div>"
+            f"<div style='margin-top:8px;font-size:13px;line-height:1.8;color:{COLOR_TEXT};'>{aside_body}</div>"
+            f"</div>"
+        )
     st.markdown(
         f"""
-        <div style="margin:0 0 12px 0;padding:18px 20px 16px 20px;border-radius:14px;border:1px solid rgba(255,255,255,0.08);
+        <div class="rt-page-hero" style="margin:0 0 12px 0;padding:18px 20px 16px 20px;border-radius:14px;border:1px solid rgba(255,255,255,0.08);
                     background:
                       radial-gradient(circle at top right, rgba(0,218,243,0.08), transparent 28%),
                       linear-gradient(180deg, rgba(15,20,27,0.7) 0%, rgba(10,14,23,0.85) 100%);
@@ -839,7 +843,7 @@ def render_page_header(
                     box-shadow:0 18px 48px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.03);">
           <div style="display:flex;justify-content:space-between;gap:18px;align-items:flex-start;flex-wrap:wrap;">
             <div style="flex:1;min-width:320px;">
-              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:0.24em;color:{COLOR_SECOND};text-shadow:0 0 10px rgba(0,218,243,0.3);">{_eh(kicker)}</div>
+	              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.24em;color:{COLOR_SECOND};text-shadow:0 0 10px rgba(0,218,243,0.3);">{_eh(kicker)}</div>
               <div style="margin-top:8px;font-size:30px;font-weight:700;line-height:1.06;color:{COLOR_TEXT};letter-spacing:-0.03em;font-family:'Hanken Grotesk','Inter',sans-serif;">{_eh(title)}</div>
               <div style="margin-top:9px;max-width:760px;font-size:13px;line-height:1.72;color:{COLOR_MUTED};">{_eh(description)}</div>
               <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">{badge_html}</div>
@@ -1000,7 +1004,7 @@ def _v16_mf_layer_html(row) -> str:
         f"border-radius:6px;padding:9px 12px;margin-top:9px;font-size:12px;"
         f"color:{COLOR_TEXT};line-height:1.75;'>"
         f"<div><b>V1.6 复盘计划层</b>：{plan_action}</div>"
-        f"<div>是否只观察：<b>{observe_text}</b> ｜ 交易权限：<b>{trade_perm}</b></div>"
+        f"<div>是否只观察：<b>{observe_text}</b> ｜ 明日计划口径：<b>{trade_perm}</b></div>"
         f"<div>是否命中主线：<b>{theme_match}</b> ｜ 是否核心观察股：<b>{focus_match}</b></div>"
         f"<div>V1.6 原因：{plan_reason}</div>"
         f"<div style='margin-top:4px;'><b>资金条件层（观察模式）</b>：{money_decision}"
@@ -1027,7 +1031,7 @@ def stock_card(row: pd.Series, variant: str = "default") -> str:
     theme = _eh(row.get("theme_name", "") or "—")
 
     bs = _gb(row.get("buy_signal_0935"))
-    if bs is True:    buy_txt = "✅ 已买入"
+    if bs is True:    buy_txt = "✅ 模拟买入"
     elif bs is False: buy_txt = "○ 未买入"
     else:             buy_txt = "⏳ 待确认"
 
@@ -1116,16 +1120,23 @@ def stock_card(row: pd.Series, variant: str = "default") -> str:
     )
 
     return f"""
-    <div style="
-        background:{COLOR_CARD};
-        border:1px solid {COLOR_BORDER};
-        border-left:4px solid {color};
-        border-radius:8px;
-        padding:14px 16px;
-        margin-bottom:10px;">
+    <div class="rt-v2-glass-card" style="
+        position:relative;
+        background:{COLOR_GLASS_BG};
+        backdrop-filter:blur(18px);
+        -webkit-backdrop-filter:blur(18px);
+        border:1px solid {COLOR_GLASS_EDGE};
+        border-radius:12px;
+        padding:14px 16px 14px 18px;
+        margin-bottom:10px;
+        box-shadow:inset 0 1px 0 rgba(255,255,255,0.03);
+        transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease;">
+      <div style="position:absolute;left:0;top:14px;bottom:14px;width:2px;
+                  background:{color};border-radius:0 2px 2px 0;
+                  box-shadow:0 0 12px {color}66;"></div>
       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
         <div>
-          <div style="font-size:16px;font-weight:600;color:{COLOR_TEXT};display:inline-block;">
+          <div style="font-family:{FONT_HEADLINE};font-size:17px;font-weight:700;color:{COLOR_TEXT};display:inline-block;">
             {name} <span style="font-size:13px;color:{COLOR_MUTED};font-weight:normal;">（{code}）</span>
           </div>
           {mode_badge}{theme_badge}{sec_badge}
@@ -1172,20 +1183,20 @@ def render_today_banner(today_df: pd.DataFrame, date_str: str) -> None:
     if state["bought"] == 0 and state["checked"] == state["total"]:
         status_banner(
             f"今日推荐 <b>{state['total']}</b> 只，9:36 检查已完成，"
-            f"<b>今日无符合买入条件的票</b>，未模拟买入。无需手动操作。",
+            f"<b>今日无符合模拟确认条件的票</b>，未模拟买入。无需手动操作。",
             "success",
         )
         return
     if state["waiting_t1"] > 0:
         status_banner(
-            f"已完成 9:36 买入确认，<b>{state['waiting_t1']}</b> 只等待 T+1 复盘"
+            f"已完成 9:36 模拟确认，<b>{state['waiting_t1']}</b> 只等待 T+1 复盘"
             f"（将在 T+1 收盘后 15:25 自动补全收益和止损数据）。",
             "warning",
         )
         return
     if state["done_t1"] > 0 and state["waiting_t1"] == 0:
         status_banner(
-            f"今日 <b>{state['done_t1']}</b> 只买入已完成 T+1 复盘，<b>全部任务已结束</b>。",
+            f"今日 <b>{state['done_t1']}</b> 只模拟买入已完成 T+1 复盘，<b>全部任务已结束</b>。",
             "success",
         )
         return
@@ -1224,7 +1235,7 @@ def generate_today_plain_conclusion(
 
     例如：
       - 今日已模拟买入 2 只（XX、YY），等待 T+1 复盘。
-      - 今日没有正式买入，主要原因是 9:36 承接不足（4 只），按 9:36 技术确认层规则继续观察，不追。
+      - 今日没有触发模拟买入，主要原因是 9:36 承接不足（4 只），按 9:36 技术确认层规则继续观察，不追。
       - 今日推荐 6 只，9:36 检查还没跑，等待开盘后自动确认。
     """
     if state["total"] == 0:
@@ -1240,7 +1251,7 @@ def generate_today_plain_conclusion(
             )
         if state["done_t1"] > 0 and state["waiting_t1"] == 0:
             return (
-                f"今日 <b>{state['bought']}</b> 只买入（{names_txt}）"
+                f"今日 <b>{state['bought']}</b> 只模拟买入（{names_txt}）"
                 f"<b>已完成 T+1 复盘</b>，可查看结果。"
             )
         return (
@@ -1266,11 +1277,11 @@ def generate_today_plain_conclusion(
     if top_reasons:
         label, cnt, _stocks = top_reasons[0]
         return (
-            f"今日没有正式买入，<b>主要原因是 {label}</b>（{cnt} 只），"
+            f"今日没有触发模拟买入，<b>主要原因是 {label}</b>（{cnt} 只），"
             f"按 <b>9:36 技术确认层规则</b>继续观察，不追。"
         )
     return (
-        f"今日推荐 {state['total']} 只，9:36 检查全部完成，<b>无符合买入条件的票</b>，"
+        f"今日推荐 {state['total']} 只，9:36 检查全部完成，<b>无符合模拟确认条件的票</b>，"
         f"按 9:36 技术确认层规则继续观察。"
     )
 
@@ -1416,25 +1427,25 @@ def _home_fmt_amount(total_amount: Optional[float]) -> str:
     return f"{total_amount:,.0f}"
 
 
-def _home_sentiment_index(df: pd.DataFrame, daily: Optional[dict]) -> tuple[int, str]:
+def _home_sentiment_index(df: pd.DataFrame, daily: Optional[dict]) -> tuple[Optional[int], str]:
     ms = _gf(df["market_sentiment"].iloc[0]) if ("market_sentiment" in df.columns and not df.empty) else None
     raw = _md_get_float(daily, "market_sentiment_score_raw")
     adr = _md_get_float(daily, "advance_decline_ratio")
     idx = _md_get_float(daily, "index_change_pct")
-    if ms is not None:
-        score = int(round(ms * 10))
-    elif raw is not None:
+    if raw is not None:
         score = int(round(raw * 10))
     elif adr is not None:
         score = int(round(50 + (adr - 1.0) * 28 + (idx or 0) * 9))
+    elif ms is not None:
+        score = int(round(ms * 10))
     else:
-        score = 50
+        return None, "数据缺失"
     score = max(8, min(92, score))
     if score >= 68:
-        return score, "积极 / BULLISH"
+        return score, "积极"
     if score >= 52:
-        return score, "中性 / NEUTRAL"
-    return score, "谨慎 / CAUTIOUS"
+        return score, "中性"
+    return score, "谨慎"
 
 
 def render_today_terminal_home(sel_date: str, df: pd.DataFrame) -> None:
@@ -1475,7 +1486,10 @@ def render_today_terminal_home(sel_date: str, df: pd.DataFrame) -> None:
         for label, value, sub, color in top_cards
     )
 
-    status_dot = COLOR_BOUGHT if score >= 68 else (COLOR_SECOND if score >= 52 else COLOR_ERROR)
+    score_num = score if score is not None else 0
+    score_display = str(score) if score is not None else "—"
+    score_delta_text = f"{_home_fmt_pct(idx_chg)} {'↑' if (idx_chg or 0) >= 0 else '↓'}" if score is not None else "行情数据缺失"
+    status_dot = COLOR_MUTED if score is None else (COLOR_BOUGHT if score >= 68 else (COLOR_SECOND if score >= 52 else COLOR_ERROR))
     module_rows = [
         ("上涨家数", str(advance or "—"), COLOR_BOUGHT),
         ("下跌家数", str(decline or "—"), COLOR_ERROR),
@@ -1490,7 +1504,7 @@ def render_today_terminal_home(sel_date: str, df: pd.DataFrame) -> None:
         """
         for k, v, c in module_rows
     )
-    effect_width = max(12, min(94, int((score / 100) * 100)))
+    effect_width = max(0, min(94, int((score_num / 100) * 100)))
     themes = " / ".join([x for x in [leader_1, leader_2, leader_3] if x and x != "—"]) or "暂无主线"
     table_rows = ""
     has_candidates = not df.empty
@@ -1499,13 +1513,16 @@ def render_today_terminal_home(sel_date: str, df: pd.DataFrame) -> None:
         for _, r in sdf.iterrows():
             bought = is_bought(r)
             obs = is_worth_observing(r)
-            dot = COLOR_BOUGHT if bought else (COLOR_SECOND if obs else COLOR_ERROR)
-            action = "EXECUTE" if bought else ("MONITOR" if obs else "DROP")
+            pending = is_not_checked(r)
+            dot = COLOR_BOUGHT if bought else (COLOR_WARN_YELLOW if pending else (COLOR_SECOND if obs else COLOR_ERROR))
+            action = "模拟确认" if bought else ("待检查" if pending else ("观察中" if obs else "未通过"))
             action_style = (
                 f"background:{COLOR_SECOND};color:#0A0E17;border:1px solid {COLOR_SECOND};box-shadow:0 0 14px rgba(0,218,243,0.22);"
                 if bought else
-                (f"border:1px solid rgba(0,218,243,0.55);color:{COLOR_SECOND};background:rgba(0,218,243,0.04);box-shadow:inset 0 0 0 1px rgba(0,218,243,0.06);"
-                 if obs else f"border:1px solid rgba(255,180,171,0.55);color:{COLOR_ERROR};background:rgba(255,180,171,0.06);box-shadow:inset 0 0 0 1px rgba(255,180,171,0.06);")
+                (f"border:1px solid rgba(255,182,39,0.55);color:{COLOR_WARN_YELLOW};background:rgba(255,182,39,0.06);box-shadow:inset 0 0 0 1px rgba(255,182,39,0.06);"
+                 if pending else
+                 (f"border:1px solid rgba(0,218,243,0.55);color:{COLOR_SECOND};background:rgba(0,218,243,0.04);box-shadow:inset 0 0 0 1px rgba(0,218,243,0.06);"
+                  if obs else f"border:1px solid rgba(255,180,171,0.55);color:{COLOR_ERROR};background:rgba(255,180,171,0.06);box-shadow:inset 0 0 0 1px rgba(255,180,171,0.06);"))
             )
             strength_score = _gf(r.get("total_score")) or 0
             bars = "".join(
@@ -1600,20 +1617,20 @@ def render_today_terminal_home(sel_date: str, df: pd.DataFrame) -> None:
             font-family: "JetBrains Mono", monospace;
             font-size: 11px;
             letter-spacing: 0.04em;
-            text-transform: uppercase;
+	          text-transform: none;
           }
           .terminal-kicker {
             font-family: "JetBrains Mono", monospace;
             font-size: 10px;
             letter-spacing: 0.14em;
-            text-transform: uppercase;
+	          text-transform: none;
             color: rgba(222,226,236,0.40);
           }
           .terminal-table tbody tr:hover {
             background: rgba(255,255,255,0.025);
           }
           .terminal-table thead th {
-            text-transform: uppercase;
+	          text-transform: none;
             letter-spacing: 0.08em;
           }
           .terminal-panel [data-testid="stMarkdownPre"],
@@ -1679,7 +1696,7 @@ def render_today_terminal_home(sel_date: str, df: pd.DataFrame) -> None:
               <div style="display:flex;justify-content:space-between;align-items:start;gap:12px;flex-wrap:wrap;">
                 <div>
                   <div class="terminal-kicker">overview engine</div>
-                  <div style="font-family:'Hanken Grotesk','Inter',sans-serif;font-size:22px;font-weight:700;color:{COLOR_SECOND};">今日总览 / MARKET SENTIMENT</div>
+	                <div style="font-family:'Hanken Grotesk','Inter',sans-serif;font-size:22px;font-weight:700;color:{COLOR_SECOND};">今日总览 / 市场情绪</div>
                   <div style="margin-top:3px;color:{COLOR_MUTED};font-size:13px;">综合市场情绪分析引擎 V2.0</div>
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -1694,12 +1711,12 @@ def render_today_terminal_home(sel_date: str, df: pd.DataFrame) -> None:
                   <svg viewBox="0 0 200 200" style="width:100%;height:100%;transform:rotate(-90deg);">
                     <circle cx="100" cy="100" r="90" stroke="rgba(255,255,255,0.08)" stroke-width="8" fill="none"></circle>
                     <circle cx="100" cy="100" r="90" stroke="{COLOR_SECOND}" stroke-width="10" fill="none" stroke-linecap="round"
-                            stroke-dasharray="{max(0, min(566, int(round((score / 100) * 566))))} 566" stroke-dashoffset="0" style="filter:drop-shadow(0 0 12px rgba(0,218,243,0.75));"></circle>
+                            stroke-dasharray="{max(0, min(566, int(round((score_num / 100) * 566))))} 566" stroke-dashoffset="0" style="filter:drop-shadow(0 0 12px rgba(0,218,243,0.75));"></circle>
                   </svg>
                   <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;">
-                    <div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.12em;color:{COLOR_MUTED};">SENTIMENT INDEX</div>
-                    <div style="margin-top:2px;font-family:'Hanken Grotesk','Inter',sans-serif;font-size:38px;line-height:1;color:{COLOR_SECOND};font-weight:700;">{score}</div>
-                    <div style="margin-top:4px;font-family:'JetBrains Mono',monospace;font-size:11px;color:{status_dot};">{_home_fmt_pct(idx_chg)} {'↑' if (idx_chg or 0) >= 0 else '↓'}</div>
+                    <div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.12em;color:{COLOR_MUTED};">情绪指数</div>
+                    <div style="margin-top:2px;font-family:'Hanken Grotesk','Inter',sans-serif;font-size:38px;line-height:1;color:{COLOR_SECOND};font-weight:700;">{score_display}</div>
+                    <div style="margin-top:4px;font-family:'JetBrains Mono',monospace;font-size:11px;color:{status_dot};">{score_delta_text}</div>
                   </div>
                 </div>
               </div>
@@ -1745,7 +1762,7 @@ def render_today_terminal_home(sel_date: str, df: pd.DataFrame) -> None:
               <div class="terminal-kicker">profitability</div>
               <div style="font-family:'Hanken Grotesk','Inter',sans-serif;font-size:18px;font-weight:700;color:{COLOR_TEXT};margin-top:2px;margin-bottom:14px;">赚钱效应</div>
               <div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:11px;color:{COLOR_MUTED};margin-bottom:8px;">
-                <span>当前强度</span><span style="color:{COLOR_BOUGHT};">{score}% {score_label.split('/')[0].strip()}</span>
+	                <span>当前强度</span><span style="color:{COLOR_BOUGHT};">{score_display} {score_label}</span>
               </div>
               <div style="height:10px;background:rgba(255,255,255,0.08);border-radius:999px;overflow:hidden;">
                 <div style="height:100%;width:{effect_width}%;background:linear-gradient(90deg,#00daf3 0%, #00e479 100%);box-shadow:0 0 12px rgba(0,228,121,0.38);"></div>
@@ -1773,12 +1790,12 @@ def render_today_terminal_home(sel_date: str, df: pd.DataFrame) -> None:
                 <div class="terminal-kicker">execution monitor</div>
                 <div style="font-family:'Hanken Grotesk','Inter',sans-serif;font-size:24px;font-weight:700;color:{COLOR_SECOND};margin-top:2px;">今日候选 / 买入确认</div>
               </div>
-              <span class="terminal-chip" style="background:rgba(0,218,243,0.10);border:1px solid rgba(0,218,243,0.24);color:{COLOR_SECOND};">实时监测 (ON)</span>
-              <span class="terminal-chip" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);color:{COLOR_MUTED};">历史记录</span>
+	              <span class="terminal-chip" style="background:rgba(0,218,243,0.10);border:1px solid rgba(0,218,243,0.24);color:{COLOR_SECOND};">本地记录</span>
+	              <span class="terminal-chip" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);color:{COLOR_MUTED};">只读展示</span>
             </div>
             <div style="display:flex;align-items:center;gap:16px;">
-              <span style="display:flex;align-items:center;gap:6px;color:{COLOR_MUTED};font-size:12px;"><span style="width:8px;height:8px;border-radius:999px;background:{COLOR_BOUGHT};display:inline-block;"></span>已确认</span>
-              <span style="display:flex;align-items:center;gap:6px;color:{COLOR_MUTED};font-size:12px;"><span style="width:8px;height:8px;border-radius:999px;background:{COLOR_SECOND};display:inline-block;"></span>监测中</span>
+	              <span style="display:flex;align-items:center;gap:6px;color:{COLOR_MUTED};font-size:12px;"><span style="width:8px;height:8px;border-radius:999px;background:{COLOR_BOUGHT};display:inline-block;"></span>模拟确认</span>
+	              <span style="display:flex;align-items:center;gap:6px;color:{COLOR_MUTED};font-size:12px;"><span style="width:8px;height:8px;border-radius:999px;background:{COLOR_SECOND};display:inline-block;"></span>观察中</span>
             </div>
           </div>
           {"<div style='margin:0 0 12px 0;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);color:" + COLOR_MUTED + ";font-size:12px;'>今日无推荐，暂无候选记录。</div>" if not has_candidates else ""}
@@ -1792,7 +1809,7 @@ def render_today_terminal_home(sel_date: str, df: pd.DataFrame) -> None:
                   <th style="padding:12px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:{COLOR_MUTED};">涨跌幅</th>
                   <th style="padding:12px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:{COLOR_MUTED};">主力强度</th>
                   <th style="padding:12px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:{COLOR_MUTED};">信号时间</th>
-                  <th style="padding:12px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:{COLOR_MUTED};">操作</th>
+	                  <th style="padding:12px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:{COLOR_MUTED};">只读状态</th>
                 </tr>
               </thead>
               <tbody>{table_rows}</tbody>
@@ -1857,7 +1874,7 @@ def _v2_mock_sparkline_from_pct(pct: Optional[float]) -> list[float]:
 
 
 def _v2_stock_card(r) -> str:
-    """V2.2 Stitch 同款股票卡片（全中文 + sparkline + 涨幅条 + V1.6 三层 chip）。
+    """V2.2 Stitch 同款股票卡片（全中文 + 真实字段 + V1.6 三层 chip）。
 
     设计稿参考：/tmp/stitch_designs/01_today_overview.png
     """
@@ -1880,12 +1897,12 @@ def _v2_stock_card(r) -> str:
     # 状态分类（中文）
     if is_bought(r):
         status_label, accent = "9:36 已确认", COLOR_BOUGHT
+    elif is_not_checked(r):
+        status_label, accent = "待 9:36 检查", COLOR_WARN_YELLOW
     elif is_worth_observing(r):
         status_label, accent = "持续观察", COLOR_SECOND
     elif is_hard_drop(r):
-        status_label, accent = "已放弃", COLOR_MAGENTA_NEON
-    elif is_not_checked(r):
-        status_label, accent = "待 9:36 检查", COLOR_WARN_YELLOW
+        status_label, accent = "未通过", COLOR_MAGENTA_NEON
     else:
         status_label, accent = "观察中", COLOR_FAINT
 
@@ -1912,11 +1929,6 @@ def _v2_stock_card(r) -> str:
     except Exception:
         pass
 
-    # Sparkline 趋势线
-    spark_values = _v2_mock_sparkline_from_pct(pct)
-    spark_color = pct_color if pct is not None and pct != 0 else COLOR_FAINT
-    sparkline_html = _v2_sparkline_svg(spark_values, spark_color, width=84, height=28)
-
     # 涨幅条（线性进度，按 |pct| 比例填充，最多 10% 满）
     pct_abs = abs(pct or 0) * 100
     bar_pct = min(100, pct_abs * 10)  # 10% 涨幅 = 满条
@@ -1931,11 +1943,11 @@ def _v2_stock_card(r) -> str:
     plan_state = ("通过", COLOR_BOUGHT)
     # 资金条件层 — 简化版判断：用 main_reason 是否有资金类失败
     main_reason = str(r.get("main_reason_code", "") or "").strip()
-    if main_reason in ("theme_strength_too_low", "full_score_not_strong_enough",
-                       "market_sentiment_below_5"):
+    if is_not_checked(r):
+        cap_state = ("等待", COLOR_WARN_YELLOW)
+    elif main_reason in ("theme_strength_too_low", "full_score_not_strong_enough",
+                         "market_sentiment_below_5"):
         cap_state = ("不通过", COLOR_MAGENTA_NEON)
-    elif is_not_checked(r):
-        cap_state = ("观察", COLOR_WARN_YELLOW)
     else:
         cap_state = ("通过", COLOR_BOUGHT)
     # 9:36 确认层
@@ -2003,7 +2015,10 @@ def _v2_stock_card(r) -> str:
             {trend_arrow} {pct_str}
           </div>
         </div>
-        <div style="margin-bottom:2px;">{sparkline_html}</div>
+        <div style="margin-bottom:2px;text-align:right;">
+          <div style="font-family:{FONT_BODY};font-size:11px;color:{COLOR_FAINT};
+                      line-height:1.35;">本卡只显示<br>本地记录字段</div>
+        </div>
       </div>
       {bar_html}
       {v16_chips_html}
@@ -2013,11 +2028,11 @@ def _v2_stock_card(r) -> str:
 
 def _v2_sidebar_capital(daily: Optional[dict]) -> str:
     """侧栏 1：市场脉冲（北向资金 / 两市成交 / 涨停 / 跌停）。"""
-    advance = _md_get_int(daily, "advance_count") or 0
-    decline = _md_get_int(daily, "decline_count") or 0
+    advance = _md_get_int(daily, "advance_count")
+    decline = _md_get_int(daily, "decline_count")
     total_amount = _md_get_float(daily, "total_amount")
-    lu = _md_get_int(daily, "limit_up_count") or 0
-    ld = _md_get_int(daily, "limit_down_count") or 0
+    lu = _md_get_int(daily, "limit_up_count")
+    ld = _md_get_int(daily, "limit_down_count")
     amount_str = f"{(total_amount or 0) / 1e8:,.0f} 亿" if total_amount else "—"
     # 北向资金（如果 daily 里有则取，否则用 ADR 估算占位）
     north = _md_get_float(daily, "northbound_capital_amount")
@@ -2031,10 +2046,10 @@ def _v2_sidebar_capital(daily: Optional[dict]) -> str:
     rows = [
         ("北向资金", north_str, north_color),
         ("两市成交额", amount_str, COLOR_TEXT),
-        ("上涨家数", f"{advance:,}", COLOR_BOUGHT),
-        ("下跌家数", f"{decline:,}", COLOR_MAGENTA_NEON),
-        ("涨停数", str(lu), COLOR_BOUGHT),
-        ("跌停数", str(ld), COLOR_MAGENTA_NEON),
+        ("上涨家数", f"{advance:,}" if advance is not None else "—", COLOR_BOUGHT if advance is not None else COLOR_MUTED),
+        ("下跌家数", f"{decline:,}" if decline is not None else "—", COLOR_MAGENTA_NEON if decline is not None else COLOR_MUTED),
+        ("涨停数", str(lu) if lu is not None else "—", COLOR_BOUGHT if lu is not None else COLOR_MUTED),
+        ("跌停数", str(ld) if ld is not None else "—", COLOR_MAGENTA_NEON if ld is not None else COLOR_MUTED),
     ]
     rows_html = "".join(
         _h(f"""
@@ -2057,7 +2072,7 @@ def _v2_sidebar_capital(daily: Optional[dict]) -> str:
       <div style="margin-left:6px;">
         <div style="font-family:{FONT_MONO};font-size:10px;color:{COLOR_SECOND};
                     letter-spacing:0.16em;text-transform:uppercase;
-                    text-shadow:0 0 6px rgba(0,218,243,0.45);">MARKET PULSE</div>
+                    text-shadow:0 0 6px rgba(0,218,243,0.45);">本地市场数据</div>
         <div style="font-family:{FONT_HEADLINE};font-size:15px;color:{COLOR_TEXT};
                     font-weight:700;margin-top:2px;">市场脉冲</div>
         <div style="margin-top:6px;">{rows_html}</div>
@@ -2067,24 +2082,25 @@ def _v2_sidebar_capital(daily: Optional[dict]) -> str:
 
 def _v2_sidebar_v16_rates(df: pd.DataFrame, state: dict) -> str:
     """侧栏 2：V1.6 达标流程（复盘计划层 / 资金条件层 / 9:36 确认层）。"""
-    n_total = max(state.get("total", 0), 1)
+    total_raw = state.get("total", 0)
+    n_total = max(total_raw, 1)
     n_bought = state.get("bought", 0)
     n_checked = state.get("checked", 0)
-    plan_rate = 100  # 计划层永远 100%（被推荐进来就是过了）
+    plan_rate = 100 if total_raw else 0
     cap_rate = int(round((n_checked / n_total) * 100)) if n_total else 0
     confirm_rate = int(round((n_bought / n_total) * 100)) if n_total else 0
 
     bars = [
-        ("复盘计划层", "凡推荐均过", plan_rate, COLOR_BOUGHT),
-        ("资金条件层", "已检查 / 总数", cap_rate, COLOR_WARN_YELLOW),
-        ("9:36 确认层", "已买入 / 总数", confirm_rate, COLOR_SECOND),
+        ("推荐记录", "进入今日候选", plan_rate, f"{total_raw} 只", COLOR_BOUGHT),
+        ("检查进度", "已检查 / 总数", cap_rate, f"{n_checked}/{total_raw}", COLOR_WARN_YELLOW),
+        ("9:36 模拟确认", "模拟买入 / 总数", confirm_rate, f"{n_bought}/{total_raw}", COLOR_SECOND),
     ]
     bars_html = "".join(
         _h(f"""
         <div style="margin-top:14px;">
           <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">
             <span style="font-family:{FONT_BODY};font-size:12px;color:{COLOR_TEXT};font-weight:600;">{cn}</span>
-            <span style="font-family:{FONT_MONO};font-size:14px;font-weight:700;color:{c};">{pct}%</span>
+            <span style="font-family:{FONT_MONO};font-size:14px;font-weight:700;color:{c};">{value}</span>
           </div>
           <div style="margin-top:6px;height:5px;background:rgba(255,255,255,0.06);
                       border-radius:3px;overflow:hidden;">
@@ -2094,7 +2110,7 @@ def _v2_sidebar_v16_rates(df: pd.DataFrame, state: dict) -> str:
           <div style="margin-top:4px;font-family:{FONT_MONO};font-size:10px;
                       color:{COLOR_FAINT};letter-spacing:0.06em;">{sub}</div>
         </div>""")
-        for cn, sub, pct, c in bars
+        for cn, sub, pct, value, c in bars
     )
     return _h(f"""
     <div class="rt-v2-glass-card" style="position:relative;background:{COLOR_GLASS_BG};
@@ -2108,7 +2124,7 @@ def _v2_sidebar_v16_rates(df: pd.DataFrame, state: dict) -> str:
       <div style="margin-left:6px;">
         <div style="font-family:{FONT_MONO};font-size:10px;color:{COLOR_BOUGHT};
                     letter-spacing:0.16em;text-transform:uppercase;
-                    text-shadow:0 0 6px rgba(0,228,121,0.45);">V1.6 ACHIEVEMENT FLOW</div>
+                    text-shadow:0 0 6px rgba(0,228,121,0.45);">V1.6 本地流程</div>
         <div style="font-family:{FONT_HEADLINE};font-size:15px;color:{COLOR_TEXT};
                     font-weight:700;margin-top:2px;">V1.6 达标流程</div>
         {bars_html}
@@ -2116,8 +2132,8 @@ def _v2_sidebar_v16_rates(df: pd.DataFrame, state: dict) -> str:
                     display:flex;align-items:center;gap:8px;">
           <span style="font-size:18px;color:{COLOR_SECOND};
                        text-shadow:0 0 8px {COLOR_SECOND}aa;line-height:1;">⌬</span>
-          <span style="font-family:{FONT_BODY};font-size:11px;color:{COLOR_FAINT};
-                       letter-spacing:0.10em;">V1.6 智能算法引擎 · 实时精炼</span>
+	          <span style="font-family:{FONT_BODY};font-size:11px;color:{COLOR_FAINT};
+	                       letter-spacing:0.10em;">V1.6 本地复盘算法 · 非实时交易</span>
         </div>
       </div>
     </div>""")
@@ -2179,7 +2195,7 @@ def _v2_sidebar_top3(df: pd.DataFrame) -> str:
             今日暂无候选股票
           </div>
           <div style="margin-top:6px;color:{COLOR_FAINT};font-size:11px;font-family:{FONT_MONO};
-                      letter-spacing:0.12em;">RANKING ENGINE STAND-BY</div>
+                      letter-spacing:0.12em;">暂无核心排行</div>
         </div>""")
 
     return _h(f"""
@@ -2194,7 +2210,7 @@ def _v2_sidebar_top3(df: pd.DataFrame) -> str:
       <div style="margin-left:6px;">
         <div style="font-family:{FONT_MONO};font-size:10px;color:{COLOR_MAGENTA_NEON};
                     letter-spacing:0.16em;text-transform:uppercase;
-                    text-shadow:0 0 6px rgba(255,61,138,0.45);">HERO RECOMMENDATIONS</div>
+                    text-shadow:0 0 6px rgba(255,61,138,0.45);">核心推荐</div>
         <div style="font-family:{FONT_HEADLINE};font-size:15px;color:{COLOR_TEXT};
                     font-weight:700;margin-top:2px;">核心推荐</div>
         <div style="margin-top:8px;">{inner_rows_html}</div>
@@ -2215,12 +2231,14 @@ def _v2_signal_stream(df: pd.DataFrame) -> str:
         # 信号类型（中文化）
         if is_bought(r):
             sig_label, sig_color = "9:36 已确认", COLOR_BOUGHT
+        elif is_not_checked(r):
+            sig_label, sig_color = "待 9:36 检查", COLOR_WARN_YELLOW
         elif is_worth_observing(r):
             sig_label, sig_color = "持续观察", COLOR_SECOND
         elif is_hard_drop(r):
-            sig_label, sig_color = "已放弃", COLOR_MAGENTA_NEON
+            sig_label, sig_color = "未通过", COLOR_MAGENTA_NEON
         else:
-            sig_label, sig_color = "待 9:36 检查", COLOR_WARN_YELLOW
+            sig_label, sig_color = "观察中", COLOR_FAINT
         # 价格 / 涨幅
         price = _gf(r.get("price_0935") or r.get("buy_price") or r.get("open_price"))
         price_str = f"¥{price:.2f}" if price else "—"
@@ -2269,17 +2287,17 @@ def _v2_signal_stream(df: pd.DataFrame) -> str:
                        box-shadow:0 0 10px {COLOR_BOUGHT};animation:rt-pulse 1.4s ease-in-out infinite;"></span>
           <span style="font-family:{FONT_HEADLINE};font-size:14px;color:{COLOR_SECOND};
                        font-weight:700;
-                       text-shadow:0 0 8px rgba(0,218,243,0.45);">实时信号流</span>
-          <span style="font-family:{FONT_MONO};font-size:10px;color:{COLOR_MUTED};
-                       padding-left:8px;border-left:1px solid {COLOR_DIVIDER};
-                       letter-spacing:0.10em;">RADAR_LIVE_FEED</span>
+                       text-shadow:0 0 8px rgba(0,218,243,0.45);">本地信号记录</span>
+	          <span style="font-family:{FONT_MONO};font-size:10px;color:{COLOR_MUTED};
+	                       padding-left:8px;border-left:1px solid {COLOR_DIVIDER};
+	                       letter-spacing:0.10em;">本地复盘记录</span>
         </div>
         <div style="display:flex;gap:14px;align-items:center;">
           <span style="font-family:{FONT_BODY};font-size:11px;color:{COLOR_MUTED};">
-            延迟 <span style="color:{COLOR_BOUGHT};font-family:{FONT_MONO};font-weight:700;">12ms</span>
+            更新 <span style="color:{COLOR_BOUGHT};font-family:{FONT_MONO};font-weight:700;">本地CSV</span>
           </span>
           <span style="font-family:{FONT_BODY};font-size:11px;color:{COLOR_MUTED};">
-            数据源 <span style="color:{COLOR_SECOND};font-family:{FONT_MONO};font-weight:700;">本地雷达</span>
+            数据源 <span style="color:{COLOR_SECOND};font-family:{FONT_MONO};font-weight:700;">trade_review</span>
           </span>
         </div>
       </div>
@@ -2328,76 +2346,77 @@ def render_today_v2_stitch(sel_date: str, df: pd.DataFrame) -> None:
     state = compute_today_state(df) if not df.empty else dict(total=0, checked=0, bought=0,
                                                               waiting_t1=0, done_t1=0,
                                                               drop=0, observe=0, second_check=0)
-    score, score_label = _home_sentiment_index(df, daily) if not df.empty else (50, "中性")
+    score, score_label = _home_sentiment_index(df, daily)
     n_total = state.get("total", 0)
     n_bought = state.get("bought", 0)
     n_checked = state.get("checked", 0)
 
-    # 模拟收益累计
+    # simulated_trade_return 是收益率字段，不是现金金额。
     sim_return = 0.0
+    has_sim_return = False
     if not df.empty and "simulated_trade_return" in df.columns:
         for v in df["simulated_trade_return"].apply(_gf):
             if v is not None:
+                has_sim_return = True
                 sim_return += v
 
-    if sim_return > 0:
-        sim_ret_str = f"+¥{sim_return:,.0f}"
-        sim_ret_color = COLOR_BOUGHT
-        sim_ret_trend = "up"
-        sim_ret_sub = "正收益"
-    elif sim_return < 0:
-        sim_ret_str = f"-¥{abs(sim_return):,.0f}"
-        sim_ret_color = COLOR_MAGENTA_NEON
-        sim_ret_trend = "down"
-        sim_ret_sub = "负收益"
-    else:
-        sim_ret_str = "¥0"
+    if not has_sim_return:
+        sim_ret_str = "—"
         sim_ret_color = COLOR_MUTED
         sim_ret_trend = None
-        sim_ret_sub = "累计"
+        sim_ret_sub = "暂无模拟收益记录"
+    elif sim_return > 0:
+        sim_ret_str = f"+{sim_return * 100:.2f}%"
+        sim_ret_color = COLOR_BOUGHT
+        sim_ret_trend = "up"
+        sim_ret_sub = "累计收益率"
+    elif sim_return < 0:
+        sim_ret_str = f"-{abs(sim_return) * 100:.2f}%"
+        sim_ret_color = COLOR_MAGENTA_NEON
+        sim_ret_trend = "down"
+        sim_ret_sub = "累计收益率"
+    else:
+        sim_ret_str = "0.00%"
+        sim_ret_color = COLOR_MUTED
+        sim_ret_trend = None
+        sim_ret_sub = "累计收益率"
 
     # 自选池 active
     wl = _wl_load()
     wl_active = sum(1 for r in wl if str(r.get("status", "")).lower() == "active")
 
-    # 市场情绪标签 → 简洁中文（取斜杠前面部分；如果带英文再去掉）
-    sentiment_label = score_label.split('/')[0].strip()
+    sentiment_label = score_label
+    sentiment_color = COLOR_MUTED if score is None else (COLOR_SECOND if score >= 50 else COLOR_MAGENTA_NEON)
+    sentiment_item = {
+        "label": "本地情绪分",
+        "value": sentiment_label,
+        "color": sentiment_color,
+        "sub": f"本地评分 {score}" if score is not None else "待生成",
+    }
+    if score is not None:
+        sentiment_item["ring"] = score / 100.0
+        sentiment_item["ring_label"] = str(score)
 
-    # 用涨幅生成 sparkline 走势（mock，确保视觉趋势对应数据）
-    cand_spark = _v2_mock_sparkline_from_pct(0.02) if n_total > 0 else [50] * 7
-    conf_spark = _v2_mock_sparkline_from_pct(0.015) if n_bought > 0 else [50] * 7
-    pnl_spark = _v2_mock_sparkline_from_pct(sim_return / 10000 if sim_return else 0)
-    wl_spark = _v2_mock_sparkline_from_pct(0.005) if wl_active > 0 else [50] * 7
-
-    # ===== KPI Hero 5 张方卡（全中文 + sparkline） =====
+    # ===== KPI Hero 5 张方卡：只展示真实字段，不用模拟走势装饰 =====
     hero_items = [
         {"label": "今日候选",
          "value": str(n_total),
          "color": COLOR_SECOND,
-         "sub": f"已检查 {n_checked}",
-         "spark": cand_spark},
-        {"label": "9:36 确认买入",
+         "sub": f"已检查 {n_checked}"},
+        {"label": "9:36 模拟确认",
          "value": str(n_bought),
          "color": COLOR_BOUGHT,
-         "sub": "活跃",
-         "spark": conf_spark},
-        {"label": "模拟收益",
+         "sub": "模拟记录"},
+        {"label": "模拟收益率",
          "value": sim_ret_str,
          "color": sim_ret_color,
          "sub": sim_ret_sub,
-         "trend": sim_ret_trend,
-         "spark": pnl_spark},
+         "trend": sim_ret_trend},
         {"label": "自选池",
          "value": str(wl_active),
          "color": COLOR_SECOND,
-         "sub": "稳定",
-         "spark": wl_spark},
-        {"label": "市场情绪",
-         "value": sentiment_label,
-         "color": COLOR_SECOND if score >= 50 else COLOR_MAGENTA_NEON,
-         "sub": f"指数 {score}",
-         "ring": score / 100.0,
-         "ring_label": str(score)},
+         "sub": "活跃数量"},
+        sentiment_item,
     ]
     hero_html = kpi_hero_strip(hero_items)
 
@@ -2439,7 +2458,7 @@ def render_today_v2_stitch(sel_date: str, df: pd.DataFrame) -> None:
 
         v16_status_text = (
             f"今日推荐 <b style='color:{COLOR_SECOND}'>{n_total}</b> 只，"
-            f"已确认买入 <b style='color:{COLOR_BOUGHT}'>{n_bought}</b> 只，"
+            f"已模拟确认 <b style='color:{COLOR_BOUGHT}'>{n_bought}</b> 只，"
             f"未通过 <b style='color:{COLOR_MAGENTA_NEON}'>{max(0, n_checked - n_bought)}</b> 只，"
             f"等待检查 <b style='color:{COLOR_WARN_YELLOW}'>{max(0, n_total - n_checked)}</b> 只。"
         )
@@ -2454,15 +2473,15 @@ def render_today_v2_stitch(sel_date: str, df: pd.DataFrame) -> None:
           <div style="margin-left:8px;">
             <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
               <div>
-                <div style="font-family:{FONT_MONO};font-size:10px;color:{COLOR_WARN_YELLOW};
-                            letter-spacing:0.16em;text-transform:uppercase;
-                            text-shadow:0 0 6px {COLOR_WARN_YELLOW}aa;">STRATEGY INSIGHT</div>
+	                <div style="font-family:{FONT_MONO};font-size:10px;color:{COLOR_WARN_YELLOW};
+	                            letter-spacing:0.16em;text-transform:uppercase;
+	                            text-shadow:0 0 6px {COLOR_WARN_YELLOW}aa;">策略洞察</div>
                 <div style="font-family:{FONT_HEADLINE};font-size:16px;color:{COLOR_TEXT};
                             font-weight:700;margin-top:2px;">策略洞察 · 当日复盘</div>
               </div>
               <span style="font-family:{FONT_MONO};font-size:11px;color:{COLOR_MUTED};
                            padding:4px 10px;border:1px solid {COLOR_DIVIDER};
-                           border-radius:6px;">实时</span>
+                           border-radius:6px;">本地记录</span>
             </div>
             <div style="margin-top:8px;font-family:{FONT_BODY};font-size:13px;
                         color:{COLOR_TEXT};line-height:1.8;">{v16_status_text}</div>
@@ -2694,13 +2713,13 @@ def page_buy_check(df_all: pd.DataFrame) -> None:
 
     dates_all = sorted(df_all["report_date"].unique().tolist(), reverse=True)
     render_page_header(
-        "Execution Review",
+        "模拟确认复盘",
         "买入确认",
-        "把所有推荐票按当日执行结果拆成已买入、值得继续观察和直接放弃三段，方便快速判断策略当天的执行质量。",
+        "把所有推荐票按当日模拟确认结果拆成模拟确认、值得继续观察和未通过三段，方便快速判断策略当天的执行质量。",
         badges=[f"可选日期 {len(dates_all)}", "9:36 检查", "只读回看"],
-        aside_title="Review Lens",
+        aside_title="查看口径",
         aside_body=(
-            "这一页不改任何交易结果，只把已有记录按执行结论分层展示。<br>"
+            "这一页不改任何交易结果，只把已有模拟记录按执行结论分层展示。<br>"
             "先看结构分布，再看每只票的原因。"
         ),
     )
@@ -2723,35 +2742,50 @@ def page_buy_check(df_all: pd.DataFrame) -> None:
     df_drop    = df[df.apply(is_hard_drop, axis=1)]
 
     top = st.columns(3)
-    top[0].markdown(kpi_card("已买入", len(df_bought), COLOR_BOUGHT, "形成执行信号"), unsafe_allow_html=True)
+    top[0].markdown(kpi_card("模拟确认", len(df_bought), COLOR_BOUGHT, "形成模拟信号"), unsafe_allow_html=True)
     top[1].markdown(kpi_card("值得观察", len(df_observe), COLOR_SECOND, "可继续观察/二次确认"), unsafe_allow_html=True)
-    top[2].markdown(kpi_card("直接放弃", len(df_drop), COLOR_DROP, "硬性不符合条件"), unsafe_allow_html=True)
+    top[2].markdown(kpi_card("未通过", len(df_drop), COLOR_DROP, "硬性不符合条件"), unsafe_allow_html=True)
 
-    # —— 顶部柔和颜色柱状图（不再用大面积红色）——
-    counts = pd.DataFrame([
-        {"分类": "已买入",   "数量": len(df_bought)},
-        {"分类": "值得观察", "数量": len(df_observe)},
-        {"分类": "直接放弃", "数量": len(df_drop)},
-    ])
-    fig = px.bar(
-        counts, x="数量", y="分类", orientation="h",
-        color="分类",
-        color_discrete_map={
-            "已买入":   COLOR_BOUGHT,
-            "值得观察": COLOR_SECOND,
-            "直接放弃": COLOR_DROP,
-        },
-        text="数量", height=200,
+    total_stage = max(len(df_bought) + len(df_observe) + len(df_drop), 1)
+    stage_items = [
+        ("模拟确认", len(df_bought), COLOR_BOUGHT, "进入模拟记录"),
+        ("值得观察", len(df_observe), COLOR_SECOND, "继续观察/二次确认"),
+        ("未通过", len(df_drop), COLOR_DROP, "硬性条件不满足"),
+    ]
+    stage_html = "".join(
+        _h(f"""
+        <div style="display:grid;grid-template-columns:110px 1fr 64px;gap:12px;align-items:center;padding:9px 0;border-bottom:1px solid {COLOR_DIVIDER};">
+          <div style="font-family:{FONT_BODY};font-size:13px;color:{COLOR_TEXT};font-weight:700;">{_eh(label)}</div>
+          <div>
+            <div style="height:8px;border-radius:999px;background:rgba(255,255,255,0.06);overflow:hidden;">
+              <div style="height:100%;width:{max(4 if count else 0, int(count / total_stage * 100))}%;background:{color};box-shadow:0 0 12px {color}66;border-radius:999px;"></div>
+            </div>
+            <div style="margin-top:5px;font-family:{FONT_BODY};font-size:11px;color:{COLOR_MUTED};">{_eh(sub)}</div>
+          </div>
+          <div style="text-align:right;font-family:{FONT_MONO};font-size:18px;font-weight:700;color:{color};">{count}</div>
+        </div>
+        """)
+        for label, count, color, sub in stage_items
     )
-    fig.update_layout(**_plotly_terminal_layout(
-        showlegend=False, xaxis_title=None, yaxis_title=None,
-    ))
-    fig.update_traces(textposition="outside",
-                      textfont=dict(color=COLOR_TEXT))
-    st.plotly_chart(fig, width="stretch")
+    st.markdown(
+        glass_card_html(
+            _h(f"""
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:6px;">
+              <div>
+                <div style="font-family:{FONT_MONO};font-size:10px;color:{COLOR_SECOND};letter-spacing:0.16em;">模拟确认分布</div>
+                <div style="margin-top:3px;font-family:{FONT_HEADLINE};font-size:18px;color:{COLOR_TEXT};font-weight:700;">三段结果总览</div>
+              </div>
+              <span style="font-family:{FONT_MONO};font-size:12px;color:{COLOR_MUTED};">只读统计</span>
+            </div>
+            {stage_html}
+            """),
+            accent=COLOR_SECOND,
+        ),
+        unsafe_allow_html=True,
+    )
 
-    # —— 1. 已买入 ——
-    st.markdown(f"### ✅ 1. 已买入（{len(df_bought)}）")
+    # —— 1. 模拟确认 ——
+    st.markdown(f"### ✅ 1. 模拟买入确认（{len(df_bought)}）")
     if df_bought.empty:
         st.caption("（无）")
     else:
@@ -2771,8 +2805,8 @@ def page_buy_check(df_all: pd.DataFrame) -> None:
         for _, r in df_observe.iterrows():
             st.markdown(stock_card(r, variant="observe"), unsafe_allow_html=True)
 
-    # —— 3. 直接放弃 ——
-    st.markdown(f"### ○ 3. 直接放弃（{len(df_drop)}）")
+    # —— 3. 未通过 ——
+    st.markdown(f"### ○ 3. 未通过 / 暂不执行（{len(df_drop)}）")
     st.caption(
         "硬性失败：大盘情绪不足 / full分数不够 / 主题强度不足 / "
         "高开过多 / 低开>3% / 一字涨停"
@@ -2780,19 +2814,8 @@ def page_buy_check(df_all: pd.DataFrame) -> None:
     if df_drop.empty:
         st.caption("（无）")
     else:
-        rows = []
         for _, r in df_drop.iterrows():
-            rows.append({
-                "日期":     r["report_dfmt"],
-                "代码":     r["stock_code"],
-                "名称":     r["stock_name"],
-                "模式":     r["mode_cn"],
-                "主题":     r["theme_name"] or "—",
-                "放弃原因": r.get("main_reason_cn") or r.get("reason_hard_cn") or "—",
-                "9:36价":   _num_str(r["price_0935"], 3),
-                "开盘价":   _num_str(r["open_price"], 3),
-            })
-        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+            st.markdown(stock_card(r, variant="drop"), unsafe_allow_html=True)
 
 
 # ─── PAGE 3: T+1 复盘（卡片化 + 友好空态）────────────────────────────
@@ -2844,6 +2867,93 @@ def _resolve_settlement(row) -> Tuple[str, str]:
     return "盘中止损", "T+1 盘中最低价跌破止损价，按止损价结算。"
 
 
+def _t1_done_cards_html(done_rows: list[dict]) -> str:
+    """T+1 已完成样本终端卡片。只读展示，不改结算规则。"""
+    if not done_rows:
+        return _h(glass_card_html(
+            f"""
+            <div style="font-family:{FONT_MONO};font-size:10px;letter-spacing:0.16em;color:{COLOR_MUTED};">
+              T+1 RESULT STREAM
+            </div>
+            <div style="margin-top:8px;color:{COLOR_TEXT};font-weight:800;">暂无已完成 T+1 复盘样本</div>
+            """,
+            accent=COLOR_MUTED,
+        ))
+
+    cards = []
+    for row in done_rows:
+        ret_text = str(row.get("模拟收益", "—") or "—")
+        ret_color = COLOR_ERROR if ret_text.startswith("-") else (COLOR_BOUGHT if ret_text not in ("—", "") else COLOR_MUTED)
+        settlement = str(row.get("结算方式", "—") or "—")
+        settle_color = COLOR_ERROR if "止损" in settlement else COLOR_BOUGHT
+        success = str(row.get("风险调整后成功", "—") or "—")
+        success_color = COLOR_BOUGHT if success == "是" else COLOR_MUTED
+        cards.append(
+            f"""
+            <div style="
+                border:1px solid {COLOR_GLASS_EDGE};
+                border-left:3px solid {settle_color};
+                border-radius:14px;
+                padding:15px 16px;
+                background:
+                  radial-gradient(circle at top right, rgba(0,218,243,0.10), transparent 34%),
+                  linear-gradient(180deg, rgba(17,24,33,0.94), rgba(9,13,20,0.90));
+                box-shadow:inset 0 1px 0 rgba(255,255,255,0.035);">
+              <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap;">
+                <div>
+                  <div style="font-family:{FONT_MONO};font-size:10px;letter-spacing:0.14em;color:{COLOR_MUTED};">
+                    T+1 SETTLEMENT
+                  </div>
+                  <div style="margin-top:7px;font-family:{FONT_HEADLINE};font-size:20px;font-weight:800;color:{COLOR_TEXT};">
+                    {_eh(row.get("名称"))}
+                  </div>
+                  <div style="margin-top:3px;font-family:{FONT_MONO};font-size:12px;color:{COLOR_SECOND};font-weight:800;">
+                    {_eh(row.get("代码"))} · {_eh(row.get("推荐日期"))} · {_eh(row.get("模式"))}
+                  </div>
+                </div>
+                <div style="text-align:right;">
+                  <div style="font-family:{FONT_MONO};font-size:10px;letter-spacing:0.12em;color:{COLOR_MUTED};">模拟收益</div>
+                  <div style="margin-top:5px;font-family:{FONT_MONO};font-size:24px;font-weight:900;color:{ret_color};">
+                    {_eh(ret_text)}
+                  </div>
+                </div>
+              </div>
+              <div style="margin-top:13px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;">
+                <div><div class="tt-card-label">买入价</div><div class="tt-card-value">{_eh(row.get("买入价"))}</div></div>
+                <div><div class="tt-card-label">滑点后</div><div class="tt-card-value">{_eh(row.get("滑点后"))}</div></div>
+                <div><div class="tt-card-label">止损价</div><div class="tt-card-value" style="color:{COLOR_ERROR};">{_eh(row.get("止损价"))}</div></div>
+                <div><div class="tt-card-label">结算方式</div><div class="tt-card-value" style="color:{settle_color};">{_eh(settlement)}</div></div>
+              </div>
+              <div style="margin-top:12px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;">
+                <div><div class="tt-card-label">T+1 开盘</div><div class="tt-card-value">{_eh(row.get("T+1开盘"))}</div></div>
+                <div><div class="tt-card-label">T+1 最低</div><div class="tt-card-value">{_eh(row.get("T+1最低"))}</div></div>
+                <div><div class="tt-card-label">T+1 收盘</div><div class="tt-card-value">{_eh(row.get("T+1收盘"))}</div></div>
+                <div><div class="tt-card-label">最大回撤</div><div class="tt-card-value">{_eh(row.get("最大回撤"))}</div></div>
+              </div>
+              <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+                {chip_html("冲高3% " + _eh(row.get("是否冲高3%")), color=COLOR_SECOND)}
+                {chip_html("冲高5% " + _eh(row.get("是否冲高5%")), color=COLOR_SECOND)}
+                {chip_html("止损 " + _eh(row.get("是否止损")), color=settle_color)}
+                {chip_html("风险调整 " + _eh(success), color=success_color)}
+              </div>
+              <div style="margin-top:11px;padding:9px 10px;border-radius:10px;
+                          background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.055);
+                          color:{COLOR_MUTED};font-size:12px;line-height:1.65;">
+                {_eh(row.get("止损说明"))} ｜ 止盈规则：{_eh(row.get("止盈规则"))}
+              </div>
+            </div>
+            """
+        )
+
+    return _h(
+        f"""
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:12px;margin:8px 0 14px 0;">
+          {''.join(cards)}
+        </div>
+        """
+    )
+
+
 def page_t1_review(df_all: pd.DataFrame) -> None:
     if df_all.empty:
         status_banner("当前无数据。", "info")
@@ -2852,11 +2962,11 @@ def page_t1_review(df_all: pd.DataFrame) -> None:
     df = enrich_df(df_all.copy())
     df_bought = df[df.apply(is_bought, axis=1)]
     render_page_header(
-        "Outcome Audit",
+        "T+1 结果审计",
         "T+1 复盘",
         "聚焦已经触发模拟买入的样本，查看次日结果、止损触发和风险调整后的真实质量。这一页只读，不改任何结算规则。",
-        badges=["只看已买入样本", "T+1 结果", "风险调整成功率"],
-        aside_title="Audit Scope",
+        badges=["只看模拟买入样本", "T+1 结果", "风险调整成功率"],
+        aside_title="审计范围",
         aside_body=(
             "样本来源：已经触发 <code>buy_signal_0935</code> 的记录。<br>"
             "页面只展示结果解释与统计，不回写任何字段。"
@@ -2880,7 +2990,7 @@ def page_t1_review(df_all: pd.DataFrame) -> None:
     # 顶部状态横幅
     if n_done == 0 and n_wait > 0:
         status_banner(
-            f"当前已有 <b>{n_wait}</b> 只买入样本，但还未到 T+1 复盘时间。"
+            f"当前已有 <b>{n_wait}</b> 只模拟买入样本，但还未到 T+1 复盘时间。"
             "系统将在 T+1 收盘后自动补全收益、回撤、止损和成功率。",
             "warning",
         )
@@ -2893,7 +3003,7 @@ def page_t1_review(df_all: pd.DataFrame) -> None:
 
     cols = st.columns(4)
     cols[0].markdown(
-        kpi_card("已完成T+1", n_done, COLOR_TEXT, "可参与正式胜率统计"),
+        kpi_card("已完成T+1", n_done, COLOR_TEXT, "可参与复盘胜率统计"),
         unsafe_allow_html=True,
     )
     cols[1].markdown(
@@ -2959,7 +3069,7 @@ def page_t1_review(df_all: pd.DataFrame) -> None:
 
     if df_done.empty:
         st.info(
-            f"📊 当前已有 **{n_wait}** 只买入样本，但还未到 T+1 复盘时间。"
+            f"📊 当前已有 **{n_wait}** 只模拟买入样本，但还未到 T+1 复盘时间。"
             f"系统将在 T+1 收盘后自动补全收益、回撤、止损和成功率。"
         )
         return
@@ -2979,10 +3089,10 @@ def page_t1_review(df_all: pd.DataFrame) -> None:
             font-size:12.5px;
             color:{COLOR_TEXT};
             line-height:1.8;">
-          💡 <b>当前 9:36 技术确认层没有正式止盈规则（不是 bug，是设计）：</b><br>
+          💡 <b>当前 9:36 模拟确认层没有主动止盈规则（不是 bug，是设计）：</b><br>
           ・ 系统会统计 <b>是否冲高 ≥3%</b>（`is_active_success`）和 <b>是否冲高 ≥5%</b>（`is_strong_surge`），
               但<b>不会因为冲高自动卖出</b>。<br>
-          ・ 正式结算只有两种出口：<b>触发止损线</b> 或 <b>持有到 T+1 收盘</b>。<br>
+          ・ 当前模拟复盘口径只有两种出口：<b>触发止损线</b> 或 <b>持有到 T+1 收盘</b>。<br>
           ・ "冲高 3%/5%" 仅用于事后判定 <b>风险调整后是否成功</b>（冲高≥3% 且 未先触止损 ⇒ 成功），
               不参与买卖动作。
           <span style="color:{COLOR_MUTED};font-size:11.5px;display:block;margin-top:4px;">
@@ -3054,7 +3164,7 @@ def page_t1_review(df_all: pd.DataFrame) -> None:
             "止损说明":       settle_note,
             "风险调整后成功": "是" if _gb(r.get("risk_adjusted_success")) is True else "否",
         })
-    st.dataframe(pd.DataFrame(done_rows), width="stretch", hide_index=True)
+    st.markdown(_t1_done_cards_html(done_rows), unsafe_allow_html=True)
 
     # —— 3 张图表 ——
     chart_rows = []
@@ -3088,7 +3198,7 @@ def page_t1_review(df_all: pd.DataFrame) -> None:
             showlegend=False, yaxis_tickformat=".0%",
             coloraxis_colorbar=dict(tickfont=dict(color=COLOR_TEXT)),
         ))
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, width="stretch", config=PLOTLY_SAFE_CONFIG)
 
     with col2:
         st.markdown("##### 最大回撤")
@@ -3104,7 +3214,7 @@ def page_t1_review(df_all: pd.DataFrame) -> None:
             textfont=dict(color=COLOR_TEXT),
         )
         fig.update_layout(**_plotly_terminal_layout(yaxis_tickformat=".0%"))
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, width="stretch", config=PLOTLY_SAFE_CONFIG)
 
     st.markdown("##### 成功 / 失败统计")
     succ_df = cdf["success"].value_counts().reset_index()
@@ -3121,13 +3231,145 @@ def page_t1_review(df_all: pd.DataFrame) -> None:
         margin=dict(l=0, r=0, t=10, b=10),
         legend=dict(font=dict(color=COLOR_TEXT)),
     )
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, width="stretch", config=PLOTLY_SAFE_CONFIG)
 
 
 # ─── PAGE 4: 未买入跟踪（bug 修复 + 灰色不再红）──────────────────────
 
+def _not_bought_reason_cards_html(rdf: pd.DataFrame) -> str:
+    """未买入原因卡片。只读聚合，不改变原因统计。"""
+    if rdf is None or rdf.empty:
+        return _h(glass_card_html(
+            f"""
+            <div style="font-family:{FONT_MONO};font-size:10px;letter-spacing:0.16em;color:{COLOR_MUTED};">
+              REASON CLUSTER
+            </div>
+            <div style="margin-top:8px;color:{COLOR_TEXT};font-weight:800;">暂无不买原因记录</div>
+            """,
+            accent=COLOR_MUTED,
+        ))
+
+    cards = []
+    max_count = max([int(v) for v in rdf["次数"].tolist()] or [1])
+    for _, row in rdf.head(8).iterrows():
+        count = int(row.get("次数", 0) or 0)
+        width = max(8, min(100, int(count / max_count * 100)))
+        stocks = _eh(row.get("涉及股票"), "—")
+        cards.append(
+            f"""
+            <div style="border:1px solid {COLOR_GLASS_EDGE};border-radius:14px;padding:13px 14px;
+                        background:linear-gradient(180deg, rgba(17,24,33,0.94), rgba(9,13,20,0.90));">
+              <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">
+                <div style="min-width:0;">
+                  <div style="font-family:{FONT_MONO};font-size:10px;letter-spacing:0.14em;color:{COLOR_MUTED};">
+                    BLOCK REASON
+                  </div>
+                  <div style="margin-top:6px;font-size:16px;font-weight:800;color:{COLOR_TEXT};line-height:1.35;">
+                    {_eh(row.get("原因"))}
+                  </div>
+                </div>
+                <div style="font-family:{FONT_MONO};font-size:22px;font-weight:900;color:{COLOR_NO_BUY};">
+                  {count}
+                </div>
+              </div>
+              <div style="margin-top:10px;height:6px;border-radius:999px;background:rgba(255,255,255,0.07);overflow:hidden;">
+                <div style="width:{width}%;height:100%;background:{COLOR_NO_BUY};box-shadow:0 0 10px {COLOR_NO_BUY}77;"></div>
+              </div>
+              <div style="margin-top:9px;font-size:12px;color:{COLOR_MUTED};line-height:1.6;">
+                涉及股票：{stocks}
+              </div>
+            </div>
+            """
+        )
+    return _h(f"""
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;">
+      {''.join(cards)}
+    </div>
+    """)
+
+
+def _missed_big_cards_html(missed_rows: list[dict]) -> str:
+    """错过大涨卡片。仅展示机会成本，不代表应该买入。"""
+    if not missed_rows:
+        return _h(glass_card_html(
+            f"""
+            <div style="font-family:{FONT_MONO};font-size:10px;letter-spacing:0.16em;color:{COLOR_MUTED};">
+              MISSED SURGE SCAN
+            </div>
+            <div style="margin-top:8px;color:{COLOR_TEXT};font-weight:800;">暂无错过大涨样本</div>
+            <div style="margin-top:6px;color:{COLOR_MUTED};font-size:12px;line-height:1.65;">
+              这里不会用空数据制造机会成本结论。
+            </div>
+            """,
+            accent=COLOR_MUTED,
+        ))
+
+    cards = []
+    for row in missed_rows:
+        high_text = str(row.get("次日最高涨", "—") or "—")
+        high_color = COLOR_WAIT_T1 if high_text.startswith("+") else COLOR_MUTED
+        close_text = str(row.get("次日收盘涨", "—") or "—")
+        cards.append(
+            f"""
+            <div style="border:1px solid {COLOR_GLASS_EDGE};border-left:3px solid {high_color};
+                        border-radius:14px;padding:15px 16px;
+                        background:
+                          radial-gradient(circle at top right, rgba(255,185,95,0.12), transparent 34%),
+                          linear-gradient(180deg, rgba(17,24,33,0.94), rgba(9,13,20,0.90));">
+              <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;">
+                <div>
+                  <div style="font-family:{FONT_MONO};font-size:10px;letter-spacing:0.14em;color:{COLOR_MUTED};">
+                    MISSED SURGE
+                  </div>
+                  <div style="margin-top:7px;font-family:{FONT_HEADLINE};font-size:20px;font-weight:800;color:{COLOR_TEXT};">
+                    {_eh(row.get("名称"))}
+                  </div>
+                  <div style="margin-top:3px;font-family:{FONT_MONO};font-size:12px;color:{COLOR_SECOND};font-weight:800;">
+                    {_eh(row.get("代码"))} · {_eh(row.get("推荐日期"))} · {_eh(row.get("模式"))}
+                  </div>
+                </div>
+                <div style="text-align:right;">
+                  <div style="font-family:{FONT_MONO};font-size:10px;letter-spacing:0.12em;color:{COLOR_MUTED};">次日最高</div>
+                  <div style="margin-top:5px;font-family:{FONT_MONO};font-size:23px;font-weight:900;color:{high_color};">
+                    {_eh(high_text)}
+                  </div>
+                </div>
+              </div>
+              <div style="margin-top:12px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;">
+                <div><div class="tt-card-label">次日收盘</div><div class="tt-card-value">{_eh(close_text)}</div></div>
+                <div><div class="tt-card-label">二次观察</div><div class="tt-card-value">{_eh(row.get("二次观察"))}</div></div>
+                <div><div class="tt-card-label">主题</div><div class="tt-card-value">{_eh(row.get("主题"))}</div></div>
+              </div>
+              <div style="margin-top:11px;padding:9px 10px;border-radius:10px;
+                          background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.055);
+                          color:{COLOR_MUTED};font-size:12px;line-height:1.65;">
+                未买入主因：{_eh(row.get("不买原因"))}
+              </div>
+              <div style="margin-top:9px;color:{COLOR_MUTED};font-size:11px;line-height:1.55;">
+                机会成本只用于复盘漏选，不构成补买建议。
+              </div>
+            </div>
+            """
+        )
+    return _h(f"""
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:12px;">
+      {''.join(cards)}
+    </div>
+    """)
+
+
 def page_not_bought(df_all: pd.DataFrame) -> None:
-    st.markdown("## 👁 未买入跟踪")
+    render_page_header(
+        "观察样本追踪",
+        "未买入跟踪",
+        "复盘没有触发模拟买入的候选，查看二次观察、错过大涨和主要未通过原因。页面只读，不改推荐记录。",
+        badges=["未触发模拟买入", "二次观察", "只读分析"],
+        aside_title="查看口径",
+        aside_body=(
+            "这里关注的是<b>未触发模拟买入</b>的样本。<br>"
+            "它用于复盘策略漏选与误杀，不代表新的买入建议。"
+        ),
+    )
 
     if df_all.empty:
         status_banner("当前无数据。", "info")
@@ -3211,11 +3453,11 @@ def page_not_bought(df_all: pd.DataFrame) -> None:
             ))
             fig.update_traces(textposition="outside",
                               textfont=dict(color=COLOR_TEXT))
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig, width="stretch", config=PLOTLY_SAFE_CONFIG)
         with col2:
-            st.dataframe(rdf, width="stretch", hide_index=True)
+            st.markdown(_not_bought_reason_cards_html(rdf), unsafe_allow_html=True)
     else:
-        st.caption("（无不买原因记录）")
+        st.markdown(_not_bought_reason_cards_html(pd.DataFrame()), unsafe_allow_html=True)
 
     st.divider()
 
@@ -3242,9 +3484,7 @@ def page_not_bought(df_all: pd.DataFrame) -> None:
             "二次观察":  r["sec_state"],
         })
     if missed_rows:
-        st.dataframe(
-            pd.DataFrame(missed_rows), width="stretch", hide_index=True,
-        )
+        st.markdown(_missed_big_cards_html(missed_rows), unsafe_allow_html=True)
     else:
         if n_waiting_t1 > 0:
             st.info(
@@ -3252,7 +3492,7 @@ def page_not_bought(df_all: pd.DataFrame) -> None:
                 "T+1 收盘后会自动判断是否错过大涨。"
             )
         else:
-            st.caption("（无错过大涨样本）")
+            st.markdown(_missed_big_cards_html([]), unsafe_allow_html=True)
 
     st.divider()
 
@@ -3356,8 +3596,74 @@ def _compute_period_stats(df: pd.DataFrame) -> dict:
     )
 
 
+def _period_mode_scorecards_html(comp_rows: list[dict]) -> str:
+    """周/月复盘模式对比卡片。只读展示，不改变统计口径。"""
+    if not comp_rows:
+        return _h(glass_card_html(
+            f"""
+            <div style="font-family:{FONT_MONO};font-size:10px;letter-spacing:0.16em;color:{COLOR_MUTED};">
+              MODE SCORECARD
+            </div>
+            <div style="margin-top:8px;color:{COLOR_TEXT};font-weight:800;">暂无模式对比数据</div>
+            """,
+            accent=COLOR_MUTED,
+        ))
+
+    cards = []
+    for row in comp_rows:
+        mode = str(row.get("模式", "—") or "—")
+        accent = COLOR_FULL if mode == "全A" else COLOR_THEME
+        cards.append(
+            f"""
+            <div style="border:1px solid {COLOR_GLASS_EDGE};border-left:3px solid {accent};
+                        border-radius:14px;padding:15px 16px;
+                        background:
+                          radial-gradient(circle at top right, rgba(0,218,243,0.10), transparent 34%),
+                          linear-gradient(180deg, rgba(17,24,33,0.94), rgba(9,13,20,0.90));">
+              <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">
+                <div>
+                  <div style="font-family:{FONT_MONO};font-size:10px;letter-spacing:0.14em;color:{COLOR_MUTED};">
+                    MODE SCORECARD
+                  </div>
+                  <div style="margin-top:7px;font-family:{FONT_HEADLINE};font-size:22px;font-weight:900;color:{COLOR_TEXT};">
+                    {_eh(mode)}
+                  </div>
+                </div>
+                {chip_html("只读统计", color=accent)}
+              </div>
+              <div style="margin-top:14px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;">
+                <div><div class="tt-card-label">推荐数</div><div class="tt-card-value">{_eh(row.get("推荐数"))}</div></div>
+                <div><div class="tt-card-label">模拟触发</div><div class="tt-card-value">{_eh(row.get("模拟触发"))}</div></div>
+                <div><div class="tt-card-label">触发率</div><div class="tt-card-value" style="color:{accent};">{_eh(row.get("模拟触发率"))}</div></div>
+                <div><div class="tt-card-label">T+1复盘</div><div class="tt-card-value">{_eh(row.get("已 T+1 复盘"))}</div></div>
+              </div>
+              <div style="margin-top:13px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;">
+                <div><div class="tt-card-label">风险调整成功率</div><div class="tt-card-value">{_eh(row.get("风险调整成功率"))}</div></div>
+                <div><div class="tt-card-label">止损率</div><div class="tt-card-value">{_eh(row.get("止损率"))}</div></div>
+                <div><div class="tt-card-label">盈亏比</div><div class="tt-card-value">{_eh(row.get("盈亏比"))}</div></div>
+              </div>
+            </div>
+            """
+        )
+    return _h(f"""
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:12px;margin:8px 0 14px 0;">
+      {''.join(cards)}
+    </div>
+    """)
+
+
 def page_period_review(df_all: pd.DataFrame) -> None:
-    st.markdown("## 📅 周 / 月复盘")
+    render_page_header(
+        "周期表现审计",
+        "周 / 月复盘",
+        "按周或月汇总推荐、模拟触发、T+1 结果和未通过原因，帮助判断当前策略稳定性。",
+        badges=["周期统计", "模拟触发", "只读复盘"],
+        aside_title="统计口径",
+        aside_body=(
+            "统计来自本地 CSV 记录。<br>"
+            "没有完成 T+1 的样本不会被强行算作胜率。"
+        ),
+    )
 
     if df_all.empty:
         status_banner("当前无数据。", "info")
@@ -3479,8 +3785,8 @@ def page_period_review(df_all: pd.DataFrame) -> None:
     cols[1].markdown(kpi_card("9:36 完成", overall["n_valid"]), unsafe_allow_html=True)
     cols[2].markdown(
         kpi_card(
-            "买入触发", overall["n_triggered"], COLOR_BOUGHT,
-            f"触发率 {overall['bsr']*100:.1f}%" if overall["bsr"] is not None else "（无9:36样本）",
+            "模拟触发", overall["n_triggered"], COLOR_BOUGHT,
+            f"模拟触发率 {overall['bsr']*100:.1f}%" if overall["bsr"] is not None else "（无9:36样本）",
         ),
         unsafe_allow_html=True,
     )
@@ -3508,20 +3814,20 @@ def page_period_review(df_all: pd.DataFrame) -> None:
         comp_rows.append({
             "模式":             label,
             "推荐数":           s["total"],
-            "买入触发":         s["n_triggered"],
-            "买入触发率":       f"{s['bsr']*100:.1f}%" if s["bsr"] is not None else "（无9:36样本）",
+            "模拟触发":         s["n_triggered"],
+            "模拟触发率":       f"{s['bsr']*100:.1f}%" if s["bsr"] is not None else "（无9:36样本）",
             "已 T+1 复盘":      s["n_traded"],
             "风险调整成功率":   f"{s['risk_rate']*100:.1f}%" if s.get("risk_rate") is not None else na_txt,
             "止损率":           f"{s['stop_rate']*100:.1f}%" if s.get("stop_rate") is not None else na_txt,
             "盈亏比":           f"{s['wl_ratio']:.2f}" if s.get("wl_ratio") is not None else na_txt,
         })
-    st.dataframe(pd.DataFrame(comp_rows), width="stretch", hide_index=True)
+    st.markdown(_period_mode_scorecards_html(comp_rows), unsafe_allow_html=True)
 
     bar_rows = []
     for label, s in [("全A", sf), ("主题龙头", st_)]:
         for indicator, val in [
             ("推荐数", s["total"]), ("9:36 完成", s["n_valid"]),
-            ("买入触发", s["n_triggered"]), ("已 T+1 复盘", s["n_traded"]),
+            ("模拟触发", s["n_triggered"]), ("已 T+1 复盘", s["n_traded"]),
         ]:
             bar_rows.append({"模式": label, "指标": indicator, "值": val})
     bdf = pd.DataFrame(bar_rows)
@@ -3536,7 +3842,7 @@ def page_period_review(df_all: pd.DataFrame) -> None:
     ))
     fig.update_traces(textposition="outside",
                       textfont=dict(color=COLOR_TEXT))
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, width="stretch", config=PLOTLY_SAFE_CONFIG)
 
     st.divider()
 
@@ -3809,14 +4115,16 @@ def _render_rerun_button(key: str, spec: dict) -> None:
         f"<div style='font-size:15px;font-weight:600;color:{COLOR_TEXT};'>"
         f"{spec['icon']} {spec['label']}</div>"
         f"<div style='font-size:12px;color:{COLOR_MUTED};margin-top:4px;'>"
-        f"<b>命令：</b><code>{PYTHON_BIN.name} run.py {spec['flag']}</code></div>"
-        f"<div style='font-size:12px;color:{COLOR_MUTED};margin-top:4px;'>"
         f"<b>作用：</b>{spec['desc']}</div>"
         f"<div style='font-size:12px;color:{COLOR_MUTED};margin-top:4px;'>"
         f"<b>建议：</b>{spec['when']}</div>"
+        f"<div style='font-size:12px;color:{COLOR_WAIT_T1};margin-top:4px;'>"
+        f"仅补跑复盘产物，不接券商、不自动下单。</div>"
         f"</div>",
         unsafe_allow_html=True,
     )
+    with st.expander("开发者排查：实际白名单命令", expanded=False):
+        st.code(f"{PYTHON_BIN.name} run.py {spec['flag']}", language="bash")
 
     # —— 锁状态提示 ——
     if locked:
@@ -3838,7 +4146,7 @@ def _render_rerun_button(key: str, spec: dict) -> None:
         )
     with col_btn:
         clicked = st.button(
-            f"{spec['icon']} 立即执行",
+            f"{spec['icon']} {spec['label']}",
             key=button_key,
             disabled=(not confirmed) or locked,
             width="stretch",
@@ -3866,19 +4174,19 @@ def _render_rerun_button(key: str, spec: dict) -> None:
         if result["returncode"] == 0:
             status_banner(
                 f"✅ <b>执行成功</b>（{result['duration_s']} 秒）"
-                f"｜ 命令：<code>{result['cmd']}</code>",
+                f"｜ 复盘产物已尝试刷新，详情见下方日志。",
                 "success",
             )
         elif result["timed_out"]:
             status_banner(
                 f"⚠️ <b>执行超时</b>（{result['duration_s']} 秒）"
-                f"｜ 命令：<code>{result['cmd']}</code>",
+                f"｜ 可能是数据源较慢，详情见下方日志。",
                 "warning",
             )
         else:
             status_banner(
                 f"❌ <b>执行失败</b>（返回码 {result['returncode']}，{result['duration_s']} 秒）"
-                f"｜ 命令：<code>{result['cmd']}</code>",
+                f"｜ 详情见下方日志。",
                 "error",
             )
 
@@ -4392,9 +4700,9 @@ def _render_money_flow_system_cards(struct: dict, reason: str) -> None:
 
     # —— system_status 顶部 banner（统一大写展示）——
     sys_level_map = {
-        "ok":          ("success", "✅ 系统状态：OK — 主源正常运行"),
-        "degraded":    ("warning", "⚠️ 系统状态：DEGRADED — 主源异常，已降级到备源 ths_simple（仅观察）"),
-        "unavailable": ("error",   "❌ 系统状态：UNAVAILABLE — 主源与备源都不可用"),
+        "ok":          ("success", "✅ 系统状态：正常 — 主源正常运行"),
+        "degraded":    ("warning", "⚠️ 系统状态：降级 — 主源异常，已降级到备源 ths_simple（仅观察）"),
+        "unavailable": ("error",   "❌ 系统状态：不可用 — 主源与备源都不可用"),
     }
     banner_level, banner_text = sys_level_map.get(
         system_status, ("info", f"💡 系统状态：{system_status_display}")
@@ -4406,22 +4714,22 @@ def _render_money_flow_system_cards(struct: dict, reason: str) -> None:
     # —— 各卡颜色（accent + badge）——
     def _primary_style():
         if primary_status == "ok":
-            return (COLOR_BOUGHT, "OK",          COLOR_BOUGHT,  COLOR_BANNER_SUCCESS)
+            return (COLOR_BOUGHT, "正常",          COLOR_BOUGHT,  COLOR_BANNER_SUCCESS)
         if primary_status == "degraded":
-            return (COLOR_WAIT_T1, "DEGRADED",   COLOR_WAIT_T1, COLOR_BANNER_WARN)
+            return (COLOR_WAIT_T1, "降级",   COLOR_WAIT_T1, COLOR_BANNER_WARN)
         if primary_status == "unavailable":
-            return (COLOR_ERROR,  "UNAVAILABLE", COLOR_ERROR,   COLOR_BANNER_ERROR)
+            return (COLOR_ERROR,  "不可用", COLOR_ERROR,   COLOR_BANNER_ERROR)
         return (COLOR_MUTED, primary_status or "—", COLOR_MUTED, COLOR_BANNER_INFO)
 
     def _fallback_style():
         if fallback_status == "ok":
             # 备源 ok = 绿；若主源已降级，备源亮色但仍可染黄表达"被启用"——这里按用户规则：绿/黄
             # 用户原文："ths_simple ok：绿色或黄色"——我们用绿色保持简洁
-            return (COLOR_BOUGHT, "OK",         COLOR_BOUGHT,  COLOR_BANNER_SUCCESS)
+            return (COLOR_BOUGHT, "正常",         COLOR_BOUGHT,  COLOR_BANNER_SUCCESS)
         if fallback_status == "degraded":
-            return (COLOR_WAIT_T1, "DEGRADED",  COLOR_WAIT_T1, COLOR_BANNER_WARN)
+            return (COLOR_WAIT_T1, "降级",  COLOR_WAIT_T1, COLOR_BANNER_WARN)
         if fallback_status == "unavailable":
-            return (COLOR_ERROR,  "UNAVAILABLE",COLOR_ERROR,   COLOR_BANNER_ERROR)
+            return (COLOR_ERROR,  "不可用",COLOR_ERROR,   COLOR_BANNER_ERROR)
         if fallback_status in ("not_checked", "skipped"):
             return (COLOR_MUTED,  fallback_status.upper(), COLOR_MUTED, COLOR_BANNER_INFO)
         return (COLOR_MUTED, fallback_status or "—", COLOR_MUTED, COLOR_BANNER_INFO)
@@ -4533,15 +4841,17 @@ def _render_money_flow_health_section() -> None:
         f"<div style='font-size:15px;font-weight:600;color:{COLOR_TEXT};'>"
         f"🔄 探测资金源状态</div>"
         f"<div style='font-size:12px;color:{COLOR_MUTED};margin-top:4px;'>"
-        f"<b>命令：</b><code>{PYTHON_BIN.name} -m money_flow health</code></div>"
-        f"<div style='font-size:12px;color:{COLOR_MUTED};margin-top:4px;'>"
         f"<b>作用：</b>用 5 只蓝筹探针（PROBE_SET）判定 push2his.eastmoney 资金流端点是否可用。"
         f"结果追加到 <code>logs/money_flow_health.log</code>，<b>仅供观察</b>。</div>"
         f"<div style='font-size:12px;color:{COLOR_MUTED};margin-top:4px;'>"
         f"<b>判定：</b>失败率 ≤20% = ok（绿）｜ 20%~50% = degraded（黄）｜ &gt;50% = unavailable（橙红）</div>"
+        f"<div style='font-size:12px;color:{COLOR_WAIT_T1};margin-top:4px;'>"
+        f"只读探测，不写推荐、不触发买入确认。</div>"
         f"</div>",
         unsafe_allow_html=True,
     )
+    with st.expander("开发者排查：实际只读探测命令", expanded=False):
+        st.code(f"{PYTHON_BIN.name} -m money_flow health", language="bash")
 
     # —— 锁状态 ——
     if locked:
@@ -4562,7 +4872,7 @@ def _render_money_flow_health_section() -> None:
         )
     with col_btn:
         clicked = st.button(
-            "🔄 立即探测",
+            "🔄 探测资金源",
             key=button_key,
             disabled=(not confirmed) or locked,
             width="stretch",
@@ -4618,13 +4928,13 @@ def _render_money_flow_health_section() -> None:
 
         elif result["timed_out"]:
             status_banner(
-                f"⚠️ 探测超时（{result['duration_s']} 秒）｜ 命令：<code>{result['cmd']}</code>",
+                f"⚠️ 探测超时（{result['duration_s']} 秒）｜ 可能是数据源较慢，详情见下方日志。",
                 "warning",
             )
         else:
             status_banner(
                 f"❌ 探测失败（返回码 {result['returncode']}，{result['duration_s']} 秒）"
-                f"｜ 命令：<code>{result['cmd']}</code>",
+                f"｜ 详情见下方日志。",
                 "error",
             )
 
@@ -4706,7 +5016,17 @@ def _render_money_flow_health_section() -> None:
 
 
 def page_manual_rerun() -> None:
-    st.markdown("## 🛠 手动补跑")
+    render_page_header(
+        "安全补跑控制台",
+        "手动补跑",
+        "只提供白名单内的补救命令，用于电脑关机/睡眠错过自动任务后的人工修复。",
+        badges=["白名单命令", "需要确认", "不自动交易"],
+        aside_title="安全边界",
+        aside_body=(
+            "本页不会提供盘前选股、9:36 买入确认等高风险按钮。<br>"
+            "所有操作都需要勾选确认并带锁执行。"
+        ),
+    )
 
     # —— 顶部说明（用户要求的强警示）——
     st.markdown(
@@ -4752,7 +5072,7 @@ def page_manual_rerun() -> None:
     )
     col_a, col_b = st.columns([1, 5])
     with col_a:
-        if st.button("🔄 重新读取日志", key="reload_log", width="stretch"):
+        if st.button("🔄 刷新日志", key="reload_log", width="stretch"):
             st.rerun()
     with col_b:
         mod = last_modified(AUTO_LOG)
@@ -5050,7 +5370,8 @@ def _lifecycle_translate_reason(raw) -> str:
         return "（无原因记录）"
 
     # 多 code 分隔符兼容（避免引入 re，用纯 str 规范化）
-    s_norm = s.replace("|", ",").replace(";", ",").replace(" / ", ",").replace("/", ",")
+    # 只拆明确的 reason 分隔符；不要拆裸 "/"，避免把 "V1.4/V1.5" 这类版本号误拆成未知原因。
+    s_norm = s.replace("|", ",").replace(";", ",").replace(" / ", ",")
     parts = [p.strip() for p in s_norm.split(",") if p.strip()]
     if not parts:
         return "（无原因记录）"
@@ -5228,16 +5549,16 @@ def _lifecycle_card_status(stock: dict) -> tuple:
     根据股票聚合状态返回卡片头部徽章：(label, color, emoji)。
     """
     if not stock["any_mode_bought"]:
-        return ("完全未买入", COLOR_NO_BUY, "👁")
+        return ("未触发模拟买入", COLOR_NO_BUY, "👁")
     primary = stock["primary_row"]
     t1_key, _, _ = _lifecycle_t1_status(primary)
     if t1_key == "waiting":
-        return ("已买入·等待T+1", COLOR_SECOND, "⏳")
+        return ("模拟买入·等待T+1", COLOR_SECOND, "⏳")
     if t1_key in ("stopped_open", "stopped_intraday"):
-        return ("已买入·已止损", COLOR_ERROR, "🔴")
+        return ("模拟买入·已止损", COLOR_ERROR, "🔴")
     if t1_key == "closed_normal":
-        return ("已买入·T+1已结算", COLOR_BOUGHT, "✅")
-    return ("已买入", COLOR_BOUGHT, "✅")
+        return ("模拟买入·T+1已结算", COLOR_BOUGHT, "✅")
+    return ("模拟买入", COLOR_BOUGHT, "✅")
 
 
 def _lifecycle_render_card(stock: dict, mf_df: Optional[pd.DataFrame]) -> None:
@@ -5263,7 +5584,7 @@ def _lifecycle_render_card(stock: dict, mf_df: Optional[pd.DataFrame]) -> None:
     first_mode = (bought_modes[0] if bought_modes else stock["modes"][0]) if stock["modes"] else "full"
     mf = _lifecycle_extract_mf(mf_df, code, mode_pref=first_mode)
     if mf is None:
-        mf_badge_label = "模拟未运行"
+        mf_badge_label = "资金预筛未运行"
         mf_badge_color = COLOR_MUTED
     else:
         decision_key = str(mf.get("v15_decision", "") or "").strip()
@@ -5308,8 +5629,8 @@ def _lifecycle_render_card(stock: dict, mf_df: Optional[pd.DataFrame]) -> None:
         open_chg_s   = f"{open_chg:+.2f}%" if open_chg is not None else "—"
         decision_parts.append(
             f"<div style='font-size:12.5px;color:{COLOR_TEXT};line-height:1.8;margin-top:4px;'>"
-            f"买入来源：<b>{buy_modes_cn}</b><br>"
-            f"买入价 <b>{buy_price_s}</b> ｜ 滑点价 <b>{adj_s}</b> ｜ 止损价 <b>{stop_s}</b><br>"
+            f"模拟买入来源：<b>{buy_modes_cn}</b><br>"
+            f"模拟买入价 <b>{buy_price_s}</b> ｜ 滑点价 <b>{adj_s}</b> ｜ 止损价 <b>{stop_s}</b><br>"
             f"开盘价 {open_p_s} ｜ 开盘涨幅 {open_chg_s}"
             f"</div>"
         )
@@ -5318,7 +5639,7 @@ def _lifecycle_render_card(stock: dict, mf_df: Optional[pd.DataFrame]) -> None:
             for m in stock["modes"]:
                 m_cn = LIFECYCLE_MODE_LABEL.get(m, m)
                 if m in bought_modes:
-                    div_lines.append(f"<b>{m_cn}：已买入</b>")
+                    div_lines.append(f"<b>{m_cn}：模拟买入</b>")
                 else:
                     r_raw = skip_reasons.get(m, "")
                     r = _lifecycle_translate_reason(r_raw)
@@ -5330,7 +5651,7 @@ def _lifecycle_render_card(stock: dict, mf_df: Optional[pd.DataFrame]) -> None:
                 f"🔀 <b>多模式分歧</b><br>"
                 f"{'<br>'.join(div_lines)}<br>"
                 f"<span style='color:{COLOR_MUTED};font-size:11px;'>"
-                f"结论：股票级结果按「已买入」统计；分歧仅作观察。"
+                f"结论：股票级结果按「模拟买入」统计；分歧仅作观察。"
                 f"</span></div>"
             )
     else:
@@ -5363,7 +5684,7 @@ def _lifecycle_render_card(stock: dict, mf_df: Optional[pd.DataFrame]) -> None:
             f"🧯 <b>止损后跟踪</b>：暂未启用。第二阶段将通过 candidate_lifecycle "
             f"派生表跟踪 T+2/T+3 反弹、是否疑似被洗出去。"
             f"<br><span style='color:{COLOR_MUTED};font-size:11px;'>"
-            f"该跟踪仅做观察，不会修改正式模拟收益。</span></div>"
+            f"该跟踪仅做观察，不会修改原始模拟收益。</span></div>"
         )
 
     st.markdown(
@@ -5445,11 +5766,12 @@ def _lifecycle_render_market_env_section(daily: Optional[dict]) -> None:
         st.markdown(
             f"<div style='background:{COLOR_BANNER_INFO};border-left:4px solid {COLOR_MUTED};"
             f"border-radius:6px;padding:10px 14px;font-size:12.5px;color:{COLOR_MUTED};'>"
-            f"💡 大盘环境数据未生成。"
-            f"运行：<code>.venv/bin/python3 scripts/build_market_daily.py --report-date YYYYMMDD</code>"
+            f"💡 大盘环境数据未生成。当前只展示候选记录，不强行判断市场强弱。"
             f"</div>",
             unsafe_allow_html=True,
         )
+        with st.expander("开发者排查：如何生成大盘环境数据", expanded=False):
+            st.code(".venv/bin/python3 scripts/build_market_daily.py --report-date YYYYMMDD", language="bash")
         return
 
     # —— 左栏：9:36 技术确认层 原系统口径 ——
@@ -5579,7 +5901,7 @@ def _lifecycle_render_top_sectors_section(daily: Optional[dict]) -> None:
         st.markdown(
             f"<div style='background:{COLOR_BANNER_INFO};border-left:4px solid {COLOR_MUTED};"
             f"border-radius:6px;padding:10px 14px;font-size:12.5px;color:{COLOR_MUTED};'>"
-            f"💡 主线板块数据缺失（status={sector_status}）。"
+            f"💡 主线板块数据缺失。当前不会把缺失数据当作强主线，也不会据此生成买入结论。"
             f"</div>",
             unsafe_allow_html=True,
         )
@@ -5609,10 +5931,84 @@ def _lifecycle_render_top_sectors_section(daily: Optional[dict]) -> None:
         st.caption("（主线板块 Top 5 为空，可能 noise_blocklist 过滤后无剩余）")
         return
 
-    st.caption(
-        f"基于 `board_df_cache_{sector_date}.json`，已过滤宽基/情绪面噪声板块。"
+    cards = []
+    for row in rows:
+        rank = row["排名"]
+        pct_text = row["涨跌幅"]
+        pct_color = COLOR_BOUGHT
+        if str(pct_text).startswith("-"):
+            pct_color = COLOR_ERROR
+        leader = _eh(row["领涨股票"], "—")
+        cards.append(
+            f"""
+            <div style="
+                border:1px solid {COLOR_GLASS_EDGE};
+                border-radius:14px;
+                padding:14px 15px;
+                background:
+                  radial-gradient(circle at top right, rgba(0,218,243,0.10), transparent 34%),
+                  linear-gradient(180deg, rgba(17,24,33,0.92), rgba(9,13,20,0.88));
+                box-shadow:inset 0 1px 0 rgba(255,255,255,0.035);">
+              <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
+                <div>
+                  <div style="font-family:{FONT_MONO};font-size:10px;letter-spacing:0.14em;color:{COLOR_MUTED};">
+                    SECTOR NODE #{rank}
+                  </div>
+                  <div style="margin-top:7px;font-family:{FONT_HEADLINE};font-size:19px;font-weight:800;color:{COLOR_TEXT};">
+                    {_eh(row["板块名"])}
+                  </div>
+                </div>
+                <div style="font-family:{FONT_MONO};font-size:15px;font-weight:900;color:{pct_color};">
+                  {_eh(pct_text)}
+                </div>
+              </div>
+              <div style="margin-top:12px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;">
+                <div>
+                  <div class="tt-card-label">涨停家数</div>
+                  <div class="tt-card-value">{_eh(row["涨停家数"])}</div>
+                </div>
+                <div>
+                  <div class="tt-card-label">跌停家数</div>
+                  <div class="tt-card-value">{_eh(row["跌停家数"])}</div>
+                </div>
+              </div>
+              <div style="margin-top:12px;padding:9px 10px;border-radius:10px;
+                          background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.055);">
+                <div class="tt-card-label">领涨股票</div>
+                <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
+                  <div class="tt-card-value">{leader}</div>
+                  <div style="font-family:{FONT_MONO};font-size:12px;font-weight:800;color:{pct_color};">
+                    {_eh(row["领涨涨幅"])}
+                  </div>
+                </div>
+              </div>
+            </div>
+            """
+        )
+
+    st.markdown(
+        _h(glass_card_html(
+            f"""
+            <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
+              <div>
+                <div style="font-family:{FONT_MONO};font-size:10px;letter-spacing:0.16em;color:{COLOR_SECOND};">
+                  SECTOR SCAN
+                </div>
+                <div style="margin-top:7px;font-size:18px;font-weight:800;color:{COLOR_TEXT};">主线板块 Top 5</div>
+                <div style="margin-top:5px;font-size:12px;color:{COLOR_MUTED};line-height:1.65;">
+                  基于本地板块快照过滤宽基/情绪面噪声，只用于复盘观察，不代表买入指令。
+                </div>
+              </div>
+              {chip_html(f"数据日 {sector_date}", color=COLOR_SECOND)}
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-top:14px;">
+              {''.join(cards)}
+            </div>
+            """,
+            accent=COLOR_SECOND,
+        )),
+        unsafe_allow_html=True,
     )
-    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
 
 def _lifecycle_render_post_stop_section(track_df: Optional[pd.DataFrame],
@@ -5624,12 +6020,15 @@ def _lifecycle_render_post_stop_section(track_df: Optional[pd.DataFrame],
         st.markdown(
             f"<div style='background:{COLOR_BANNER_INFO};border-left:4px solid {COLOR_MUTED};"
             f"border-radius:6px;padding:10px 14px;font-size:12.5px;color:{COLOR_MUTED};'>"
-            f"💡 止损后跟踪文件未生成。"
-            f"运行：<code>.venv/bin/python3 scripts/build_post_stop_tracking.py "
-            f"--report-date {report_date}</code>"
+            f"💡 止损后跟踪文件未生成。当前页面不会把缺失数据当作止损后结论。"
             f"</div>",
             unsafe_allow_html=True,
         )
+        with st.expander("开发者排查：如何生成止损后跟踪", expanded=False):
+            st.code(
+                f".venv/bin/python3 scripts/build_post_stop_tracking.py --report-date {report_date}",
+                language="bash",
+            )
         return
 
     if track_df.empty:
@@ -5718,9 +6117,9 @@ def _lifecycle_render_post_stop_section(track_df: Optional[pd.DataFrame],
             # 基础信息行
             f"<div style='font-size:12.5px;line-height:1.8;color:{COLOR_TEXT};'>"
             f"止损价 <b>{_f(stop_price)}</b> ｜ 买入价 <b>{_f(adj_buy)}</b> ｜ "
-            f"正式模拟收益 <b style='color:{COLOR_ERROR};'>{_pct(sim_ret)}</b>"
+            f"原始模拟收益 <b style='color:{COLOR_ERROR};'>{_pct(sim_ret)}</b>"
             f"<br><span style='color:{COLOR_MUTED};font-size:11px;'>"
-            f"正式收益绝不受 T+2/T+3 跟踪影响</span>"
+            f"原始模拟收益不受 T+2/T+3 跟踪影响</span>"
             f"</div>"
 
             # T+2 / T+3 状态块
@@ -5756,7 +6155,7 @@ def _lifecycle_render_post_stop_section(track_df: Optional[pd.DataFrame],
         f"<div style='background:{COLOR_BANNER_INFO};border-left:4px solid {COLOR_SECOND};"
         f"border-radius:6px;padding:10px 14px;margin-top:6px;font-size:12.5px;"
         f"color:{COLOR_TEXT};line-height:1.7;'>"
-        f"💡 <b>止损后跟踪仅用于复盘观察，不会修改正式模拟收益</b>"
+        f"💡 <b>止损后跟踪仅用于复盘观察，不会修改原始模拟收益</b>"
         f"（<code>simulated_trade_return</code> 永远以 T+1 规则为准）。"
         f"</div>",
         unsafe_allow_html=True,
@@ -5765,10 +6164,16 @@ def _lifecycle_render_post_stop_section(track_df: Optional[pd.DataFrame],
 
 def page_candidate_lifecycle() -> None:
     """📒 每日候选复盘 — 卡片式全生命周期视图（第二轮重构 · 全中文化）。"""
-    st.markdown("## 📒 每日候选复盘")
-    st.caption(
-        "候选股全生命周期：被选入 → 是否买入 → T+1 表现 → V1.6 · 资金条件层（观察模式）资金预筛。"
-        "**只读、资金条件层当前为观察模式，不接入买入硬拦截、不写 trade_review.csv。**"
+    render_page_header(
+        "候选生命周期",
+        "每日候选复盘",
+        "候选股全生命周期：被选入 → 是否模拟确认 → T+1 表现 → V1.6 资金条件层观察。",
+        badges=["全生命周期", "资金观察模式", "只读复盘"],
+        aside_title="安全边界",
+        aside_body=(
+            "资金条件层当前为观察模式。<br>"
+            "不接入买入硬拦截，不写 trade_review.csv 历史记录。"
+        ),
     )
 
     df_all = load_trade_review()
@@ -5829,7 +6234,7 @@ def page_candidate_lifecycle() -> None:
     r1c1, r1c2, r1c3, r1c4 = st.columns(4)
     r1c1.metric("推荐记录数", n_rows)
     r1c2.metric("唯一股票数", n_unique)
-    r1c3.metric("已买入",     n_bought)
+    r1c3.metric("模拟买入",   n_bought)
     r1c4.metric("完全未买",   n_pure_skip)
 
     r2c1, r2c2, r2c3, r2c4 = st.columns(4)
@@ -5841,8 +6246,13 @@ def page_candidate_lifecycle() -> None:
     if not mf_loaded:
         st.caption(
             f"💡 当日 V1.6 · 资金条件层（观察模式）资金预筛未运行。"
-            f"命令：`.venv/bin/python3 scripts/run_money_flow_simulation.py --output-date {selected_date}`"
+            f"这里显示为未检查，不等于资金条件通过。"
         )
+        with st.expander("开发者排查：如何生成资金预筛观察数据", expanded=False):
+            st.code(
+                f".venv/bin/python3 scripts/run_money_flow_simulation.py --output-date {selected_date}",
+                language="bash",
+            )
 
     st.divider()
 
@@ -5851,7 +6261,7 @@ def page_candidate_lifecycle() -> None:
     )
     st.markdown(f"### 📋 候选股全卡片（共 {n_unique} 只）")
     st.caption(
-        "按聚合排序：已买入在前（含模式分歧），完全未买入在后。"
+        "按聚合排序：模拟买入在前（含模式分歧），未触发模拟买入在后。"
         "每只股票一张卡，含决策 / 资金条件层 / T+1 / 止损跟踪。"
     )
     for _, stock in bought_first.iterrows():
@@ -5889,7 +6299,7 @@ def page_candidate_lifecycle() -> None:
             ] if c in mf_df.columns]
             st.dataframe(mf_df[mf_show_cols], width="stretch", hide_index=True)
         else:
-            st.caption("（当日 资金条件层 资金模拟未运行，无明细）")
+            st.caption("（当日资金预筛未运行，无明细）")
 
         # —— market_daily 原始字段 ——
         if market_daily is not None:
@@ -6011,6 +6421,143 @@ def _tp_status_card(title: str, value: str, desc: str, level: str = "info") -> s
     )
 
 
+def _tp_focus_cards_html(focus: list[str], focus_reason: list[str]) -> str:
+    """明日计划核心观察股卡片。只读展示，不生成任何买入动作。"""
+    if not focus:
+        return _h(glass_card_html(
+            f"""
+            <div style="font-family:{FONT_MONO};font-size:10px;letter-spacing:0.16em;color:{COLOR_MUTED};">
+              FOCUS WATCHLIST
+            </div>
+            <div style="margin-top:8px;font-size:15px;font-weight:700;color:{COLOR_TEXT};">暂无核心观察股</div>
+            <div style="margin-top:6px;font-size:12px;color:{COLOR_MUTED};line-height:1.65;">
+              当前计划没有写入 focus_stocks。这里不会自动补票，也不会生成买入指令。
+            </div>
+            """,
+            accent=COLOR_MUTED,
+        ))
+
+    cards = []
+    for i, raw in enumerate(focus):
+        parts = str(raw or "").split(":")
+        code = _eh(parts[0] if parts else raw, "—")
+        name = _eh(parts[1] if len(parts) > 1 else "—", "—")
+        reason = _eh(focus_reason[i] if i < len(focus_reason) and focus_reason[i] else "未填写入选原因", "未填写入选原因")
+        cards.append(
+            f"""
+            <div style="
+                position:relative;
+                min-height:118px;
+                border:1px solid {COLOR_GLASS_EDGE};
+                border-radius:14px;
+                padding:14px 15px;
+                background:
+                  radial-gradient(circle at top right, rgba(0,218,243,0.10), transparent 34%),
+                  linear-gradient(180deg, rgba(17,24,33,0.92), rgba(9,13,20,0.88));
+                box-shadow:inset 0 1px 0 rgba(255,255,255,0.035);">
+              <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">
+                <div>
+                  <div style="font-family:{FONT_MONO};font-size:10px;letter-spacing:0.14em;color:{COLOR_MUTED};">
+                    FOCUS NODE
+                  </div>
+                  <div style="margin-top:6px;font-family:{FONT_HEADLINE};font-size:20px;font-weight:800;color:{COLOR_TEXT};">
+                    {name}
+                  </div>
+                  <div style="margin-top:3px;font-family:{FONT_MONO};font-size:13px;color:{COLOR_SECOND};font-weight:700;">
+                    {code}
+                  </div>
+                </div>
+                {chip_html("只读观察", color=COLOR_WAIT_T1)}
+              </div>
+              <div style="margin-top:13px;padding:10px 11px;border-radius:10px;
+                          background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.055);
+                          color:{COLOR_MUTED};font-size:12.5px;line-height:1.68;">
+                {reason}
+              </div>
+            </div>
+            """
+        )
+
+    return _h(
+        f"""
+        <div style="
+            display:grid;
+            grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+            gap:12px;
+            margin:8px 0 4px 0;">
+          {''.join(cards)}
+        </div>
+        """
+    )
+
+
+def _tp_config_cards_html(v16: dict) -> str:
+    """V1.6 配置只读卡片，替代后台感较重的 dataframe。"""
+    if not v16:
+        return _h(glass_card_html(
+            f"""
+            <div style="font-family:{FONT_MONO};font-size:10px;letter-spacing:0.16em;color:{COLOR_MUTED};">
+              CONFIG SNAPSHOT
+            </div>
+            <div style="margin-top:8px;color:{COLOR_TEXT};font-weight:700;">未读取到 V1.6 配置</div>
+            <div style="margin-top:6px;color:{COLOR_MUTED};font-size:12px;">dashboard 不会在此修改配置。</div>
+            """,
+            accent=COLOR_MUTED,
+        ))
+
+    important = [
+        ("enable_v16", "V1.6 总开关"),
+        ("affect_check_buy", "影响 9:36"),
+        ("use_review_plan_gate", "复盘计划层"),
+        ("use_money_flow_observe", "资金条件观察"),
+        ("money_flow_observe_only", "资金只观察"),
+        ("use_t_signal_observer", "做T观察"),
+    ]
+    shown = []
+    for key, label in important:
+        if key in v16:
+            shown.append((key, label, v16.get(key)))
+    for key, value in v16.items():
+        if key not in {x[0] for x in shown} and len(shown) < 10:
+            shown.append((key, key, value))
+
+    rows = []
+    for key, label, value in shown:
+        value_text = _eh(str(value), "—")
+        color = COLOR_BOUGHT if str(value).lower() in ("true", "1", "yes", "on") else COLOR_MUTED
+        rows.append(
+            f"""
+            <div style="display:flex;justify-content:space-between;gap:14px;align-items:center;
+                        padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.055);">
+              <div>
+                <div style="font-size:13px;color:{COLOR_TEXT};font-weight:700;">{_eh(label)}</div>
+                <div style="margin-top:2px;font-family:{FONT_MONO};font-size:10px;color:{COLOR_MUTED};">{_eh(key)}</div>
+              </div>
+              <div style="font-family:{FONT_MONO};font-size:12px;font-weight:800;color:{color};">{value_text}</div>
+            </div>
+            """
+        )
+
+    return _h(glass_card_html(
+        f"""
+        <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
+          <div>
+            <div style="font-family:{FONT_MONO};font-size:10px;letter-spacing:0.16em;color:{COLOR_SECOND};">
+              CONFIG SNAPSHOT
+            </div>
+            <div style="margin-top:7px;font-size:18px;font-weight:800;color:{COLOR_TEXT};">V1.6 配置只读快照</div>
+          </div>
+          {chip_html("只读 / 不写 YAML", color=COLOR_SECOND)}
+        </div>
+        <div style="margin-top:8px;">{''.join(rows)}</div>
+        <div style="margin-top:10px;color:{COLOR_MUTED};font-size:12px;line-height:1.65;">
+          如需修改总开关或 9:36 接入方式，必须人工编辑 config/version_flags.yaml；本页面不会直接改配置。
+        </div>
+        """,
+        accent=COLOR_SECOND,
+    ))
+
+
 def _tp_sector_desc(status: str) -> tuple:
     s = (status or "—").strip()
     if s == "ok":
@@ -6030,7 +6577,7 @@ def _tp_permission_desc(perm: str) -> tuple:
         return "明天不做模拟买入，候选票只作为复盘观察。", "bad"
     if p in ("小仓试错", "只做主线核心"):
         return "明天只允许更收敛的观察/试错，仍需通过 9:36 技术确认层。", "warn"
-    return "交易权限需要人工确认。", "info"
+    return "明日计划口径需要人工确认。", "info"
 
 
 def _tp_risk_desc(risk: str) -> tuple:
@@ -6167,7 +6714,7 @@ def _tp_render_simple_md(plan: dict) -> str:
 | 维度 | 值 |
 |---|---|
 | 市场状态 | **{state}** （置信度：{conf}） |
-| 交易权限 | **{perm}** |
+| 明日计划口径 | **{perm}** |
 | 风险等级 | **{risk}** |
 | 判定来源 | {src} |
 | 计划版本 | {plan.get("plan_version", "v1")} |
@@ -6320,11 +6867,11 @@ def _tp_save_plan_with_edits(orig_plan: dict, edits: dict) -> tuple:
 def page_tomorrow_plan() -> None:
     """📌 V1.6 明日交易计划：一键生成 + 查看 + 人工编辑 + 一键确认。"""
     render_page_header(
-        "Plan Console",
+        "计划控制台",
         "明日交易计划",
         "这里管理第二天的交易计划、人工确认和复盘四件套触发。计划看好不等于直接买入，第二天仍需经过完整确认链路。",
         badges=["复盘计划层", "人工确认", "只读 + 手动生成"],
-        aside_title="Control Notes",
+        aside_title="控制说明",
         aside_body=(
             "这页负责生成、审阅和确认计划文案。<br>"
             "第二天是否形成模拟买入，仍取决于 V1.6 的完整检查流程。"
@@ -6372,7 +6919,7 @@ def page_tomorrow_plan() -> None:
             unsafe_allow_html=True,
         )
         c3.markdown(
-            _tp_status_card("明日交易权限", perm, perm_desc, perm_level),
+            _tp_status_card("明日计划口径", perm, perm_desc, perm_level),
             unsafe_allow_html=True,
         )
         c4, c5, c6 = st.columns(3)
@@ -6399,7 +6946,7 @@ def page_tomorrow_plan() -> None:
         if perm in ("只观察", "禁止交易") and affect_buy:
             status_banner(
                 f"⚠️ 明天符合该计划时，候选股可能被 V1.6 标记为 only_observe，9:36 不买入。"
-                f"（当前明日交易权限：{perm}；V1.6 已接入 9:36 确认）",
+                f"（当前明日计划口径：{perm}；V1.6 已接入 9:36 模拟确认）",
                 "warning",
             )
         if perm == "正常交易" and (state == "数据不足" or sector_status != "ok"):
@@ -6417,6 +6964,26 @@ def page_tomorrow_plan() -> None:
 
     # ── 2. 操作按钮 ──
     st.markdown("### 🔄 一键操作")
+    st.markdown(
+        _h(glass_card_html(
+            f"""
+            <div style="display:flex;justify-content:space-between;gap:14px;align-items:center;flex-wrap:wrap;">
+              <div>
+                <div style="font-family:{FONT_MONO};font-size:10px;letter-spacing:0.16em;color:{COLOR_WAIT_T1};">
+                  LOCAL SCRIPT CONTROL
+                </div>
+                <div style="margin-top:6px;font-size:16px;font-weight:800;color:{COLOR_TEXT};">本页按钮只生成本地复盘/计划文件</div>
+                <div style="margin-top:5px;font-size:12.5px;color:{COLOR_MUTED};line-height:1.7;">
+                  不会运行 run.py，不会自动下单，不会连接券商；点击前请确认当前时间和数据状态。
+                </div>
+              </div>
+              {chip_html("只读复盘辅助", color=COLOR_WAIT_T1)}
+            </div>
+            """,
+            accent=COLOR_WAIT_T1,
+        )),
+        unsafe_allow_html=True,
+    )
 
     col_a, col_b = st.columns(2)
 
@@ -6458,13 +7025,14 @@ def page_tomorrow_plan() -> None:
                 if r.get("stdout"): st.code(r["stdout"], language="text")
                 if r.get("stderr"): st.code(r["stderr"], language="text")
 
-        st.markdown("**危险操作：强制覆盖人工确认**")
+        st.markdown("**高风险操作：覆盖已人工确认计划**")
+        st.caption("只有确认上一版计划写错时才使用。该操作会重建计划文案，但仍不会下单、不会接券商。")
         force_confirm = st.checkbox(
             "我确认要使用 --force 覆盖已人工确认的明日计划文案",
             key="tp_force_confirm",
         )
         if st.button(
-            "⚠️ 强制重建明日计划（--force）",
+            "⚠️ 覆盖重建计划（--force）",
             key="btn_build_plan_force",
             disabled=plan_locked or not force_confirm,
             width="stretch",
@@ -6584,10 +7152,10 @@ def page_tomorrow_plan() -> None:
             if current_perm not in TP_TRADE_PERMISSIONS:
                 current_perm = "只观察"
             edited_perm = st.selectbox(
-                "明日交易权限",
+                "明日计划口径",
                 TP_TRADE_PERMISSIONS,
                 index=TP_TRADE_PERMISSIONS.index(current_perm),
-                help="决定明天候选股的整体动作；只观察/禁止交易会由 V1.6 复盘计划层拦截 9:36 买入",
+                help="这是人工计划口径，不代表实盘权限；只观察/禁止交易会由 V1.6 复盘计划层拦截 9:36 模拟买入。",
             )
 
         with col2:
@@ -6653,17 +7221,7 @@ def page_tomorrow_plan() -> None:
         st.markdown("**⭐ 核心观察股（focus_stocks，只读）**")
         focus = [t.strip() for t in str(plan.get("focus_stocks", "")).split("|") if t.strip()]
         focus_reason = [t.strip() for t in str(plan.get("focus_stocks_reason", "")).split("|")]
-        if focus:
-            rows = []
-            for i, f in enumerate(focus):
-                parts = f.split(":")
-                code = parts[0] if parts else f
-                name = parts[1] if len(parts) > 1 else "—"
-                reason = focus_reason[i] if i < len(focus_reason) else "—"
-                rows.append({"代码": code, "名称": name, "入选原因": reason})
-            st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
-        else:
-            st.caption("（无）")
+        st.markdown(_tp_focus_cards_html(focus, focus_reason), unsafe_allow_html=True)
 
         # —— 4. 保存按钮 ——
         submitted = st.form_submit_button("💾 保存人工修改", width="stretch")
@@ -6710,12 +7268,7 @@ def page_tomorrow_plan() -> None:
     # ── 6. 计划/V16 配置只读展示 ──
     st.divider()
     st.markdown("### ⚙️ V1.6 配置状态（config/version_flags.yaml · 只读）")
-    cfg_rows = [{"配置项": k, "值": str(v)} for k, v in v16.items()]
-    st.dataframe(pd.DataFrame(cfg_rows), width="stretch", hide_index=True)
-    st.caption(
-        "如需修改 V1.6 总开关 / affect_check_buy 等，请编辑 `config/version_flags.yaml` 后刷新页面。"
-        "dashboard 不直接改 yaml 配置，避免误操作。"
-    )
+    st.markdown(_tp_config_cards_html(v16), unsafe_allow_html=True)
 
 
 # ─── V1.6 做 T 信号观察记录 ─────────────────────────────────────────
@@ -6779,6 +7332,72 @@ def _tt_filter_mode(df: Optional[pd.DataFrame], show_sample: bool) -> Optional[p
     return data
 
 
+def _tt_append_sample_rows(df: Optional[pd.DataFrame], folder: Path, pattern: str) -> Optional[pd.DataFrame]:
+    """Append dated sample rows so the dashboard sample toggle works even when latest is real/empty."""
+    sample_frames = []
+    for path in sorted(folder.glob(pattern)):
+        if "latest" in path.name:
+            continue
+        try:
+            part = pd.read_csv(path)
+        except Exception:
+            continue
+        if part.empty:
+            continue
+        if "data_mode" not in part.columns:
+            part["data_mode"] = part.apply(_tt_data_mode, axis=1)
+        part["data_mode"] = part["data_mode"].astype(str).str.strip().str.lower().replace({"": "real"})
+        part = part[part["data_mode"] == "sample"]
+        if not part.empty:
+            sample_frames.append(part)
+    if not sample_frames:
+        return df
+    frames = []
+    if df is not None and not df.empty:
+        frames.append(df)
+    frames.extend(sample_frames)
+    out = pd.concat(frames, ignore_index=True)
+    return out.drop_duplicates(keep="last")
+
+
+def _tt_safety_state(df: Optional[pd.DataFrame]) -> tuple[bool, bool]:
+    """Return (has_blocking_live_value, has_missing_safety_field)."""
+    if df is None or df.empty:
+        return False, False
+
+    required = {
+        "execution_mode": {"simulate"},
+        "can_execute_live": {"false", "0", "no"},
+        "order_status": {"not_submitted"},
+        "broker_status": {"not_connected"},
+    }
+    blocking = False
+    missing = False
+    for col, ok_values in required.items():
+        if col not in df.columns:
+            missing = True
+            continue
+        vals = df[col].fillna("").astype(str).str.strip().str.lower()
+        empty_mask = vals.isin(["", "nan", "none", "null"])
+        missing = missing or bool(empty_mask.any())
+        blocking = blocking or bool((~empty_mask & ~vals.isin(ok_values)).any())
+    return blocking, missing
+
+
+def _tt_load_bs_logs_for_trades(trades: pd.DataFrame, show_sample: bool) -> Optional[pd.DataFrame]:
+    if trades is None or trades.empty or "report_date" not in trades.columns:
+        return None
+    frames = []
+    for rd in trades["report_date"].astype(str).str.strip().dropna().unique():
+        part = _tt_load_bs_log(rd)
+        part = _tt_filter_mode(part, show_sample)
+        if part is not None and not part.empty:
+            frames.append(part)
+    if not frames:
+        return None
+    return pd.concat(frames, ignore_index=True).drop_duplicates(keep="last")
+
+
 def _tt_trade_stats(df: pd.DataFrame) -> dict:
     if df.empty:
         return {
@@ -6794,14 +7413,16 @@ def _tt_trade_stats(df: pd.DataFrame) -> dict:
     pnl = pd.to_numeric(df.get("pnl_amount", 0), errors="coerce").fillna(0.0)
     reasons = df.get("exit_reason", pd.Series(dtype=str)).astype(str)
     statuses = df.get("trade_status", pd.Series(dtype=str)).astype(str)
-    closed_mask = statuses.isin(["closed", "stopped", "expired"])
+    closed_mask = statuses.isin(["closed", "stopped"])
     win_mask = ret > 0
     closed_count = int(closed_mask.sum())
+    open_days = pd.to_numeric(df.get("open_days", 0), errors="coerce").fillna(0)
     return {
         "total": len(df),
         "tp": int(reasons.eq("take_profit_1_5").sum() + reasons.eq("buyback_1_5").sum()),
         "sl": int(reasons.eq("stop_loss_1_5").sum() + reasons.eq("stop_buyback_1_5").sum()),
         "open": int(statuses.isin(["open", "data_missing"]).sum()),
+        "open_overdue": int(((statuses == "open") & (open_days >= 3)).sum()),
         "return_sum": float(ret.sum()),
         "pnl_sum": float(pnl.sum()),
         "win_rate": float((win_mask & closed_mask).sum() / closed_count) if closed_count else 0.0,
@@ -6841,13 +7462,194 @@ def _ts_bool_cn(val, t_val: str = "是", f_val: str = "否") -> str:
     return str(val)
 
 
+_T_SIGNAL_CN = {"low_absorb": "低吸 T", "high_throw": "高抛 T"}
+_T_EXIT_REASON_CN = {
+    "take_profit_1_5": "止盈 1.5%",
+    "take_profit_3": "触达 3%",
+    "stop_loss_1_5": "止损 1.5%",
+    "buyback_1_5": "回补 1.5%",
+    "buyback_3": "触达回补 3%",
+    "stop_buyback_1_5": "踏空止损",
+    "no_exit_before_close": "收盘前未退出",
+    "data_missing": "数据缺失",
+}
+_T_POINT_REASON_CN = {
+    "low_absorb_entry": "低吸买点",
+    "take_profit_exit": "止盈卖点",
+    "stop_loss_exit": "止损卖点",
+    "high_throw_entry": "高抛卖点",
+    "buyback_exit": "回补买点",
+    "stop_buyback_exit": "踏空止损买点",
+}
+_T_STATUS_CN = {
+    "open": "进行中",
+    "closed": "已完成",
+    "stopped": "已止损",
+    "expired": "已过期",
+    "data_missing": "数据缺失",
+}
+
+
+def _tt_pct_text(v) -> str:
+    f = _gf(v)
+    return "—" if f is None else f"{f * 100:+.2f}%"
+
+
+def _tt_price_text(v) -> str:
+    f = _gf(v)
+    return "—" if f is None else f"{f:.3f}"
+
+
+def _tt_text(v, default: str = "—") -> str:
+    return _display_value(v, default)
+
+
+def _tt_signal_cards_html(signals: pd.DataFrame) -> str:
+    if signals is None or signals.empty:
+        return ""
+    rows_html = []
+    for _, r in signals.head(10).iterrows():
+        passed = str(r.get("rule_pass", "")).strip().lower() in ("true", "1")
+        sig_type = _tt_text(r.get("signal_type", ""), "")
+        sig_label = _T_SIGNAL_CN.get(sig_type, sig_type or "无触发")
+        accent = COLOR_BOUGHT if passed else COLOR_WAIT_T1
+        fail_raw = _tt_text(r.get("fail_reason", ""), "")
+        fail_text = _FAIL_REASON_CN.get(fail_raw, fail_raw or "—")
+        status_text = "规则通过" if passed else "未通过"
+        rows_html.append(_h(f"""
+        <div style="display:grid;grid-template-columns:1.1fr .9fr .9fr .9fr;gap:12px;align-items:center;
+                    padding:12px 0;border-bottom:1px solid {COLOR_DIVIDER};">
+          <div>
+            <div style="font-family:{FONT_HEADLINE};font-size:15px;font-weight:700;color:{COLOR_TEXT};">{_eh(_tt_text(r.get('stock_name', ''), '—'))}</div>
+            <div style="font-family:{FONT_MONO};font-size:11px;color:{COLOR_MUTED};margin-top:3px;">{_eh(_tt_text(r.get('stock_code', ''), '—'))}</div>
+          </div>
+          <div>
+            <span style="display:inline-flex;padding:4px 9px;border-radius:999px;border:1px solid {accent}88;
+                         color:{accent};background:{accent}12;font-family:{FONT_MONO};font-size:11px;font-weight:700;">{_eh(sig_label)}</span>
+          </div>
+          <div style="font-family:{FONT_MONO};font-size:12px;color:{COLOR_TEXT};">
+            {_eh(_tt_text(r.get('signal_time', ''), '—'))}<br>
+            <span style="color:{COLOR_MUTED};">{_tt_price_text(r.get('signal_price'))}</span>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-family:{FONT_BODY};font-size:12px;font-weight:700;color:{accent};">{status_text}</div>
+            <div style="margin-top:4px;font-family:{FONT_BODY};font-size:11px;color:{COLOR_MUTED};">{_eh(fail_text)}</div>
+          </div>
+        </div>
+        """))
+    return glass_card_html(
+        _h(f"""
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <div>
+            <div style="font-family:{FONT_MONO};font-size:10px;color:{COLOR_SECOND};letter-spacing:0.16em;">T 信号流</div>
+            <div style="margin-top:3px;font-family:{FONT_HEADLINE};font-size:18px;color:{COLOR_TEXT};font-weight:700;">今日真实 T 信号</div>
+          </div>
+          <span style="font-family:{FONT_MONO};font-size:12px;color:{COLOR_MUTED};">只读观察</span>
+        </div>
+        {''.join(rows_html)}
+        """),
+        accent=COLOR_SECOND,
+    )
+
+
+def _tt_trade_cards_html(trades: pd.DataFrame) -> str:
+    if trades is None or trades.empty:
+        return ""
+    cards = []
+    for _, r in trades.head(12).iterrows():
+        signal_type = _tt_text(r.get("signal_type", ""), "")
+        sig_label = _T_SIGNAL_CN.get(signal_type, signal_type or "—")
+        status_raw = _tt_text(r.get("trade_status", ""), "")
+        status_label = _T_STATUS_CN.get(status_raw, status_raw or "—")
+        ret = _gf(r.get("return_pct"))
+        ret_color = COLOR_BOUGHT if (ret or 0) > 0 else (COLOR_ERROR if (ret or 0) < 0 else COLOR_MUTED)
+        exit_raw = _tt_text(r.get("exit_reason", ""), "")
+        exit_reason = _T_EXIT_REASON_CN.get(exit_raw, exit_raw or "—")
+        live_allowed = str(r.get("can_execute_live", "")).strip().lower()
+        safe_text = "模拟 / 不允许实盘" if live_allowed in ("false", "0", "") else "⚠️ 实盘字段异常"
+        accent = COLOR_BOUGHT if status_raw == "closed" else (COLOR_ERROR if status_raw == "stopped" else COLOR_WAIT_T1)
+        b_time = r.get("entry_time", "") if str(r.get("entry_point", "")) == "B" else r.get("exit_time", "")
+        b_price = r.get("entry_price", "") if str(r.get("entry_point", "")) == "B" else r.get("exit_price", "")
+        s_time = r.get("entry_time", "") if str(r.get("entry_point", "")) == "S" else r.get("exit_time", "")
+        s_price = r.get("entry_price", "") if str(r.get("entry_point", "")) == "S" else r.get("exit_price", "")
+        target_price = r.get("take_profit_price", "") if signal_type == "low_absorb" else r.get("buyback_price", "")
+        stop_price = r.get("stop_loss_price", "") if signal_type == "low_absorb" else r.get("stop_buyback_price", "")
+        cards.append(_h(f"""
+        <div class="rt-v2-glass-card" style="position:relative;background:{COLOR_GLASS_BG};border:1px solid {COLOR_GLASS_EDGE};
+                    border-radius:12px;padding:14px 16px 14px 18px;margin-bottom:10px;
+                    box-shadow:inset 0 1px 0 rgba(255,255,255,0.03);">
+          <div style="position:absolute;left:0;top:14px;bottom:14px;width:2px;background:{accent};border-radius:0 2px 2px 0;box-shadow:0 0 12px {accent}66;"></div>
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
+            <div>
+              <div style="font-family:{FONT_HEADLINE};font-size:18px;font-weight:700;color:{COLOR_TEXT};">{_eh(_tt_text(r.get('stock_name', ''), '—'))}</div>
+              <div style="font-family:{FONT_MONO};font-size:11px;color:{COLOR_MUTED};margin-top:3px;">{_eh(_tt_text(r.get('stock_code', ''), '—'))} · {_eh(sig_label)}</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+              <span style="padding:4px 9px;border-radius:999px;border:1px solid {accent}88;color:{accent};background:{accent}12;font-family:{FONT_MONO};font-size:11px;font-weight:700;">{_eh(status_label)}</span>
+              <span style="padding:4px 9px;border-radius:999px;border:1px solid {COLOR_SECOND}66;color:{COLOR_SECOND};background:{COLOR_SECOND}10;font-family:{FONT_MONO};font-size:11px;font-weight:700;">{_eh(safe_text)}</span>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:14px;">
+            <div><div class="tt-card-label">B 点</div><div class="tt-card-value">{_eh(_tt_text(b_time, '—'))} / {_tt_price_text(b_price)}</div></div>
+            <div><div class="tt-card-label">S 点</div><div class="tt-card-value">{_eh(_tt_text(s_time, '—'))} / {_tt_price_text(s_price)}</div></div>
+            <div><div class="tt-card-label">目标 / 止损</div><div class="tt-card-value">{_tt_price_text(target_price)} / {_tt_price_text(stop_price)}</div></div>
+            <div><div class="tt-card-label">盈亏</div><div class="tt-card-value" style="color:{ret_color};">{_tt_pct_text(ret)}</div></div>
+          </div>
+          <div style="margin-top:12px;padding-top:10px;border-top:1px solid {COLOR_DIVIDER};display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+            <span style="font-family:{FONT_BODY};font-size:12px;color:{COLOR_MUTED};">退出原因：<b style="color:{COLOR_TEXT};">{_eh(exit_reason)}</b></span>
+            <span style="font-family:{FONT_MONO};font-size:11px;color:{COLOR_FAINT};">数据模式：{_eh(_tt_text(r.get('data_mode', ''), '—'))}</span>
+          </div>
+        </div>
+        """))
+    return "".join(cards)
+
+
+def _tt_points_html(points: pd.DataFrame, point_type: str) -> str:
+    if points is None or points.empty:
+        return glass_card_html(
+            f"<div style='font-family:{FONT_BODY};font-size:13px;color:{COLOR_MUTED};'>暂无 {point_type} 点记录。</div>",
+            accent=COLOR_MUTED,
+        )
+    accent = COLOR_BOUGHT if point_type == "B" else COLOR_SECOND
+    rows = []
+    for _, r in points.head(10).iterrows():
+        reason_raw = _tt_text(r.get("point_reason", ""), "")
+        reason = _T_POINT_REASON_CN.get(reason_raw, reason_raw or "—")
+        rows.append(_h(f"""
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid {COLOR_DIVIDER};">
+          <div>
+            <div style="font-family:{FONT_HEADLINE};font-size:14px;font-weight:700;color:{COLOR_TEXT};">{_eh(_tt_text(r.get('stock_name', ''), '—'))}</div>
+            <div style="font-family:{FONT_MONO};font-size:11px;color:{COLOR_MUTED};margin-top:3px;">{_eh(_tt_text(r.get('stock_code', ''), '—'))} · {_eh(reason)}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-family:{FONT_MONO};font-size:12px;color:{accent};font-weight:700;">{_eh(_tt_text(r.get('point_time', ''), '—'))}</div>
+            <div style="font-family:{FONT_MONO};font-size:12px;color:{COLOR_TEXT};margin-top:3px;">{_tt_price_text(r.get('point_price'))}</div>
+            <div style="font-family:{FONT_MONO};font-size:11px;color:{COLOR_MUTED};margin-top:3px;">{_tt_pct_text(r.get('return_pct_after_exit'))}</div>
+          </div>
+        </div>
+        """))
+    return glass_card_html(
+        _h(f"""
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <div>
+            <div style="font-family:{FONT_MONO};font-size:10px;color:{accent};letter-spacing:0.16em;">{point_type} 点记录</div>
+            <div style="margin-top:3px;font-family:{FONT_HEADLINE};font-size:18px;color:{COLOR_TEXT};font-weight:700;">{point_type} 点列表</div>
+          </div>
+          <span style="font-family:{FONT_MONO};font-size:12px;color:{COLOR_MUTED};">{len(points)} 条</span>
+        </div>
+        {''.join(rows)}
+        """),
+        accent=accent,
+    )
+
+
 def page_t_signal() -> None:
     """📈 做 T 观察记录 — 信号 + T 交易记录 + B/S 点统计。"""
     render_page_header(
         title="做 T 观察",
         description="第二阶段会记录 B/S 点、止盈止损、盈亏统计，但仍然只是模拟观察，不接券商、不自动下单。",
-        kicker="T EXECUTION LAB",
-        badges=["SIMULATE ONLY", "V1.6 SIDE MODULE"],
+        kicker="做 T 模拟记录",
+        badges=["只做模拟", "V1.6 旁路模块"],
         aside_title="执行边界",
         aside_body="当前为做 T 模拟记录，不构成自动买卖指令。<br>任何买卖均未提交订单，can_execute_live 固定为 False。",
     )
@@ -6861,32 +7663,36 @@ def page_t_signal() -> None:
     trades_raw = _tt_load_latest()
 
     show_sample = st.checkbox("显示样例数据", value=False, key="tt_show_sample")
+    if show_sample:
+        signals_raw = _tt_append_sample_rows(signals_raw, T_SIGNAL_DIR, "t_signal_*.csv")
+        trades_raw = _tt_append_sample_rows(trades_raw, T_TRADE_DIR, "t_trade_*.csv")
     signals = _tt_filter_mode(signals_raw, show_sample)
     trades = _tt_filter_mode(trades_raw, show_sample)
 
     if signals is None or signals.empty:
         if show_sample:
-            status_banner("暂无做 T 信号记录。", "info")
+            status_banner(
+                "暂无做 T 样例信号记录。请确认 t_signal sample 是否已生成，或运行做 T 样例验证脚本。",
+                "info",
+            )
         else:
-            status_banner("暂无真实 T 数据。勾选“显示样例数据”后可查看 sample 验证记录。", "info")
+            status_banner(
+                "暂无真实 T 数据：可能是今日没有触发 T 信号，也可能是 T 信号脚本未运行，或 1 分钟行情源缺失。"
+                "<br>当前默认隐藏 sample；勾选“显示样例数据”只用于验证页面展示，不代表真实交易机会。",
+                "info",
+            )
         return
 
-    all_simulate = all(str(v).strip().lower() == "simulate" for v in signals.get("execution_mode", pd.Series(dtype=str)))
-    all_live_blocked = all(str(v).strip().lower() == "false" for v in signals.get("can_execute_live", pd.Series(dtype=str)))
-    all_not_submitted = all(str(v).strip().lower() == "not_submitted" for v in signals.get("order_status", pd.Series(dtype=str)))
-    all_broker_disconnected = all(str(v).strip().lower() == "not_connected" for v in signals.get("broker_status", pd.Series(dtype=str)))
-    trade_safety_ok = True
-    if trades is not None and not trades.empty:
-        trade_safety_ok = (
-            all(str(v).strip().lower() == "simulate" for v in trades.get("execution_mode", pd.Series(dtype=str))) and
-            all(str(v).strip().lower() == "false" for v in trades.get("can_execute_live", pd.Series(dtype=str))) and
-            all(str(v).strip().lower() == "not_submitted" for v in trades.get("order_status", pd.Series(dtype=str))) and
-            all(str(v).strip().lower() == "not_connected" for v in trades.get("broker_status", pd.Series(dtype=str)))
+    signal_blocking, signal_missing = _tt_safety_state(signals)
+    trade_blocking, trade_missing = _tt_safety_state(trades)
+    if signal_blocking or trade_blocking:
+        status_banner("检测到异常：做 T 记录里出现了非模拟/疑似可实盘字段，请检查。", "error")
+    elif signal_missing or trade_missing:
+        status_banner(
+            "部分历史 T 记录缺少安全字段；当前页面仍按模拟只读展示。"
+            "<br>新生成记录会显式写入 simulate / False / not_submitted / not_connected。",
+            "warning",
         )
-    safety_ok = all_simulate and all_live_blocked and all_not_submitted and all_broker_disconnected and trade_safety_ok
-
-    if not safety_ok:
-        status_banner("检测到异常：做 T 记录里出现了疑似可实盘字段，请检查。", "error")
 
     st.markdown("### 今日真实 T 信号")
     total = len(signals)
@@ -6912,14 +7718,18 @@ def page_t_signal() -> None:
     sig_show["规则通过"] = signals.get("rule_pass", "").map(lambda v: "✅ 规则通过" if str(v).strip().lower() in ("true", "1") else "❌ 未通过")
     sig_show["失败原因"] = signals.get("fail_reason", "").map(lambda v: _FAIL_REASON_CN.get(str(v).strip(), str(v)))
     sig_show["数据模式"] = signals.get("data_mode", "")
-    st.dataframe(sig_show, width="stretch", hide_index=True)
+    st.markdown(_tt_signal_cards_html(signals), unsafe_allow_html=True)
 
     st.markdown("### 今日 T 交易记录")
     if trades is None or trades.empty:
         if show_sample:
-            status_banner("当前还没有 T 交易记录。请先运行 build_t_trade_tracker.py。", "info")
+            status_banner("当前样例信号没有生成 T 交易记录，请检查 build_t_trade_tracker.py 样例输出。", "info")
         else:
-            status_banner("暂无真实 T 数据。当前默认不展示 sample 记录。", "info")
+            status_banner(
+                "暂无真实 T 交易记录：可能没有 rule_pass=True 的 T 信号，或跟踪脚本尚未写入 output/t_trade。"
+                "<br>未完成 T 单会继续保持 open，不会自动下单。",
+                "info",
+            )
         return
 
     stats = _tt_trade_stats(trades)
@@ -6931,8 +7741,12 @@ def page_t_signal() -> None:
     t5.markdown(kpi_card("总收益率", f"{stats['return_sum'] * 100:.2f}%", COLOR_SECOND), unsafe_allow_html=True)
     t6.markdown(kpi_card("模拟盈亏", f"{stats['pnl_sum']:.2f}", COLOR_TEXT), unsafe_allow_html=True)
     t7.markdown(kpi_card("胜率", f"{stats['win_rate'] * 100:.1f}%", "#1F883D" if stats["win_rate"] >= 0.5 else "#9A6700"), unsafe_allow_html=True)
+    if stats.get("open_overdue", 0) > 0:
+        status_banner(f"当前有 {stats['open_overdue']} 笔做 T 模拟单 open 超过 3 天，建议人工复核。", "warning")
 
     trade_show = pd.DataFrame()
+    trade_show["记录日"] = trades.get("report_date", "")
+    trade_show["入场日"] = trades.get("entry_report_date", trades.get("report_date", ""))
     trade_show["股票代码"] = trades.get("stock_code", "")
     trade_show["股票名称"] = trades.get("stock_name", "")
     trade_show["信号类型"] = trades.get("signal_type", "").map(lambda v: {"low_absorb": "低吸 T", "high_throw": "高抛 T"}.get(str(v), str(v)))
@@ -6945,18 +7759,23 @@ def page_t_signal() -> None:
     trade_show["退出原因"] = trades.get("exit_reason", "")
     trade_show["盈亏%"] = pd.to_numeric(trades.get("return_pct", ""), errors="coerce").map(lambda v: f"{v * 100:.2f}%" if pd.notna(v) else "")
     trade_show["状态"] = trades.get("trade_status", "")
+    trade_show["持仓天数"] = trades.get("open_days", "")
     trade_show["数据模式"] = trades.get("data_mode", "")
     trade_show["是否实盘允许"] = trades.get("can_execute_live", "").map(lambda v: "否" if str(v).strip().lower() in ("false", "0") else "⚠️ 是")
-    st.dataframe(trade_show, width="stretch", hide_index=True)
+    trade_show["备注"] = trades.get("note", "")
+    st.markdown(_tt_trade_cards_html(trades), unsafe_allow_html=True)
 
     report_date = ""
     if "report_date" in trades.columns and not trades.empty:
         report_date = str(trades["report_date"].iloc[0]).strip()
-    bs_log = _tt_filter_mode(_tt_load_bs_log(report_date), show_sample)
+    bs_log = _tt_load_bs_logs_for_trades(trades, show_sample)
 
     st.markdown("### B/S 点与盈亏统计")
     if bs_log is None or bs_log.empty:
-        status_banner("当前还没有 B/S 点记录。", "info")
+        status_banner(
+            "当前还没有 B/S 点记录。只有 T 信号进入模拟交易并触发入场/退出后，才会生成 B 点或 S 点。",
+            "info",
+        )
         return
 
     b_points = bs_log[bs_log.get("point_type", "").astype(str).eq("B")]
@@ -6965,23 +7784,27 @@ def page_t_signal() -> None:
     with bcol:
         st.markdown("#### B 点列表")
         b_show = pd.DataFrame()
+        b_show["事件日"] = b_points.get("event_report_date", b_points.get("report_date", ""))
+        b_show["入场日"] = b_points.get("entry_report_date", b_points.get("report_date", ""))
         b_show["股票代码"] = b_points.get("stock_code", "")
         b_show["股票名称"] = b_points.get("stock_name", "")
         b_show["B点原因"] = b_points.get("point_reason", "")
         b_show["B点时间"] = b_points.get("point_time", "")
         b_show["B点价格"] = b_points.get("point_price", "")
         b_show["关联收益"] = pd.to_numeric(b_points.get("return_pct_after_exit", ""), errors="coerce").map(lambda v: f"{v * 100:.2f}%" if pd.notna(v) else "")
-        st.dataframe(b_show, width="stretch", hide_index=True)
+        st.markdown(_tt_points_html(b_points, "B"), unsafe_allow_html=True)
     with scol:
         st.markdown("#### S 点列表")
         s_show = pd.DataFrame()
+        s_show["事件日"] = s_points.get("event_report_date", s_points.get("report_date", ""))
+        s_show["入场日"] = s_points.get("entry_report_date", s_points.get("report_date", ""))
         s_show["股票代码"] = s_points.get("stock_code", "")
         s_show["股票名称"] = s_points.get("stock_name", "")
         s_show["S点原因"] = s_points.get("point_reason", "")
         s_show["S点时间"] = s_points.get("point_time", "")
         s_show["S点价格"] = s_points.get("point_price", "")
         s_show["关联收益"] = pd.to_numeric(s_points.get("return_pct_after_exit", ""), errors="coerce").map(lambda v: f"{v * 100:.2f}%" if pd.notna(v) else "")
-        st.dataframe(s_show, width="stretch", hide_index=True)
+        st.markdown(_tt_points_html(s_points, "S"), unsafe_allow_html=True)
 
 
 def _wl_load() -> list[dict]:
@@ -7267,7 +8090,7 @@ def page_watchlist() -> None:
           .watchlist-metric__label {
             font-size: 10px;
             letter-spacing: 0.12em;
-            text-transform: uppercase;
+	          text-transform: none;
             color: rgba(222,226,236,0.52);
             font-family: "JetBrains Mono", monospace;
           }
@@ -7809,12 +8632,12 @@ def page_watchlist() -> None:
         <div class="watchlist-page-head">
           <div class="watchlist-hero">
             <div>
-              <div class="watchlist-hero__kicker">WATCHLIST RESEARCH</div>
+              <div class="watchlist-hero__kicker">自选研究池</div>
               <div class="watchlist-hero__title">⭐ 我的自选观察池</div>
               <div class="watchlist-hero__desc">自选池只用于观察，不代表自动买入；最终仍需经过 V1.6 明日计划层、资金条件层、9:36 技术确认。</div>
               <div class="watchlist-hero__badges">
                 <span>总数 {total_count}</span>
-                <span>Active {active_count}</span>
+                <span>活跃 {active_count}</span>
                 <span>P1 {p1_count}</span>
               </div>
             </div>
@@ -7871,7 +8694,7 @@ def page_watchlist() -> None:
         <div class="watchlist-tools">
           <div class="watchlist-tools__head">
             <div>
-              <div class="watchlist-panel__kicker">RESEARCH CONSOLE</div>
+              <div class="watchlist-panel__kicker">研究控制台</div>
               <div class="watchlist-tools__title">搜索、识别与观察筛选</div>
               <div class="watchlist-tools__sub">输入代码或名称先识别，再加入观察池；筛选仅影响当前展示，不触发任何交易动作。</div>
             </div>
@@ -8034,11 +8857,6 @@ def page_watchlist() -> None:
             note = _wl_card_value(row.get("note", ""), "无")
             research_date = _wl_card_value(row.get("research_date", ""), "未填写")
             code_text = str(row.get("stock_code", ""))
-            seed = sum(ord(ch) for ch in code_text)
-            bars = "".join(
-                f"<span style='height:{18 + ((seed + i * 13) % 72)}%;'></span>"
-                for i in range(7)
-            )
             filled_score = int(theme != "未填写") + int(reason != "待补充") + int(research_date != "未填写") + int(max_pos != "未设置")
             completion_pct = int(filled_score / 4 * 100)
             st.markdown(
@@ -8059,7 +8877,7 @@ def page_watchlist() -> None:
                         <span class="watchlist-safe-chip">自选 ≠ 买入</span>
                       </div>
                       <div class="watchlist-feed-card__reason">
-                        <div class="watchlist-feed-card__label">Research Reason 研究理由</div>
+                        <div class="watchlist-feed-card__label">研究理由</div>
                         <div class="watchlist-feed-card__copy">{_eh(reason)}</div>
                       </div>
                       <div style="font-size:12px;color:{COLOR_MUTED};line-height:1.45;"><b style="color:{COLOR_TEXT};">观察备注：</b>{_eh(note)}</div>
@@ -8077,10 +8895,12 @@ def page_watchlist() -> None:
                       </div>
                       <div>
                         <div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:6px;">
-                          <span class="watchlist-feed-card__label">Research Pulse 信息完整度</span>
+                          <span class="watchlist-feed-card__label">信息完整度</span>
                           <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:{COLOR_SECOND};font-weight:700;">{completion_pct}%</span>
                         </div>
-                        <div class="watchlist-mini-bars">{bars}</div>
+                        <div style="height:6px;border-radius:999px;background:rgba(255,255,255,0.06);overflow:hidden;">
+                          <span style="display:block;height:100%;width:{completion_pct}%;border-radius:999px;background:{COLOR_SECOND};box-shadow:0 0 10px {COLOR_SECOND}66;"></span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -8371,11 +9191,21 @@ def main() -> None:
           background: {COLOR_CARD_ALT} !important;
           color: {COLOR_TEXT} !important;
       }}
-      .glideDataEditor [role="gridcell"] {{
-          color: {COLOR_TEXT} !important;
-      }}
+	      .glideDataEditor [role="gridcell"] {{
+	          color: {COLOR_TEXT} !important;
+	      }}
 
-      /* 按钮整体做成终端按键 */
+	      /* 隐藏 Streamlit dataframe 默认工具栏，避免出现下载/搜索/全屏等非业务按钮感 */
+	      div[data-testid="stElementToolbar"],
+	      div[data-testid="stDataFrame"] [role="toolbar"],
+	      div[data-testid="stDataFrame"] button[title],
+	      div[data-testid="stDataFrame"] [data-testid="stElementToolbar"] {{
+	          display: none !important;
+	          visibility: hidden !important;
+	          pointer-events: none !important;
+	      }}
+
+	      /* 按钮整体做成终端按键 */
       .stButton button, .stDownloadButton button {{
           border-radius: 2px !important;
           border: 1px solid rgba(255,255,255,0.10) !important;
@@ -8384,7 +9214,7 @@ def main() -> None:
           font-family: "JetBrains Mono", monospace !important;
           font-size: 11px !important;
           letter-spacing: 0.08em;
-          text-transform: uppercase;
+          text-transform: none;
       }}
       .stButton button:hover, .stDownloadButton button:hover {{
           border-color: {COLOR_SECOND} !important;
@@ -8804,12 +9634,77 @@ def main() -> None:
           font-weight: 700 !important;
           letter-spacing: -0.01em;
       }}
-      div[data-testid="stMetric"] [data-testid="stMetricDelta"] {{
-          font-family: {FONT_MONO} !important;
-          font-size: 12px !important;
-      }}
+	      div[data-testid="stMetric"] [data-testid="stMetricDelta"] {{
+	          font-family: {FONT_MONO} !important;
+	          font-size: 12px !important;
+	      }}
+	      .tt-card-label {{
+	          font-family: {FONT_MONO};
+	          font-size: 10px;
+	          letter-spacing: 0.12em;
+	          color: {COLOR_MUTED};
+	          margin-bottom: 5px;
+	      }}
+	      .tt-card-value {{
+	          font-family: {FONT_MONO};
+	          font-size: 13px;
+	          font-weight: 700;
+	          color: {COLOR_TEXT};
+	      }}
 
-      /* 5) 按钮 ── 主按钮反色风格 + hover 电光青光晕 */
+	      /* 4.5) 非今日页统一章节风格：让旧 Streamlit 页面也进入 RADAR 终端视觉 */
+	      .main .block-container div[data-testid="stMarkdown"] h2,
+	      .main .block-container div[data-testid="stMarkdown"] h3 {{
+	          position: relative;
+	          display: flex;
+	          align-items: center;
+	          gap: 10px;
+	          margin: 14px 0 10px 0 !important;
+	          padding: 10px 14px 10px 18px !important;
+	          border: 1px solid {COLOR_GLASS_EDGE};
+	          border-left: 2px solid {COLOR_SECOND};
+	          border-radius: 12px;
+	          background:
+	            radial-gradient(circle at top right, rgba(0,218,243,0.08), transparent 30%),
+	            linear-gradient(180deg, rgba(16,21,29,0.88) 0%, rgba(10,14,23,0.78) 100%);
+	          box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 12px 28px rgba(0,0,0,0.18);
+	          color: {COLOR_TEXT} !important;
+	          font-family: {FONT_HEADLINE} !important;
+	          letter-spacing: -0.01em;
+	      }}
+	      .main .block-container div[data-testid="stMarkdown"] h3 {{
+	          font-size: 18px !important;
+	      }}
+	      .main .block-container div[data-testid="stMarkdown"] h2 {{
+	          font-size: 22px !important;
+	      }}
+	      .main .block-container div[data-testid="stMarkdown"] h2::before,
+	      .main .block-container div[data-testid="stMarkdown"] h3::before {{
+	          content: "";
+	          position: absolute;
+	          left: 0;
+	          top: 12px;
+	          bottom: 12px;
+	          width: 2px;
+	          background: {COLOR_SECOND};
+	          box-shadow: 0 0 12px rgba(0,218,243,0.55);
+	      }}
+	      .rt-page-hero + div[data-testid="stElementContainer"],
+	      .rt-page-hero ~ div[data-testid="stElementContainer"] {{
+	          scroll-margin-top: 64px;
+	      }}
+	      div[data-testid="stCaptionContainer"] {{
+	          color: {COLOR_MUTED} !important;
+	          font-family: {FONT_BODY} !important;
+	      }}
+	      div[data-testid="stDivider"] {{
+	          margin: 14px 0 !important;
+	      }}
+	      div[data-testid="stDivider"] > div {{
+	          border-color: rgba(0,218,243,0.18) !important;
+	      }}
+
+	      /* 5) 按钮 ── 主按钮反色风格 + hover 电光青光晕 */
       .stButton > button[kind="primary"] {{
           background: transparent !important;
           color: {COLOR_SECOND} !important;
@@ -8819,7 +9714,7 @@ def main() -> None:
           font-size: 12px !important;
           font-weight: 700 !important;
           letter-spacing: 0.12em !important;
-          text-transform: uppercase;
+          text-transform: none;
           transition: all .18s ease;
           box-shadow: 0 0 0 rgba(0,218,243,0) inset;
       }}
@@ -8903,7 +9798,7 @@ def main() -> None:
     prev_page = st.session_state.get("_last_rendered_top_nav_page")
     if prev_page != page:
         st.session_state["_last_rendered_top_nav_page"] = page
-        components.html(
+        st.iframe(
             """
             <script>
               const main = window.parent.document.querySelector('[data-testid="stMain"]');
@@ -8911,7 +9806,7 @@ def main() -> None:
               window.parent.scrollTo({ top: 0, left: 0, behavior: 'instant' });
             </script>
             """,
-            height=0,
+            height=1,
         )
 
     is_today_page = "今日总览" in page

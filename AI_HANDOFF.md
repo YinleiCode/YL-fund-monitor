@@ -2303,3 +2303,699 @@ else:
 | `d7ecb77` / `82e3375` | 第二轮扫描 | Claude |
 | `730a6fe` / `5e1f752` | tomorrow_plan + indicators nan | Claude |
 | `3df6d1d` / `bf9ce11` | notifier nan/inf | Claude |
+
+---
+
+## 2026-06-02 Codex T 跨日记录口径修复
+
+### 本次背景
+
+用户明确要求做 T 记录不能只看当天：如果一只股票当天出现 B/S 点后没有触发止盈或止损，后续每天都要继续追踪，直到止盈、止损或人工复核。上一版 T 交易记录虽然能生成当天 B/S 点，但跨日 open 单缺少清晰的入场日、事件日和持仓天数字段。
+
+### 已修复
+
+- `scripts/build_t_trade_tracker.py`
+  - T 交易字段新增 `entry_report_date`、`event_report_date`、`open_days`。
+  - B/S 点字段新增 `entry_report_date`、`event_report_date`。
+  - `trade.report_date` 表示本次记录日，`entry_report_date` 表示原始入场日，`event_report_date` 表示退出事件日或本次记录日。
+  - `bs_log.report_date` 表示 B/S 点事件发生日。
+  - open 单超过 3 天时，`note` 追加“已 open N 天，建议人工复核”。
+  - 写 `t_open_positions.csv` 的同时写 `t_open_positions_<report_date>.csv` 每日快照。
+- `dashboard_app.py`
+  - 做 T 交易表新增记录日、入场日、持仓天数、备注。
+  - B/S 点表新增事件日、入场日。
+  - open 超过 3 天时显示风险提醒。
+- `scripts/run_t_eod.py`
+  - T summary 新增 `open_count`、`open_overdue_count`。
+
+### 验收状态
+
+- `py_compile` 曾通过：`scripts/build_t_trade_tracker.py`、`scripts/run_t_eod.py`、`dashboard_app.py`。
+- 四个原 T 样例曾通过：低吸止盈、低吸止损、高抛回补、高抛踏空止损。
+- 跨日 open 验证曾通过：Day1 open，Day2 触发止盈后写入正确的入场日、事件日和 B/S 点。
+
+### 安全边界
+
+- 未运行 `python run.py` 或任何 `run.py` 子命令。
+- 未修改 `output/trade_review.csv` 历史记录。
+- 未修改 `config/version_flags.yaml`。
+- 未修改 `launchd/*.plist`。
+- 未新增自动下单或券商连接逻辑。
+
+### 当前状态
+
+- 上一批已提交：`36f5a97 fix watchlist priority and simulated T tracking`。
+- 本节改动仍在工作区，尚未提交，等待用户确认。
+
+## 2026-06-02 Codex dashboard UI 安全文案修正
+
+### 本次背景
+
+用户要求逐页检查 dashboard，找出可点击但功能不清、假指标、误导文案和布局问题，先记录问题后统一优化。本轮先做第一批低风险 UI 修正，只改展示口径，不改后端策略逻辑。
+
+### 已修正
+
+- `dashboard_app.py`
+  - 首页将“实时信号流 / RADAR_LIVE_FEED / 延迟 12ms”改为“本地信号记录 / LOCAL_REVIEW_FEED / 更新 本地CSV”。
+  - 首页将“模拟收益”改为“模拟收益率”，避免把收益率误显示成现金金额。
+  - 首页将“9:36 确认买入”改为“9:36 模拟确认”。
+  - 首页右侧流程中“资金条件层 0%”改为“检查进度”，避免误解为真实资金条件通过率。
+  - 候选股票卡片 mini 折线标注为“趋势示意”，避免误解为真实分时图。
+  - 买入确认页将“已买入”统一改为“模拟买入 / 模拟确认”，将“直接放弃”改为“未通过 / 暂不执行”。
+  - T+1 / 候选复盘可见“已买入”口径统一改为“模拟买入”。
+  - 明日计划将“明日交易权限”改为“明日计划口径”，并给覆盖重建按钮增加“不下单、不接券商”说明。
+  - 做 T 观察空状态说明区分没有信号、脚本未跑、1 分钟行情源缺失、sample 仅用于验证。
+  - 手动补跑将重复“立即执行”按钮改成具体动作名，如“补跑 T+1 复盘 / 生成本周复盘 / 生成本月复盘”。
+  - 将废弃的 `st.components.v1.html` 滚动辅助替换为 `st.iframe(..., height=1)`，消除 Streamlit 1.57 废弃提示。
+
+### 验收状态
+
+- `py_compile dashboard_app.py` 曾通过。
+- `git diff --check` 曾通过。
+- Streamlit AppTest non-crash 曾覆盖全部 10 个页面。
+
+### 安全边界
+
+- 未运行 `python run.py` 或任何 `run.py` 子命令。
+- 未修改 `run.py`。
+- 未修改 `trade_review.py`。
+- 未修改 `output/trade_review.csv` 历史记录。
+- 未修改 `config/version_flags.yaml`。
+- 未修改 `launchd/*.plist`。
+- 未新增自动下单或券商连接逻辑。
+
+### 当前状态
+
+- 本轮 UI 安全文案修正尚未提交，等待用户确认。
+- 工作区同时还保留上一批未提交的 T 跨日记录口径修复。
+
+## 2026-06-02 Codex dashboard UI 第二批清理
+
+### 本次背景
+
+Claude 提交 `notifier.py` nan/inf 修复后，用户要求 Codex 先检查 md 接力是否完整，再继续 UI。已确认 Claude 的最新记录保留；同时从 `/tmp/handoff_with_codex.md.bak` 和 `/tmp/changelog_with_codex.md.bak` 把 Codex 前两段未提交交接记录追加回来。
+
+### 已修正
+
+- `AI_HANDOFF.md` / `AI_CHANGELOG.md`
+  - 追加 Codex 的 T 跨日记录口径修复段。
+  - 追加 Codex 的 dashboard UI 安全文案修正段。
+  - 未覆盖 Claude 的 `notifier.py` 修复和实战首日观察段。
+- `dashboard_app.py`
+  - 候选复盘页：大盘环境、止损后跟踪、资金预筛缺失时，主界面改为用户友好状态说明；具体命令收进“开发者排查”折叠区。
+  - 手动补跑页：主卡片不再直接展示命令，只展示作用、建议和“不接券商、不自动下单”边界；实际白名单命令收进折叠区。
+  - 手动补跑结果提示不再把命令铺在主提示里，改为“详情见日志”。
+  - 资金源健康探测：主卡片不再直接展示命令，增加“只读探测，不写推荐、不触发买入确认”说明；实际只读命令收进折叠区。
+  - 可见“交易权限”展示口径改为“明日计划口径”，不改内部字段和后端逻辑。
+
+### 验收
+
+- `py_compile` 通过：
+  - `dashboard_app.py`
+  - `scripts/build_t_trade_tracker.py`
+  - `scripts/run_t_eod.py`
+- `git diff --check` 通过。
+- Streamlit AppTest non-crash 通过全部 10 个页面：
+  - 今日总览
+  - 买入确认
+  - T+1 复盘
+  - 未买入跟踪
+  - 周月复盘
+  - 候选复盘
+  - 明日计划
+  - 做T观察
+  - ⭐ 我的自选
+  - 手动补跑
+
+### 安全边界
+
+- 未运行 `python run.py` 或任何 `run.py` 子命令。
+- 未修改 `run.py`。
+- 未修改 `trade_review.py`。
+- 未修改 `output/trade_review.csv` 历史记录。
+- 未修改 `config/version_flags.yaml`。
+- 未修改 `launchd/*.plist`。
+- 未新增自动下单或券商连接逻辑。
+
+### 当前状态
+
+- 工作区仍 dirty：
+  - `dashboard_app.py`
+  - `scripts/build_t_signal_observer.py`
+  - `scripts/build_t_trade_tracker.py`
+  - `scripts/run_t_eod.py`
+  - `AI_HANDOFF.md`
+  - `AI_CHANGELOG.md`
+  - `data/minute_today/` 未追踪真实分钟数据，不建议提交。
+- 建议下一步先让用户确认是否提交 `dashboard_app.py` + 两个 T 脚本 + 两份 AI md；不要提交 `data/minute_today/`。
+
+## 2026-06-02 Codex 逐页 UI 审查与 T 展示修复
+
+### 本次背景
+
+用户要求调用 Chrome 逐页检查 dashboard，每个导航页识别可点击但未实现、假指标、误导文案、布局/展示异常，最后统一修改。Chrome 可操作，但页面无障碍树和截图偶尔不同步；已结合 Chrome 点击、Streamlit AppTest 和代码定位完成本轮修复。
+
+### 已检查页面
+
+- 今日总览
+- 买入确认
+- T+1 复盘
+- 未买入跟踪
+- 周月复盘
+- 候选复盘
+- 明日计划
+- 做T观察
+- ⭐ 我的自选
+- 手动补跑
+
+### 发现并修复
+
+- 今日总览：
+  - 市场脉冲在行情字段缺失时不再把上涨家数/跌停数等显示成 `0`，改为 `—`，避免误判为真实 0。
+  - 本地信号记录中的 `已放弃` 改为 `未通过`。
+- Plotly 图表：
+  - 隐藏 Plotly 英文 modebar，避免页面露出 `Download plot as PNG / Zoom / Pan` 等英文工具按钮。
+- T+1 / 周月 / 候选复盘：
+  - 将 `正式胜率统计`、`正式结算`、`正式止盈规则` 等文案改为模拟复盘口径。
+  - 将 `买入触发` 改为 `模拟触发`。
+  - 将候选复盘 `是否买入` 改为 `是否模拟确认`。
+  - 将 `完全未买入` 改为 `未触发模拟买入`。
+  - 将 `模拟未运行` 改为 `资金预筛未运行`。
+- 做T观察：
+  - 修复 sample 展示只依赖 `t_trade_latest.csv` 的问题；勾选“显示样例数据”后会从 dated sample 文件补充样例交易记录。
+  - 样例 fallback 验证：能读到 4 笔 sample T trade、8 条 B/S 点。
+  - 安全提示区分“真实可实盘异常”和“历史安全字段缺失”。历史空字段只黄灯提示，不再误报为疑似可实盘。
+- `scripts/build_t_signal_observer.py`：
+  - 对所有 T 信号行补齐默认安全字段，即使是未触发/数据缺失短返回行，也写入：
+    - `execution_mode=simulate`
+    - `can_execute_live=False`
+    - `order_status=not_submitted`
+    - `broker_status=not_connected`
+  - 不接券商，不自动下单，不写 `output/trade_review.csv`。
+
+### 验收
+
+- `py_compile` 通过：
+  - `dashboard_app.py`
+  - `scripts/build_t_signal_observer.py`
+  - `scripts/build_t_trade_tracker.py`
+  - `scripts/run_t_eod.py`
+- `git diff --check` 通过。
+- Streamlit AppTest non-crash 通过全部 10 个页面。
+- 做T样例 helper 验证：
+  - sample signals rows: 8
+  - sample trades rows: 4
+  - B/S rows: 8
+  - safety: 无可实盘异常；历史真实 T 信号存在空安全字段，新生成记录已修复。
+
+### 安全边界
+
+- 未运行 `python run.py` 或任何 `run.py` 子命令。
+- 未修改 `run.py`。
+- 未修改 `trade_review.py`。
+- 未修改 `output/trade_review.csv` 历史记录。
+- 未修改 `config/version_flags.yaml`。
+- 未修改 `launchd/*.plist`。
+- 未新增自动下单或券商连接逻辑。
+
+### 当前状态
+
+- 本轮改动未提交，等待用户确认。
+- 工作区仍包含此前未提交的 T 跨日记录口径修复和本轮 UI/T 安全展示修复。
+- `data/minute_today/` 是未追踪真实分钟数据，不建议提交。
+
+## 2026-06-02 Codex UI 假指标/英文/误导控件清理
+
+### 本次背景
+
+用户指出 dashboard 仍存在假数字、假指标、不能点但像按钮的元素，以及残留英文字段。本轮仅做 UI 展示层修正，不改后端交易逻辑。
+
+### 已修复
+
+- 今日总览：
+  - `正式买入`、`买入条件` 等容易误解的文案改为 `模拟买入`、`模拟确认条件`。
+  - 表格最后一列从 `操作` 改为 `只读状态`，`CONFIRM / OBSERVE / FAILED` 改为 `模拟确认 / 观察中 / 未通过 / 待检查`。
+  - `实时监测 (ON)`、`历史记录` 改为 `本地记录`、`只读展示`，避免用户误以为可点击。
+  - 未到 9:36 检查时，候选股票和信号流优先显示 `待 9:36 检查`，不再误显示 `未通过`。
+  - 没有收益字段时，`模拟收益率` 不再显示假 `0.00%`，改为 `— / 暂无模拟收益记录`。
+  - `市场情绪` 改为 `本地情绪分`，并显示 `本地评分`，避免误解为实时大盘真值。
+- 假视觉清理：
+  - 移除今日候选卡片和 KPI 卡片中的 mock sparkline 假走势。
+  - 自选股卡片移除按股票代码随机生成的假柱状图，改为基于真实字段完整度的进度条。
+  - V1.6 侧栏不再展示固定 `100%` 假达标率，改为 `推荐记录 3 只 / 检查进度 0/3 / 模拟确认 0/3` 等真实计数。
+- 中文化：
+  - 首页 `MARKET SENTIMENT`、`LOCAL_REVIEW_FEED`、`MARKET PULSE`、`V1.6 ACHIEVEMENT FLOW` 等可视英文改为中文。
+  - 自选页 `WATCHLIST RESEARCH`、`RESEARCH CONSOLE`、`Research Reason`、`Research Pulse` 改为中文。
+  - 做T页 `T EXECUTION LAB`、`SIMULATE ONLY`、`V1.6 SIDE MODULE` 改为中文。
+- Streamlit 默认工具栏：
+  - 通过 CSS 隐藏 dataframe 默认工具栏，减少 `Download/Search/Fullscreen` 等非业务按钮感。
+
+### 验收
+
+- `py_compile` 通过：
+  - `dashboard_app.py`
+  - `scripts/build_t_signal_observer.py`
+  - `scripts/build_t_trade_tracker.py`
+  - `scripts/run_t_eod.py`
+- `git diff --check` 通过。
+- Streamlit AppTest non-crash 通过全部 10 个页面。
+- 浏览器刷新 `http://localhost:8501/` 后确认：
+  - `MARKET SENTIMENT`、`WATCHLIST RESEARCH`、`RESEARCH CONSOLE`、`趋势示意` 不再出现。
+  - 首页显示 `待 9:36 检查`、`暂无模拟收益记录`、`本地情绪分`。
+
+### 安全边界
+
+- 未运行 `python run.py` 或任何 `run.py` 子命令。
+- 未修改 `run.py`。
+- 未修改 `trade_review.py`。
+- 未修改 `output/trade_review.csv` 历史记录。
+- 未修改 `config/version_flags.yaml`。
+- 未修改 `launchd/*.plist`。
+- 未新增自动下单或券商连接逻辑。
+
+### 当前状态
+
+- 本轮 UI 清理未提交，等待用户确认。
+- 工作区仍 dirty，包含 UI 修复、T 脚本修复、AI 文档更新，以及未追踪 `data/minute_today/`。
+
+## 2026-06-02 Codex 跨页面 RADAR 风格统一
+
+### 本次背景
+
+用户指出“今日总览”已经按 Stitch/RADAR 终端风格重构，但其它页面仍是旧 Streamlit 风格，导致整体割裂。本轮仅做前端风格统一，不改后端业务逻辑。
+
+### 已修复
+
+- `render_page_header()`：
+  - 不再强制英文 uppercase，中文 kicker/aside 保持自然展示。
+  - 修复右侧说明卡因为 HTML 缩进被 Markdown 当作代码块渲染的问题。
+- 补齐统一 Hero：
+  - `未买入跟踪`
+  - `周 / 月复盘`
+  - `每日候选复盘`
+  - `手动补跑`
+- 中文化已有 Hero：
+  - `买入确认`：`Execution Review / Review Lens` 改为中文。
+  - `T+1 复盘`：`Outcome Audit / Audit Scope` 改为中文。
+  - `明日交易计划`：`Plan Console / Control Notes` 改为中文。
+- 全局 CSS：
+  - 非今日页的 `h2/h3` 统一为 RADAR 玻璃终端章节标题。
+  - `st.divider`、caption、metric 等进一步统一到深色终端视觉。
+
+### 浏览器确认
+
+- 已刷新 `http://localhost:8501/`。
+- 实测点击：
+  - `买入确认`
+  - `未买入跟踪`
+  - `候选复盘`
+  - `手动补跑`
+- 确认右侧说明卡不再露出 `<div style=...>` 原始 HTML。
+- 非今日页已出现统一终端 Hero，视觉不再完全割裂。
+
+### 验收
+
+- `py_compile dashboard_app.py` 通过。
+- `git diff --check` 通过。
+- Streamlit AppTest non-crash 通过全部 10 个页面。
+
+### 安全边界
+
+- 未运行 `python run.py` 或任何 `run.py` 子命令。
+- 未修改 `run.py`。
+- 未修改 `trade_review.py`。
+- 未修改 `output/trade_review.csv` 历史记录。
+- 未修改 `config/version_flags.yaml`。
+- 未修改 `launchd/*.plist`。
+- 未新增自动下单或券商连接逻辑。
+
+### 当前状态
+
+- 跨页面 UI 统一未提交，等待用户确认。
+- 当前仍是“基础统一”，还不是每个页面都深度卡片化；后续可按页面逐个把表格改为自渲染终端卡片/表格。
+
+## 2026-06-02 Codex 买入确认页深度卡片化
+
+### 本次背景
+
+用户说明 Claude 今天改了底层代码但未动 UI，要求先读最新 MD 后继续修 dashboard UI。经确认当前 dirty 文件主要是 `dashboard_app.py` 与 AI 文档，底层 T 脚本已不在当前 dirty 列表；`data/calendar/`、`data/minute_today/` 为未追踪数据目录，本轮不处理。
+
+### 已修复
+
+- `买入确认` 页面：
+  - 保留原有三段分类逻辑，不改数据来源、不改交易判断。
+  - 将原 Plotly 横向分布图替换为 RADAR 终端风格 HTML 分布卡：
+    - 模拟确认
+    - 值得观察
+    - 未通过
+  - 将“未通过”明细从 `st.dataframe` 改为与其它分组一致的股票卡片展示。
+  - 升级通用 `stock_card()` 外观为 V2 玻璃态卡片，带左侧状态光条和 hover 风格，减少与今日总览的视觉割裂。
+  - 修复新增 HTML 片段未套 `_h()` 导致浏览器显示 `<div style=...>` 原始源码的问题。
+
+### 验收
+
+- `py_compile dashboard_app.py` 通过。
+- `git diff --check` 通过。
+- Streamlit AppTest non-crash 通过全部 10 个页面。
+- 浏览器刷新 `http://localhost:8501/` 并点击 `买入确认`：
+  - 确认显示 `三段结果总览`、`只读统计`。
+  - 确认不再露出 `<div style=...>` 原始 HTML。
+
+### 安全边界
+
+- 未运行 `python run.py` 或任何 `run.py` 子命令。
+- 未修改 `run.py`。
+- 未修改 `trade_review.py`。
+- 未修改 `output/trade_review.csv` 历史记录。
+- 未修改 `config/version_flags.yaml`。
+- 未修改 `launchd/*.plist`。
+- 未新增自动下单或券商连接逻辑。
+
+### 当前状态
+
+- 本轮 UI 深度卡片化未提交，等待用户确认。
+- 下一步建议继续按页面推进：`做T观察` → `明日计划` → `候选复盘`。
+
+## 2026-06-02 Codex 做T观察页终端卡片化
+
+### 本次背景
+
+用户确认 Claude 今日改了底层代码，但要求 Codex 继续处理 UI 风格统一。先读取最新 AI 文档后继续，不改后端主逻辑、不运行 `python run.py`。
+
+### 已修复
+
+- `做T观察` 页面：
+  - 保留原有 T 信号读取、T 交易记录读取、B/S 点读取逻辑。
+  - 将“今日真实 T 信号”从普通 dataframe 展示改为 RADAR 终端卡片流。
+  - 将“T 交易记录”从普通 dataframe 展示改为终端交易卡片。
+  - 将 B 点 / S 点记录改为终端点位卡片。
+  - 增加 T 信号类型、退出原因、B/S 点原因、交易状态的中文映射。
+  - 对 `nan`、空值、缺失价格做前端兜底，显示为 `—`、`无触发`、`未设置` 等友好文案。
+  - 页面继续保留“做 T 模拟记录 / 不构成自动买卖指令”的安全提示。
+
+### 当前真实数据状态
+
+- 当前真实 T 信号可显示。
+- 当前真实 T 交易记录为空时，页面显示暂无真实 T 交易记录。
+- 因默认不显示 sample，且真实交易记录为空，B/S 点区不会误造数据。
+
+### 验收
+
+- `py_compile dashboard_app.py` 通过。
+- `git diff --check` 通过。
+- Streamlit AppTest non-crash 通过全部 10 个页面。
+- 浏览器刷新 `http://localhost:8501/` 并点击 `做T观察`：
+  - 确认显示 `T 信号流`。
+  - 确认显示 `只读观察`。
+  - 确认没有 `nan` 文案。
+  - 确认没有 `<div style=...>` 原始 HTML。
+
+### 安全边界
+
+- 未运行 `python run.py` 或任何 `run.py` 子命令。
+- 未修改 `run.py`。
+- 未修改 `trade_review.py`。
+- 未修改 `output/trade_review.csv` 历史记录。
+- 未修改 `config/version_flags.yaml`。
+- 未修改 `launchd/*.plist`。
+- 未新增自动下单或券商连接逻辑。
+
+### 当前状态
+
+- `dashboard_app.py` UI 改动未提交，等待用户确认。
+- 下一步建议继续深度统一：`明日计划` → `候选复盘` → `T+1复盘` → `未买入跟踪`。
+
+## 2026-06-02 Codex 明日计划页前端安全视觉优化
+
+### 本次背景
+
+用户要求继续逐页统一 dashboard UI，并重点识别“能点但容易误解”“假指标”“英文残留”“普通后台表格感”等问题。本轮先处理 `明日计划` 页面。
+
+### 已修复
+
+- `明日计划` 页面：
+  - 保留原有计划读取、人工编辑、保存、脚本按钮逻辑，不改交易判断。
+  - 在一键操作区新增 `LOCAL SCRIPT CONTROL` 安全说明卡，明确：
+    - 不会运行 `python run.py`
+    - 不会自动下单
+    - 不会连接券商
+    - 只是生成本地复盘/计划文件
+  - 将 `核心观察股（focus_stocks）` 从普通 dataframe 改为终端观察卡片：
+    - 股票代码
+    - 股票名称
+    - 入选原因
+    - 只读观察标签
+  - 将 `V1.6 配置状态` 从普通 dataframe 改为 `CONFIG SNAPSHOT` 只读配置卡。
+  - 修复新增 HTML 卡片未压平导致浏览器显示 `<div style=...>` 原始文本的问题。
+
+### 验收
+
+- `py_compile dashboard_app.py` 通过。
+- `git diff --check` 通过。
+- Streamlit AppTest 打开 `明日计划` 无异常。
+- 浏览器刷新 `http://localhost:8501/` 并点击 `明日计划`：
+  - 确认显示 `LOCAL SCRIPT CONTROL`。
+  - 确认显示 `FOCUS NODE`。
+  - 确认显示 `CONFIG SNAPSHOT`。
+  - 确认没有 `nan`。
+  - 确认没有 `<div style=...>` 原始 HTML。
+
+### 安全边界
+
+- 未运行 `python run.py` 或任何 `run.py` 子命令。
+- 未修改 `run.py`。
+- 未修改 `trade_review.py`。
+- 未修改 `output/trade_review.csv` 历史记录。
+- 未修改 `config/version_flags.yaml`。
+- 未修改 `launchd/*.plist`。
+- 未新增自动下单或券商连接逻辑。
+
+### 当前状态
+
+- `dashboard_app.py` UI 改动未提交，等待用户确认。
+- 下一步建议继续深度统一：`候选复盘` → `T+1复盘` → `未买入跟踪`。
+
+## 2026-06-02 Codex 候选复盘页主线板块与文案优化
+
+### 本次背景
+
+用户继续要求逐页检查 UI，识别假指标、英文/开发字段、不能点但像按钮的问题。本轮处理 `候选复盘` 页面。
+
+### 已修复
+
+- `候选复盘` 页面：
+  - 保留原有候选生命周期聚合、资金条件层观察、T+1 表现、止损跟踪读取逻辑。
+  - 将 `主线板块判断` 的普通 dataframe 改为 `SECTOR SCAN` 终端板块卡片。
+  - 去掉前台缺失提示里的 `status=...` 开发字段。
+  - 修复原因翻译函数误把 `V1.4/V1.5` 中的斜杠拆成两个原因，导致页面出现 `未知原因：V1.5` 的问题。
+
+### 验收
+
+- `py_compile dashboard_app.py` 通过。
+- `git diff --check` 通过。
+- Streamlit AppTest 打开 `候选复盘` 无异常。
+- 浏览器刷新 `http://localhost:8501/` 并点击 `候选复盘`：
+  - 确认页面打开正常。
+  - 确认没有 `nan`。
+  - 确认没有 `<div style=...>` 原始 HTML。
+  - 确认 `未知原因：V1.5` 已消失，文案正常显示为 `已回退 V1.4/V1.5`。
+
+### 安全边界
+
+- 未运行 `python run.py` 或任何 `run.py` 子命令。
+- 未修改 `run.py`。
+- 未修改 `trade_review.py`。
+- 未修改 `output/trade_review.csv` 历史记录。
+- 未修改 `config/version_flags.yaml`。
+- 未修改 `launchd/*.plist`。
+- 未新增自动下单或券商连接逻辑。
+
+### 当前状态
+
+- `dashboard_app.py` UI 改动未提交，等待用户确认。
+- 下一步建议继续深度统一：`T+1复盘` → `未买入跟踪` → `周月复盘`。
+
+## 2026-06-02 Codex T+1复盘页结算卡片化
+
+### 本次背景
+
+用户继续要求逐页修 UI，减少普通 dataframe、假指标感和未解释清楚的展示项。本轮处理 `T+1 复盘` 页面。
+
+### 已修复
+
+- `T+1 复盘` 页面：
+  - 保留原有 T+1 结算、止损、风险调整成功率读取逻辑。
+  - 将 `已完成 T+1 复盘明细` 从普通 dataframe 改为 `T+1 SETTLEMENT` 终端结算卡片。
+  - 每张卡展示：
+    - 股票名称 / 代码 / 推荐日期 / 模式
+    - 模拟收益
+    - 买入价 / 滑点后 / 止损价 / 结算方式
+    - T+1 开盘 / 最低 / 收盘 / 最大回撤
+    - 冲高 3%、冲高 5%、是否止损、风险调整成功
+    - 止损说明与止盈规则说明
+
+### 验收
+
+- `py_compile dashboard_app.py` 通过。
+- `git diff --check` 通过。
+- Streamlit AppTest 打开 `T+1 复盘` 无异常。
+- 浏览器刷新 `http://localhost:8501/` 并点击 `T+1 复盘`：
+  - 确认显示 `T+1 SETTLEMENT`。
+  - 确认没有 `nan`。
+  - 确认没有 `<div style=...>` 原始 HTML。
+
+### 安全边界
+
+- 未运行 `python run.py` 或任何 `run.py` 子命令。
+- 未修改 `run.py`。
+- 未修改 `trade_review.py`。
+- 未修改 `output/trade_review.csv` 历史记录。
+- 未修改 `config/version_flags.yaml`。
+- 未修改 `launchd/*.plist`。
+- 未新增自动下单或券商连接逻辑。
+
+### 当前状态
+
+- `dashboard_app.py` UI 改动未提交，等待用户确认。
+- 下一步建议继续深度统一：`未买入跟踪` → `周月复盘`。
+
+## 2026-06-02 Codex 未买入跟踪页原因与机会成本卡片化
+
+### 本次背景
+
+用户继续要求逐页检查 UI，减少普通表格、假指标感和误解性展示。本轮处理 `未买入跟踪` 页面。
+
+### 已修复
+
+- `未买入跟踪` 页面：
+  - 保留原有未买入样本筛选、二次观察统计、错过大涨判定逻辑。
+  - 将 `不买原因排名` 的右侧 dataframe 改为 `BLOCK REASON` 终端原因卡片。
+  - 将 `错过大涨` dataframe 改为 `MISSED SURGE` 机会成本卡片。
+  - 卡片明确提示“机会成本只用于复盘漏选，不构成补买建议”。
+  - 保留底部 `未买入完整明细` dataframe，作为详细排查表。
+
+### 验收
+
+- `py_compile dashboard_app.py` 通过。
+- `git diff --check` 通过。
+- Streamlit AppTest 打开 `未买入跟踪` 无异常。
+- 浏览器刷新 `http://localhost:8501/` 并点击 `未买入跟踪`：
+  - 确认显示 `BLOCK REASON`。
+  - 确认显示 `MISSED SURGE`。
+  - 确认没有 `nan`。
+  - 确认没有 `<div style=...>` 原始 HTML。
+
+### 安全边界
+
+- 未运行 `python run.py` 或任何 `run.py` 子命令。
+- 未修改 `run.py`。
+- 未修改 `trade_review.py`。
+- 未修改 `output/trade_review.csv` 历史记录。
+- 未修改 `config/version_flags.yaml`。
+- 未修改 `launchd/*.plist`。
+- 未新增自动下单或券商连接逻辑。
+
+### 当前状态
+
+- `dashboard_app.py` UI 改动未提交，等待用户确认。
+- 下一步建议继续深度统一：`周月复盘`。
+
+## 2026-06-02 Codex 周月复盘页模式对比卡片化
+
+### 本次背景
+
+用户继续要求逐页统一 dashboard UI，减少普通 dataframe 和旧式成绩表。本轮处理 `周月复盘` 页面。
+
+### 已修复
+
+- `周月复盘` 页面：
+  - 保留原有周期统计、模式统计、胜率、止损率、盈亏比计算逻辑。
+  - 将 `全A vs 主题龙头 对比` 从普通 dataframe 改为 `MODE SCORECARD` 终端模式对比卡片。
+  - 卡片展示推荐数、模拟触发、触发率、已 T+1 复盘、风险调整成功率、止损率、盈亏比。
+  - 保留下方柱状图和明细 tab，方便继续排查。
+
+### 验收
+
+- `py_compile dashboard_app.py` 通过。
+- `git diff --check` 通过。
+- Streamlit AppTest 打开 `周月复盘` 无异常。
+- AppTest 文本断言确认 `MODE SCORECARD` 已渲染，且无 `nan`。
+- 浏览器自动化点击该页时本轮曾出现工具超时，但 AppTest 页面级验收通过；未发现代码异常。
+
+### 安全边界
+
+- 未运行 `python run.py` 或任何 `run.py` 子命令。
+- 未修改 `run.py`。
+- 未修改 `trade_review.py`。
+- 未修改 `output/trade_review.csv` 历史记录。
+- 未修改 `config/version_flags.yaml`。
+- 未修改 `launchd/*.plist`。
+- 未新增自动下单或券商连接逻辑。
+
+### 当前状态
+
+- `dashboard_app.py` UI 改动未提交，等待用户确认。
+- 主要页面已完成第一轮风格统一；后续可做全局收口和提交拆分。
+
+## 2026-06-03 Codex UI 提交前边界复核
+
+### 当前分支
+
+- `restore/radar-terminal-keep-t`
+
+### 当前工作区
+
+- 未提交修改：
+  - `dashboard_app.py`
+  - `AI_HANDOFF.md`
+  - `AI_CHANGELOG.md`
+- 未追踪数据目录：
+  - `data/calendar/`
+  - `data/minute_today/`
+
+### 已确认状态
+
+- `trade_review.py` 持仓持续追踪 / 止损后 30 天跟踪已在此前提交中落地，当前工作区不再 dirty。
+- 自选池 13 → 27 只已在此前提交中落地，当前工作区不再 dirty。
+- 当前剩余待提交内容主要是 dashboard UI 第一轮风格统一和 AI 文档记录。
+
+### 验收
+
+- `py_compile dashboard_app.py` 通过。
+- `git diff --check` 通过。
+- 10 个页面 Streamlit AppTest 全部无异常：
+  - 今日总览
+  - 买入确认
+  - T+1 复盘
+  - 未买入跟踪
+  - 周月复盘
+  - 候选复盘
+  - 明日计划
+  - 做T观察
+  - ⭐ 我的自选
+  - 手动补跑
+- 浏览器刷新 `http://localhost:8501/`：
+  - 确认 `RADAR_TERMINAL` 顶部导航存在。
+  - 确认没有 `nan`。
+  - 确认没有 `<div style=...>` 原始 HTML。
+  - 确认主要导航项存在。
+
+### 安全边界
+
+- 未运行 `python run.py` 或任何 `run.py` 子命令。
+- 未修改 `run.py`。
+- 未修改 `trade_review.py`。
+- 未修改 `output/trade_review.csv` 历史记录。
+- 未修改 `config/version_flags.yaml`。
+- 未修改 `launchd/*.plist`。
+- 未新增自动下单或券商连接逻辑。
+
+### 建议下一步
+
+- 如果用户确认 UI 当前可接受，可以提交：
+  - `dashboard_app.py`
+  - `AI_HANDOFF.md`
+  - `AI_CHANGELOG.md`
+- 不建议提交：
+  - `data/calendar/`
+  - `data/minute_today/`
