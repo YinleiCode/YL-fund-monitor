@@ -123,6 +123,16 @@ WINDOW_END   = "10:15"
 T_WINDOW_START = 9 * 60 + 33   # 09:33 in minutes
 T_WINDOW_END   = 10 * 60 + 15  # 10:15 in minutes
 
+# ─────────────────── 朱哥 T 规则常量 ────────────────────────────────
+# 2026-06-02 用户拍板：规则 3 加"当前位置比分时均线低 3 个格子"约束。
+# 通达信/同花顺分时图纵向通常按 ±0.5% 划格，3 格 = 1.5%。
+# 阈值放成常量，方便后续调参。
+BELOW_VWAP_PCT = 0.015   # 规则 3 第 2 段：触发分钟 close 至少比分时均线低 1.5%（3 格 × 0.5%/格）
+
+DROP_PCT_MIN  = 0.007    # 规则 3 第 1 段：1-3 分钟急跌阈值 ≥ 0.7%（朱哥 2026-06-02 最新版）
+VOL_MULTIPLE_MIN = 2.0   # 规则 4 量倍数 ≥ 2.0
+SHRINK_RATIO_MAX = 0.5   # 规则 5 缩量比 ≤ 0.5
+
 
 def _time_to_minutes(t_str: str) -> int:
     """Convert HH:MM or HH:MM:SS to minutes since midnight."""
@@ -216,6 +226,26 @@ def _same_color_bars(bars: list[dict], color: str) -> list[dict]:
     return [b for b in bars if _bar_color(b["open"], b["close"]) == color]
 
 
+def _annotate_vwap_inplace(bars: list[dict]) -> None:
+    """给每根 K 加 vwap 字段 = 从开盘到本根累计 VWAP（成交量加权均价）。
+
+    2026-06-02 引入：规则 3 第 2 段「比分时图均线低 3 个格子」需要分时均线。
+    通达信/同花顺的分时均价线算法 = Σ(成交额) / Σ(成交量)。
+    分钟 K 没有 amount 字段，用 close × volume 近似（每根 K 内价格变化忽略不计）。
+
+    必须用 minute_bars 全部（从 09:30 开盘累计），不能只用 window_bars。
+    """
+    total_amount = 0.0
+    total_volume = 0.0
+    for b in bars:
+        v = b.get("volume", 0)
+        c = b.get("close", 0)
+        if v > 0 and math.isfinite(v) and math.isfinite(c):
+            total_amount += c * v
+            total_volume += v
+        b["vwap"] = (total_amount / total_volume) if total_volume > 0 else None
+
+
 def evaluate_t_signals(
     minute_bars: list[dict],
     stock_code: str,
@@ -224,10 +254,11 @@ def evaluate_t_signals(
     ma5_slope_up: Optional[bool] = None,
 ) -> list[dict]:
     """
-    朱哥 V1.6 做 T 规则（2026-06-02 用户拍板，正 T only）：
-      1. 5 日均线向上（ma5_slope_up=True）              ← 前置门
+    朱哥 V1.6 做 T 规则（2026-06-02 最新版，正 T only）：
+      1. 5 日均线向上（ma5_slope_up=True）                ← 前置门
       2. 时间在 09:33-10:15 之间
-      3. 急跌 1-3 分钟跌幅 ≥ 1%（low_absorb，下跌触发）
+      3. 急跌 1-3 分钟跌幅 ≥ 0.7%（DROP_PCT_MIN）
+         **且** 触发分钟 close 比分时图均线（VWAP）低 ≥ 1.5%（BELOW_VWAP_PCT，"3 个格子"）
       4. 触发分钟相比前 1-3 根绿分时量 ≥ 2 倍（"1 倍以上的绿量"）
       5. 倍量后下一根明显缩量（缩量比 ≤ 0.5）
 
@@ -245,6 +276,10 @@ def evaluate_t_signals(
             "rule_pass": False,
             "fail_reason": "minute_data_missing",
         }]
+
+    # 2026-06-02 规则 3 第 2 段需要分时均线（VWAP），从开盘 09:30 累计算
+    # 必须用 minute_bars 全部（含 09:30/31/32），不能只用 window_bars
+    _annotate_vwap_inplace(minute_bars)
 
     # 规则 2: 时间窗口
     window_bars = []
@@ -294,7 +329,7 @@ def evaluate_t_signals(
         if bar_color != "green":
             continue
 
-        # 规则 3: 1/2/3 分钟内累计跌幅 ≥ 1%（取最深的那个窗口）
+        # 规则 3 第 1 段: 1/2/3 分钟内累计跌幅 ≥ DROP_PCT_MIN (0.7%) (取最深的那个窗口)
         hit_move = False
         best_move_pct = 0.0
         best_window = 0
@@ -306,14 +341,22 @@ def evaluate_t_signals(
             if start_close <= 0 or not math.isfinite(start_close):
                 continue
             move_pct = (trigger_close / start_close) - 1.0
-            # 只做 low_absorb（跌 ≥ 1%）
-            if move_pct <= -0.01 and abs(move_pct) > abs(best_move_pct):
+            if move_pct <= -DROP_PCT_MIN and abs(move_pct) > abs(best_move_pct):
                 hit_move = True
                 best_move_pct = move_pct
                 best_window = w
 
         if not hit_move:
             continue
+
+        # 规则 3 第 2 段: 触发分钟 close 比分时图均线 (VWAP) 低 ≥ BELOW_VWAP_PCT (1.5%, "3 个格子")
+        vwap_val = trigger.get("vwap")
+        if vwap_val is None or vwap_val <= 0:
+            # 开盘第一根没成交量等极端情况，VWAP 无法算，保守放过该 K
+            continue
+        # 要求 trigger_close <= vwap × (1 - 0.015)
+        if trigger_close > vwap_val * (1 - BELOW_VWAP_PCT):
+            continue   # 跌得不够深（离 VWAP 不够远），不触发
 
         # 规则 4: 触发分钟量 ≥ 前 1-3 根绿 K 均量 × 2.0（"绿量 1 倍以上" = 2 倍）
         prev_green = _same_color_bars(window_bars[:i], "green")
@@ -326,10 +369,10 @@ def evaluate_t_signals(
             continue
 
         vol_multiple = trigger_vol / avg_vol
-        if vol_multiple < 2.0:
+        if vol_multiple < VOL_MULTIPLE_MIN:
             continue
 
-        # 规则 5: 下一根明显缩量（≤ 0.5 倍触发分钟量）
+        # 规则 5: 下一根明显缩量（≤ SHRINK_RATIO_MAX 倍触发分钟量）
         if i + 1 >= len(window_bars):
             # 还没有下一根（盘中实时识别时常见），记一条"待确认"占位
             signal_data = _build_signal_output(
@@ -355,7 +398,7 @@ def evaluate_t_signals(
         if next_vol < 0 or not math.isfinite(next_vol):
             continue
         shrink_ratio = (next_vol / trigger_vol) if trigger_vol > 0 else 0.0
-        shrink_confirmed = shrink_ratio <= 0.5
+        shrink_confirmed = shrink_ratio <= SHRINK_RATIO_MAX
 
         # 信号价格：缩量确认 K 的收盘价（B 点入场价）
         signal_price = next_bar["close"]
