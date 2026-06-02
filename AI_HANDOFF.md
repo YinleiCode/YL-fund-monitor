@@ -1806,3 +1806,166 @@ SHRINK_RATIO_MAX = 0.5     # 规则 5:  下一根缩量比 ≤ 0.5
 | `5e1f752` | tomorrow_plan + indicators nan | Claude |
 | `3df6d1d` | md 第 1 段 | Claude |
 | `bf9ce11` | notifier nan/inf | Claude |
+
+---
+
+## 2026-06-02 Claude（中危 bug #1 + #2 修复 + 节假日识别上线）
+
+### 本次任务
+
+修中危 3 个问题：
+
+| # | 决策方向 | 修不修 |
+|---|---|---|
+| 1 自选池跳过 V1.4 预闸 | A 方案 | ✅ 修了 |
+| 2 节假日识别 | A2 方案（akshare + fallback） | ✅ 修了 |
+| 3 launchd mac 睡眠跳期 | 不改代码 | ⚠️ 改运维（pmset 命令） |
+
+### 修改文件
+
+#### 1. `trade_review.py` — 中危 #1
+
+`_v14_pregate_main_reason()` 加入自选池跳过预闸：
+
+```python
+# 自选池标的：跳过分数门槛预闸（朱哥拍板）
+is_custom = str(row.get("is_custom_pool", "")).strip().lower() in ("true", "1", "yes")
+if is_custom:
+    return None
+```
+
+**保留 V1.4 后续判定**：开盘涨幅 / 价格关 / 市场情绪 / V1.5 资金 / V1.6 plan 全部走，
+只跳分数预闸，不跳风险检查。
+
+#### 2. `data_fetcher.py` — 中危 #2
+
+新增**节假日识别**全套机制：
+
+| 函数 | 作用 |
+|---|---|
+| `_HOLIDAYS_2026_FALLBACK` | 国务院 2025-11 发布的 2026 节假日内置 fallback |
+| `_load_trading_calendar()` | 调 akshare `tool_trade_date_hist_sina` 拉真实日历 |
+| `_is_trading_day(d)` | 周末 + 节假日均不是交易日 |
+| `_prev_weekday` / `_next_weekday` | 命名沿用（向后兼容），实际跳过周末 + 节假日 |
+| `next_trading_date` / `prev_trading_date` | 同上 |
+| `calc_dates` | 用 `_is_trading_day(today)` 替代原 weekday>=5 判断 |
+
+**Cache 策略**：
+- 写到 `data/calendar/sse_calendar.json`（30 天有效）
+- 已加 `.gitignore`，本地生成不进 git
+- 失败时 fallback 到 `_HOLIDAYS_2026_FALLBACK`
+
+#### 3. `.gitignore`
+
+新增 `data/minute_today/` + `data/calendar/` 排除项
+
+### 新增文件
+
+- 无 git 追踪的新文件
+- runtime 生成（不入 git）：
+  - `data/calendar/sse_calendar.json`（≈ 2 KB，134 个非交易日）
+
+### 禁改文件检查
+
+- `run.py`：未改
+- `trade_review.py`：本次新增一处（`_v14_pregate_main_reason` 自选池 bypass），属朱哥拍板的策略改动，**不动决策公式本身**，只加前置门 bypass
+- `output/trade_review.csv`：未改
+- `config/version_flags.yaml`：未改
+- `launchd/*.plist`：未改
+
+### 是否运行 python run.py
+
+- 否
+
+### 验收
+
+**中危 #1（自选池跳过预闸）** 5/5 mock 通过：
+- 普通候选 + 分数不足 → `full_score_not_strong_enough`
+- 普通候选 + 分数足 → `None`
+- 自选池 + 分数不足 → `None` ✅（关键修复）
+- 自选池 + 分数足 → `None`
+- 自选池 + `theme_auto` + 强度不足 → `None`（也跳过）
+
+**中危 #2（节假日识别）** 14/14 关键日期 + 4/4 next/prev 调用通过：
+- 元旦 / 春节 / 清明 / 劳动节 / 端午 / 中秋 / 国庆 全部正确识别
+- `next_trading_date('20260213')` = `20260224`（跳过春节假期 11 天）✅
+- `prev_trading_date('20260224')` = `20260213`
+- `next_trading_date('20260101')` = `20260105`（跳过元旦 + 周末）
+- `next_trading_date('20260930')` = `20261008`（跳过国庆 7 天 + 周末）
+- 实际 akshare 拉到 **134 个非交易日**（覆盖前后 1 年）
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：`8607ae2 feat: 中危 bug #1 + #2 修复（自选池跳过预闸 + 节假日识别）`
+- commit：`c26faf3 chore: gitignore add data/minute_today + data/calendar caches`
+
+### 中危 #3（launchd mac 睡眠跳期）— 运维操作，不改代码
+
+**根因**：mac 睡眠时 launchd 整个被冻结。`StartInterval` 任务（如 supervisor）漏过的触发不补；
+`StartCalendarInterval` 任务（如 check_buy）醒来后会立即跑一次（但可能晚于设定时间）。
+
+**plist 没有 `WakeUp` 有效键**，正确做法是用 `pmset` 命令让 mac 在交易日早上**主动唤醒**：
+
+```bash
+# 让 mac 周一-周五 09:25:00 自动唤醒（提前 11 分钟给 launchd 起步时间）
+sudo pmset repeat wake MTWRF 09:25:00
+```
+
+**说明**：
+- `MTWRF` = 周一-周五（M=Mon T=Tue W=Wed R=Thu F=Fri）
+- 唤醒不需要登录密码（系统级 wake event）
+- 屏幕保持锁定，只是 launchd 队列恢复运行
+- 配合之前 `e4fef60` 已把 teod 从 15:30 改到 15:35
+
+**验证**：
+```bash
+pmset -g sched    # 查看当前 schedule
+```
+
+**取消**：
+```bash
+sudo pmset repeat cancel
+```
+
+### 主干 commit 时间线（最新在上）
+
+| commit | 内容 | 谁做 |
+|---|---|---|
+| `c26faf3` | gitignore + cache 目录 | Claude（本轮）|
+| `8607ae2` | 中危 #1 自选池跳过预闸 + #2 节假日识别 | Claude（本轮）|
+| `2968143` | md：规则 3b 阈值 1.3% | Claude |
+| `9b2a583` | T 规则 3b 阈值 1.3% | Claude |
+| `b296183` | md：T 规则 3 升级 0.7%+1.5% | Claude |
+| `e3a8987` | T 规则 3 升级 0.7%+1.5%（被 9b2a583 覆盖到 1.3%）| Claude |
+| `789fb29` | md：T 模块重写 + 6 T bug | Claude |
+| `e4fef60` | T 模块按 5 条规则重写 | Claude |
+| `d7ecb77` | md 全景扫描 | Claude |
+| `82e3375` | second_check / not_bought / _gf isinf | Claude |
+| `730a6fe` | md 第 2 段 | Claude |
+| `5e1f752` | tomorrow_plan + indicators nan | Claude |
+| `3df6d1d` | md 第 1 段 | Claude |
+| `bf9ce11` | notifier nan/inf | Claude |
+| `36f5a97` | 自选池优先 + T 跨日字段 | Codex |
+| `ee5d2c7` | T 模块文档 | Codex |
+| `0145717` | T 模块实时 B/S + EOD | Codex |
+| `588d3c1` | fetch_minute_today | Codex |
+
+### 用户必做的运维操作（**两个，还没做**）
+
+```bash
+# 1. teod plist 15:35 生效（e4fef60 引入）
+launchctl unload ~/Library/LaunchAgents/com.zhuge.stock.teod.plist
+launchctl load   ~/Library/LaunchAgents/com.zhuge.stock.teod.plist
+
+# 2. mac 工作日 09:25 自动唤醒（本轮中危 #3）
+sudo pmset repeat wake MTWRF 09:25:00
+
+# 验证
+pmset -g sched
+```
+
+### Codex 工作区状态（不变）
+
+- `dashboard_app.py`（UI + RADAR 风格）— **完整保留**未触碰
+- AI 文档 Codex 8 段 — 仍在末尾

@@ -1456,3 +1456,76 @@ ee5d2c7 T 模块文档                              Codex
 
 - commit：`9b2a583 fix(t-rule): BELOW_VWAP_PCT 1.5% → 1.3%（朱哥拍板）`
 - status：仅 1 个文件改动 5+/6−，Codex dashboard_app.py 保持不动
+
+---
+
+## 2026-06-02 Claude（中危 #1 + #2 修复）
+
+### 本次任务
+
+修中危 bug：自选池跳过 V1.4 预闸 + 节假日识别（akshare 交易日历 + 内置 fallback）。
+
+### 修改文件
+
+- `trade_review.py:_v14_pregate_main_reason`
+  - 自选池 (`is_custom_pool=true`) 直接 return None，跳过分数门槛
+  - 保留 V1.4 后续 9:36 风险检查（开盘涨幅 / 价格 / 情绪 / V1.5 / V1.6）
+
+- `data_fetcher.py`
+  - 新增 `_HOLIDAYS_2026_FALLBACK`（国务院发布的 2026 标准节假日内置 dict）
+  - 新增 `_load_trading_calendar()`：调 akshare `tool_trade_date_hist_sina` 拉真实日历 → 缓存到 `data/calendar/sse_calendar.json`（30 天有效）→ 失败 fallback
+  - 新增 `_is_trading_day(d)`：weekday < 5 且不在 holidays
+  - 改 `_prev_weekday` / `_next_weekday`（命名沿用向后兼容）：跳过周末 + 节假日
+  - 改 `calc_dates`：用 `_is_trading_day` 替代 weekday>=5
+
+- `.gitignore`
+  - 新增 `data/minute_today/` + `data/calendar/` 排除项
+
+### 新增文件
+
+- 无 git 追踪文件
+- runtime 自动生成（不入 git）：`data/calendar/sse_calendar.json`
+
+### 禁改文件检查
+
+- run.py：未改
+- trade_review.py：本次改了 `_v14_pregate_main_reason` 一处（自选池 bypass，朱哥拍板）
+- output/trade_review.csv：未改
+- config/version_flags.yaml：未改
+- launchd/*.plist：未改
+- 自动下单逻辑：未新增
+- 券商连接逻辑：未新增
+
+### 是否运行 python run.py
+
+- 否
+
+### 验收
+
+- `_v14_pregate_main_reason` 5/5 mock 通过
+- 节假日识别 14/14 关键日期通过
+- `next/prev_trading_date` 4/4 调用通过
+- 实际 akshare 拉到 134 个非交易日（前后 1 年覆盖）
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commits：
+  - `8607ae2 feat: 中危 bug #1 + #2 修复`
+  - `c26faf3 chore: gitignore add data/minute_today + data/calendar caches`
+
+### 中危 #3（mac 睡眠）运维操作
+
+用户跑：
+```bash
+sudo pmset repeat wake MTWRF 09:25:00
+```
+
+让 mac 工作日 09:25 自动唤醒，11 分钟后 09:36 check_buy 准时触发。
+plist 不存在 WakeUp 键，pmset 是正确的解决路径。
+
+### 关键提示
+
+- 本次代码 2 个 commit + 1 个 .gitignore commit
+- 影响面：所有调用 `next_trading_date` / `prev_trading_date` 的代码自动受益（trade_review / build_tomorrow_plan / dashboard 等），无须改其他文件
+- Codex 在 dashboard_app.py 的脏改保持不动
