@@ -1228,3 +1228,116 @@ launchctl load ~/Library/LaunchAgents/com.zhuge.stock.teod.plist
 - **请 Codex 同步**：dashboard_app.py 的 `_gf`（~251 行）也只查 nan 不查 inf，请在你下一次提交时一并加 `math.isinf(f)`。
 - Codex 工作区脏文件：`dashboard_app.py` / `scripts/build_t_signal_observer.py` / `scripts/build_t_trade_tracker.py` / `scripts/run_t_eod.py`，本轮未触碰。
 - 不要自作主张改 V1.4 门槛、自选池逻辑、launchd plist、节假日识别 — 等用户决策。
+
+---
+
+## 2026-06-02 Claude（T 模块按朱哥规则重写 + 6 处 T bug 修复）
+
+### 本次任务
+
+朱哥给出明确的正 T 5 条规则（用户原话）：
+
+> 1. 5 日均线向上
+> 2. 时间 9:33 - 10:15 之间
+> 3. 出现急跌 1-3 分钟跌幅大于 1%
+> 4. 出现相比于前 1-3 根绿分时成交量 1 倍以上的绿量
+> 5. 倍量以后下一个成交量刚开始明显缩量
+>
+> 如果有就正 T，先买再卖，卖的时候比买的点高 1.5%-3% 就可以卖。
+
+按此规则重写 T 模块 + 顺带修 6 个 T 模块 bug。
+
+### 修改文件
+
+- `scripts/build_t_signal_observer.py`
+  - `evaluate_t_signals()` 按 5 条规则完全重写
+  - 完全移除 high_throw（高抛/反 T）触发路径
+  - 新增 `ma5_override` / `ma5_slope_up` 参数
+  - 新 CLI: `--ma5-override` / `--ma5-slope-override`
+  - **T Bug #1 修复**：`_bar_color` 平盘 K 单独归 doji，不再算 red
+  - **T Bug #3 修复**：`load_minute_csv` 加 `math.isfinite` 检查
+  - **T Bug #5 修复**：`ma10_slope_up` 不再硬编码 True，由 `--ma5-slope-override` 传真值
+
+- `scripts/build_t_trade_tracker.py`
+  - `build_trade_rows` 把 high_throw 标记为 `high_throw_disabled_only_long_t` 跳过
+  - 保留 `_scan_high_throw` 函数代码备用
+  - 保留 Codex 之前的跨日字段补充
+
+- `scripts/run_t_intraday.py`
+  - 新增 `_load_or_build_ma5_slope_cache()`：拉历史日线现算 ma5 斜率 + 缓存
+  - `_today_candidates_from_review()` 多读 trade_review.csv 的 ma5 字段
+  - `_append_signal_overrides()` 多传 `--ma5-override` / `--ma5-slope-override`
+  - 主流程在 fetch minute 之后调一次 ma5 斜率缓存
+
+- `data_fetcher.py`
+  - **T Bug #2 修复**：`fetch_minute_today` 列名缺失时按前 6 列位置兜底，避免 akshare 升级改名时 T 模块全天 0 信号
+
+- `launchd/com.zhuge.stock.teod.plist`
+  - **T Bug #10 修复**：EOD 触发 15:30 → 15:35（避开 akshare 收盘后 5 分钟数据空窗）
+  - **生效需要 `launchctl unload + load` 一次**
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- run.py：未改。
+- trade_review.py：未改。
+- output/trade_review.csv：未改。
+- config/version_flags.yaml：未改。
+- launchd/*.plist：**改了 1 个**（teod 15:30 → 15:35），属本轮明确的 bug #10 修复。
+- 自动下单逻辑：未新增。
+- 券商连接逻辑：未新增。
+
+### 是否运行 python run.py
+
+- 否。仅本地 mock 单元测试。
+
+### 验收
+
+- `py_compile` 全通过：observer / tracker / intraday / data_fetcher
+- `plutil -lint` 通过：teod plist
+- mock 单元测试 5 个场景全部正确：
+  - `_bar_color` 红/绿/平盘 3 类分类正确
+  - 规则 1 ma5 斜率向下 → 拦下 `ma5_slope_not_up`
+  - 5 条全过 → `low_absorb / sim_buy / rule_pass=True`
+  - 高抛红 K 涨 1.5% → `no_signal_triggered`（不触发反 T）
+  - 量倍数不够 → `no_signal_triggered`
+  - 缩量不够 → `rule_pass=False, shrink_not_confirmed_volume_reduction_insufficient`
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：`e4fef60 feat(t-module): 按朱哥拍板的正 T 5 条规则重写 + 修复 T 模块 6 处 bug`
+- status：6 文件改动；Codex 在 dashboard_app.py 的脏改保持不动。
+
+### 重要运维操作（用户手动）
+
+```bash
+launchctl unload ~/Library/LaunchAgents/com.zhuge.stock.teod.plist
+launchctl load   ~/Library/LaunchAgents/com.zhuge.stock.teod.plist
+```
+
+不执行的话，EOD 仍然会在 15:30 触发，T Bug #10 不会生效。
+
+### 关于 Codex 工作区
+
+本次 commit 包含 Codex 之前未提交的稳定脏改：
+- observer `_make_row` 中的 8 行安全字段落盘
+- tracker 的跨日字段（entry_report_date / event_report_date / open_days）+ 辅助函数
+- run_t_eod 的 open_count / open_overdue_count 统计
+
+这些跟我的规则改动**完全不重叠**，是稳定可 commit 的工作。Codex 下次 pull 会拿到。
+
+**Codex 仍然脏的文件**：
+- `dashboard_app.py`（UI 文案 + RADAR 风格统一，跟 T 规则不在同一路径，**完整保留**）
+
+### 给所有协作 AI 的关键提示
+
+- 主干 commit 时间线（最新在上）：`e4fef60` → `d7ecb77` → `82e3375` → `730a6fe` → `5e1f752` → `3df6d1d` → `bf9ce11` → `36f5a97` → `ee5d2c7` → `0145717` → `588d3c1`
+- T 模块现在只产生 `sim_buy`（正 T），不再有 `sim_sell` / high_throw
+- T 信号必须满足 ma5 斜率向上（朱哥拍板的硬门）
+- 每日首次跑 t_intraday 会自动建立 `data/minute_today/_ma5_slope_<today>.json` 缓存
+- Codex 工作区脏文件：仅剩 `dashboard_app.py`，本轮未触碰
+- 不要自作主张：V1.4 门槛 / 自选池逻辑 / 节假日识别 / launchd 其他 plist
