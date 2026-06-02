@@ -49,12 +49,15 @@ BUYBACK_MIN_PCT = 0.015
 BUYBACK_MAX_PCT = 0.03
 STOP_BUYBACK_PCT = 0.015
 DEFAULT_SIM_QTY = 100
+OPEN_WARN_DAYS = 3
 
 TRACKER_NOTE = "当前为做 T 模拟记录，不构成自动买卖指令。"
 
 T_TRADE_FIELDS = [
     "trade_id",
     "report_date",
+    "entry_report_date",
+    "event_report_date",
     "stock_code",
     "stock_name",
     "data_mode",
@@ -84,6 +87,7 @@ T_TRADE_FIELDS = [
     "exit_price",
     "exit_reason",
     "trade_status",
+    "open_days",
     "return_pct",
     "pnl_amount",
     "max_favorable_pct",
@@ -100,6 +104,8 @@ T_TRADE_FIELDS = [
 
 T_BS_FIELDS = [
     "report_date",
+    "entry_report_date",
+    "event_report_date",
     "stock_code",
     "stock_name",
     "point_type",
@@ -150,6 +156,31 @@ def _parse_dt(val: str) -> Optional[datetime]:
 
 def _fmt_dt(val: Optional[datetime]) -> str:
     return val.strftime("%Y-%m-%d %H:%M:%S") if val else ""
+
+
+def _parse_report_date(val: str) -> Optional[datetime]:
+    text = str(val or "").strip().replace("-", "")
+    if not text:
+        return None
+    try:
+        return datetime.strptime(text[:8], "%Y%m%d")
+    except ValueError:
+        return None
+
+
+def _report_date_from_time(val: str, fallback: str = "") -> str:
+    dt = _parse_dt(str(val or ""))
+    if dt:
+        return dt.strftime("%Y%m%d")
+    return str(fallback or "").strip()
+
+
+def _days_between(report_date: str, entry_report_date: str) -> int:
+    cur = _parse_report_date(report_date)
+    ent = _parse_report_date(entry_report_date)
+    if not cur or not ent:
+        return 0
+    return max((cur.date() - ent.date()).days, 0)
 
 
 def _fmt_num(val: Optional[float], digits: int = 4):
@@ -208,6 +239,8 @@ def _build_base_trade(row: dict) -> dict:
     return {
         "trade_id": _trade_id(row),
         "report_date": str(row.get("report_date", "")).strip(),
+        "entry_report_date": str(row.get("entry_report_date") or row.get("report_date", "")).strip(),
+        "event_report_date": str(row.get("event_report_date") or row.get("report_date", "")).strip(),
         "stock_code": str(row.get("stock_code", "")).strip(),
         "stock_name": str(row.get("stock_name", "")).strip(),
         "data_mode": str(row.get("data_mode", "real")).strip() or "real",
@@ -237,6 +270,7 @@ def _build_base_trade(row: dict) -> dict:
         "exit_price": "",
         "exit_reason": "",
         "trade_status": "open",
+        "open_days": 0,
         "return_pct": "",
         "pnl_amount": "",
         "max_favorable_pct": "",
@@ -268,8 +302,12 @@ def _resolve_intrabar_buy(bar: dict, target_price: float, stop_price: float, is_
 
 
 def _make_bs_row(trade: dict, point_type: str, point_reason: str, point_time: str, point_price, return_pct_after_exit="") -> dict:
+    event_report_date = _report_date_from_time(point_time, trade.get("report_date", ""))
     return {
-        "report_date": trade.get("report_date", ""),
+        # report_date 表示 B/S 点事件发生日；entry_report_date 保留原始入场日。
+        "report_date": event_report_date,
+        "entry_report_date": trade.get("entry_report_date") or trade.get("report_date", ""),
+        "event_report_date": event_report_date,
         "stock_code": trade.get("stock_code", ""),
         "stock_name": trade.get("stock_name", ""),
         "point_type": point_type,
@@ -554,19 +592,47 @@ def _scan_existing_open_trade(trade: dict, bars: list[dict]) -> tuple[dict, list
     return kept, []
 
 
-def _write_open_positions(trade_rows: list[dict]) -> None:
+def _write_open_positions(trade_rows: list[dict], report_date: str = "") -> None:
     open_rows = [
         {k: row.get(k, "") for k in T_TRADE_FIELDS}
         for row in trade_rows
         if str(row.get("trade_status", "")).strip() == "open"
     ]
     _write_csv(T_OPEN_POSITIONS, T_TRADE_FIELDS, open_rows)
+    if report_date:
+        dated_open = T_TRADE_DIR / f"t_open_positions_{report_date}.csv"
+        _write_csv(dated_open, T_TRADE_FIELDS, open_rows)
+
+
+def _normalize_trade_for_run(trade: dict, run_report_date: str) -> dict:
+    """统一跨日 T 记录口径：report_date=本次记录日，entry_report_date=原始入场日。"""
+    entry_report_date = (
+        str(trade.get("entry_report_date", "")).strip()
+        or _report_date_from_time(trade.get("entry_time", ""), trade.get("report_date", ""))
+        or str(trade.get("report_date", "")).strip()
+        or run_report_date
+    )
+    exit_time = str(trade.get("exit_time", "")).strip()
+    event_report_date = _report_date_from_time(exit_time, run_report_date) if exit_time else run_report_date
+    open_days = _days_between(run_report_date, entry_report_date)
+    trade["report_date"] = run_report_date
+    trade["entry_report_date"] = entry_report_date
+    trade["event_report_date"] = event_report_date
+    trade["open_days"] = open_days
+
+    if str(trade.get("trade_status", "")).strip() == "open" and open_days >= OPEN_WARN_DAYS:
+        note = str(trade.get("note", TRACKER_NOTE)).strip()
+        marker = f"已 open {open_days} 天，建议人工复核"
+        if marker not in note:
+            trade["note"] = f"{note}｜{marker}"
+    return trade
 
 
 def build_trade_rows(
     signal_rows: list[dict],
     minute_by_code: dict[str, list[dict]],
     existing_open_rows: Optional[list[dict]] = None,
+    run_report_date: str = "",
 ) -> tuple[list[dict], list[dict]]:
     trade_rows: list[dict] = []
     bs_rows: list[dict] = []
@@ -576,6 +642,8 @@ def build_trade_rows(
         trade_id = str(open_trade.get("trade_id", "")).strip()
         code = str(open_trade.get("stock_code", "")).strip()
         trade, bs = _scan_existing_open_trade(open_trade, minute_by_code.get(code, []))
+        if run_report_date:
+            trade = _normalize_trade_for_run(trade, run_report_date)
         if trade_id:
             seen_trade_ids.add(trade_id)
         trade_rows.append(trade)
@@ -590,12 +658,18 @@ def build_trade_rows(
         code = str(row.get("stock_code", "")).strip()
         sig_type = str(row.get("signal_type", "")).strip()
         bars = minute_by_code.get(code, [])
+        # 2026-06-02 用户拍板：T 模块只做正 T（low_absorb / 先买再卖），
+        # 不再处理 high_throw（反 T / 先卖再买）。
+        # _scan_high_throw 函数保留以备将来恢复，但 observer 已不再产生 high_throw 信号。
         if sig_type == "low_absorb":
             trade, bs = _scan_low_absorb(row, bars)
         elif sig_type == "high_throw":
-            trade, bs = _scan_high_throw(row, bars)
+            # 兼容历史 t_signal CSV（如果还残留 high_throw 行），不报错，但标记跳过
+            trade, bs = _data_missing_trade(row, reason="high_throw_disabled_only_long_t")
         else:
             trade, bs = _data_missing_trade(row, reason="data_missing")
+        if run_report_date:
+            trade = _normalize_trade_for_run(trade, run_report_date)
         seen_trade_ids.add(str(trade.get("trade_id", row_trade_id)))
         trade_rows.append(trade)
         bs_rows.extend(bs)
@@ -619,7 +693,7 @@ def write_outputs(report_date: str, trade_rows: list[dict], bs_rows: list[dict])
     _write_csv(dated_trade, T_TRADE_FIELDS, trade_rows)
     _write_csv(latest_trade, T_TRADE_FIELDS, trade_rows)
     _write_csv(dated_bs, T_BS_FIELDS, bs_rows)
-    _write_open_positions(trade_rows)
+    _write_open_positions(trade_rows, report_date)
     return dated_trade, latest_trade, dated_bs
 
 
@@ -656,7 +730,7 @@ def main() -> None:
         or datetime.now().strftime("%Y%m%d")
     )
     minute_by_code = _minute_map(args.input_minute_csv)
-    trade_rows, bs_rows = build_trade_rows(signal_rows, minute_by_code, existing_open_rows)
+    trade_rows, bs_rows = build_trade_rows(signal_rows, minute_by_code, existing_open_rows, report_date)
     dated_trade, latest_trade, dated_bs = write_outputs(report_date, trade_rows, bs_rows)
 
     print(f"✅ 已写入：{dated_trade}")

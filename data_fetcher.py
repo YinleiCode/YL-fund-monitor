@@ -950,6 +950,9 @@ def fetch_minute_today(
         return None
 
     # akshare 返回中文列名，映射到 build_t_signal_observer.load_minute_csv 期望格式
+    # 2026-06-02 修复：原版本如果 akshare 升级改了列名（英文 / 加前缀 / 重命名），
+    # rename 全部不匹配，df 变空 DataFrame，T 模块全天 0 信号但不报错。
+    # 加列检查 + 位置索引兜底（前 6 列假设依次是 时间/开盘/最高/最低/收盘/成交量）。
     column_map = {
         "时间":   "datetime",
         "开盘":   "open",
@@ -960,7 +963,24 @@ def fetch_minute_today(
     }
     df = df.rename(columns=column_map)
     keep = ["datetime", "open", "high", "low", "close", "volume"]
-    df = df[[c for c in keep if c in df.columns]].copy()
+    missing = [c for c in keep if c not in df.columns]
+    if missing:
+        logger.warning(
+            f"[minute] {code} akshare 返回缺少列 {missing}（可能 API 升级改名）；"
+            f"实际列: {list(df.columns)}；尝试按前 6 列位置兜底"
+        )
+        # 位置索引兜底：前 6 列重命名为期望名（如果列数足够）
+        if len(df.columns) >= 6:
+            df = df.iloc[:, :6].copy()
+            df.columns = keep
+        else:
+            logger.warning(
+                f"[minute] {code} 列数不足 6 ({len(df.columns)})，"
+                f"无法兜底；返回 None"
+            )
+            return None
+    else:
+        df = df[keep].copy()
 
     if df.empty:
         return None

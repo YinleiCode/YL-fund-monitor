@@ -46,6 +46,8 @@ def _aggregate_summary(today: str) -> dict:
         "signal_count": 0,
         "b_count":      0,
         "s_count":      0,
+        "open_count":   0,
+        "open_overdue_count": 0,
         "pnl_total":    0.0,
         "pnl_total_pct": 0.0,
         "status":       "ok",
@@ -72,7 +74,16 @@ def _aggregate_summary(today: str) -> dict:
     if t_trade.exists():
         try:
             with t_trade.open(encoding="utf-8-sig") as f:
-                summary["signal_count"] = sum(1 for _ in csv.DictReader(f))
+                rows = list(csv.DictReader(f))
+                summary["signal_count"] = len(rows)
+                for r in rows:
+                    if str(r.get("trade_status", "")).strip() == "open":
+                        summary["open_count"] += 1
+                        try:
+                            if int(float(str(r.get("open_days", "0") or "0"))) >= 3:
+                                summary["open_overdue_count"] += 1
+                        except (TypeError, ValueError):
+                            pass
         except Exception as e:
             print(f"[t_eod] 读 t_trade 失败: {e}")
 

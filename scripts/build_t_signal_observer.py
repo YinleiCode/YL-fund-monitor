@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 import os
 import sys
 from datetime import datetime, timedelta
@@ -154,6 +155,11 @@ def load_minute_csv(path: str) -> list[dict]:
     """
     Load a 1-minute CSV file.
     Returns list of dicts with keys: datetime, open, high, low, close, volume
+
+    2026-06-02 修复（T Bug #3）：原版本只 except (KeyError, ValueError)，
+    `float("nan")` 不抛异常会把 nan 吞进去，污染下游 _bar_color / move_pct /
+    vol_multiple 等所有比较运算。停牌/熔断/接口异常时可能产生 nan 值。
+    现在用 math.isfinite 检查每个字段，命中就跳过该 bar。
     """
     rows = []
     with open(path, encoding="utf-8") as f:
@@ -163,26 +169,35 @@ def load_minute_csv(path: str) -> list[dict]:
             if dt is None:
                 continue
             try:
-                rows.append({
-                    "datetime": dt,
-                    "open":     float(row["open"]),
-                    "high":     float(row["high"]),
-                    "low":      float(row["low"]),
-                    "close":    float(row["close"]),
-                    "volume":   float(row["volume"]),
-                })
+                vals = {
+                    "open":   float(row["open"]),
+                    "high":   float(row["high"]),
+                    "low":    float(row["low"]),
+                    "close":  float(row["close"]),
+                    "volume": float(row["volume"]),
+                }
             except (KeyError, ValueError):
                 continue
+            if not all(math.isfinite(v) for v in vals.values()):
+                continue   # nan/inf 跳过整根 K，避免污染下游
+            rows.append({"datetime": dt, **vals})
     return sorted(rows, key=lambda r: r["datetime"])
 
 
 # ─────────────────── 规则引擎 ────────────────────────────────────────
 
 def _bar_color(open_p: float, close_p: float) -> str:
-    """red = close > open; green = close < open."""
-    if close_p >= open_p:
+    """red = close > open; green = close < open; doji = 平盘 (open == close).
+
+    2026-06-02 修复（T Bug #1）：原版本 `close >= open` 把平盘 K 算成 red,
+    会让 high_throw 颜色匹配触发率虚高,且把平盘 K 算进同色量能基准。
+    现在严格按 close > open 才算 red,平盘单独算 doji,不进同色统计。
+    """
+    if close_p > open_p:
         return "red"
-    return "green"
+    if close_p < open_p:
+        return "green"
+    return "doji"
 
 
 def _extract_code_from_filename(path: str) -> Optional[str]:
@@ -204,11 +219,25 @@ def _same_color_bars(bars: list[dict], color: str) -> list[dict]:
 def evaluate_t_signals(
     minute_bars: list[dict],
     stock_code: str,
-    ma10_override: Optional[float] = None,
+    ma10_override: Optional[float] = None,    # 兼容旧调用；新代码用 ma5_override
+    ma5_override: Optional[float] = None,
+    ma5_slope_up: Optional[bool] = None,
 ) -> list[dict]:
     """
-    Scan minute bars for T-signals within 09:33-10:15 window.
-    Returns list of signal dicts (one per detected signal).
+    朱哥 V1.6 做 T 规则（2026-06-02 用户拍板，正 T only）：
+      1. 5 日均线向上（ma5_slope_up=True）              ← 前置门
+      2. 时间在 09:33-10:15 之间
+      3. 急跌 1-3 分钟跌幅 ≥ 1%（low_absorb，下跌触发）
+      4. 触发分钟相比前 1-3 根绿分时量 ≥ 2 倍（"1 倍以上的绿量"）
+      5. 倍量后下一根明显缩量（缩量比 ≤ 0.5）
+
+    通过 5 条全部规则 → sim_buy（正 T，先买）。止盈在 tracker 里按
+    买入价 +1.5% / +3% 自动配对，本函数只负责识别 B 点。
+
+    ⚠️ 用户明确：本规则只做正 T（先买再卖），不再产生 high_throw（高抛）信号。
+    旧代码的 high_throw 分支已删除，tracker 里 _scan_high_throw 保留但永远收不到数据。
+
+    Returns: list of signal dicts (one per detected signal).
     """
     if not minute_bars:
         return [{
@@ -217,7 +246,7 @@ def evaluate_t_signals(
             "fail_reason": "minute_data_missing",
         }]
 
-    # Filter to time window
+    # 规则 2: 时间窗口
     window_bars = []
     for b in minute_bars:
         t_str = b["datetime"].strftime("%H:%M")
@@ -231,93 +260,83 @@ def evaluate_t_signals(
             "fail_reason": "insufficient_bars_in_window",
         }]
 
-    # MA10 check
-    if ma10_override is None or ma10_override <= 0:
+    # 规则 1: 5 日均线向上（前置门，不通过整只股直接 skip）
+    # ma5_override 是 trade_review.csv 的 ma5 数值，ma5_slope_up 由 run_t_intraday 算出来的
+    # 兼容旧调用：未传 ma5_* 时 fallback 用 ma10_override（不算斜率，但避免破坏旧 sample）
+    ma_val = ma5_override if ma5_override is not None else ma10_override
+    if ma_val is None or ma_val <= 0:
         return [{
             "stock_code": stock_code,
             "rule_pass": False,
-            "fail_reason": "ma10_missing",
+            "fail_reason": "ma5_missing",
         }]
-    ma10_slope_up = False
-    # 第一版没有完整日线序列计算 MA10 斜率；这里先确保有有效 MA10 参考值。
-    ma10_slope_up = True
+    # 旧测试 / sample 模式：ma5_slope_up 未传时按 True 兜底（不阻塞老用法）
+    slope_ok = True if ma5_slope_up is None else bool(ma5_slope_up)
+    if not slope_ok:
+        return [{
+            "stock_code": stock_code,
+            "rule_pass": False,
+            "fail_reason": "ma5_slope_not_up",
+        }]
 
     signals = []
 
-    # Scan each bar as a potential trigger (start from index 3 to have 3 prior bars)
+    # 逐根 K 扫描，找触发点（从 index 3 开始才有前 3 根回看空间）
     for i in range(3, len(window_bars)):
         trigger = window_bars[i]
-        trigger_t = trigger["datetime"]
         trigger_open = trigger["open"]
         trigger_close = trigger["close"]
-        trigger_high = trigger["high"]
-        trigger_low = trigger["low"]
         trigger_vol = trigger["volume"]
         bar_color = _bar_color(trigger_open, trigger_close)
 
-        # Check 1-min, 2-min, 3-min windows for price move
+        # 用户规则只做正 T → 触发分钟必须是绿 K（下跌 K）
+        # 平盘 K (doji) 和红 K 不触发
+        if bar_color != "green":
+            continue
+
+        # 规则 3: 1/2/3 分钟内累计跌幅 ≥ 1%（取最深的那个窗口）
         hit_move = False
         best_move_pct = 0.0
         best_window = 0
-        signal_type_hint = None  # low_absorb / high_throw
-
         for w in (1, 2, 3):
             if i < w:
                 continue
             start_bar = window_bars[i - w]
             start_close = start_bar["close"]
-            if start_close == 0:
+            if start_close <= 0 or not math.isfinite(start_close):
                 continue
             move_pct = (trigger_close / start_close) - 1.0
-
-            # Check low_absorb (drop >= 1%)
+            # 只做 low_absorb（跌 ≥ 1%）
             if move_pct <= -0.01 and abs(move_pct) > abs(best_move_pct):
                 hit_move = True
                 best_move_pct = move_pct
                 best_window = w
-                signal_type_hint = "low_absorb"
-
-            # Check high_throw (rise >= 1%)
-            if move_pct >= 0.01 and move_pct > best_move_pct:
-                hit_move = True
-                best_move_pct = move_pct
-                best_window = w
-                signal_type_hint = "high_throw"
 
         if not hit_move:
             continue
 
-        # ⚠️ Color-matching: low_absorb only on green bars, high_throw only on red bars
-        if signal_type_hint == "low_absorb" and bar_color != "green":
+        # 规则 4: 触发分钟量 ≥ 前 1-3 根绿 K 均量 × 2.0（"绿量 1 倍以上" = 2 倍）
+        prev_green = _same_color_bars(window_bars[:i], "green")
+        if len(prev_green) < 1:
             continue
-        if signal_type_hint == "high_throw" and bar_color != "red":
-            continue
-
-        # Volume check: current same-color volume >= avg of previous 1-3 same-color bars * 2.0
-        prev_same_color = _same_color_bars(window_bars[:i], bar_color)
-        if len(prev_same_color) < 1:
-            continue  # Need at least 1 prior same-color bar for volume comparison
-
-        # Take up to 3 previous same-color bars
-        prev_same_color = prev_same_color[-3:]
-        avg_vol = sum(b["volume"] for b in prev_same_color) / len(prev_same_color)
+        prev_green = prev_green[-3:]
+        avg_vol = sum(b["volume"] for b in prev_green) / len(prev_green)
 
         if avg_vol <= 0:
             continue
 
         vol_multiple = trigger_vol / avg_vol
-
         if vol_multiple < 2.0:
-            continue  # Not enough volume amplification
+            continue
 
-        # Next-bar shrink check
+        # 规则 5: 下一根明显缩量（≤ 0.5 倍触发分钟量）
         if i + 1 >= len(window_bars):
-            # No next bar to confirm shrink
+            # 还没有下一根（盘中实时识别时常见），记一条"待确认"占位
             signal_data = _build_signal_output(
                 stock_code=stock_code,
-                ma10_val=ma10_override,
-                ma10_slope_up=ma10_slope_up,
-                signal_type=signal_type_hint,
+                ma10_val=ma_val,
+                ma10_slope_up=slope_ok,
+                signal_type="low_absorb",
                 trigger=trigger,
                 prev_same_color_avg_vol=avg_vol,
                 vol_multiple=vol_multiple,
@@ -332,29 +351,20 @@ def evaluate_t_signals(
 
         next_bar = window_bars[i + 1]
         next_vol = next_bar["volume"]
-        shrink_allowed = trigger_vol * 0.5
 
-        if next_vol <= 0:
-            shrink_ratio = 0.0
-        else:
-            shrink_ratio = next_vol / trigger_vol
-
+        if next_vol < 0 or not math.isfinite(next_vol):
+            continue
+        shrink_ratio = (next_vol / trigger_vol) if trigger_vol > 0 else 0.0
         shrink_confirmed = shrink_ratio <= 0.5
 
-        # Determine signal_price: use shrink bar's close
+        # 信号价格：缩量确认 K 的收盘价（B 点入场价）
         signal_price = next_bar["close"]
-
-        # Determine side
-        if signal_type_hint == "low_absorb":
-            signal_side = "sim_buy"
-        else:
-            signal_side = "sim_sell"
 
         signal_data = _build_signal_output(
             stock_code=stock_code,
-            ma10_val=ma10_override,
-            ma10_slope_up=ma10_slope_up,
-            signal_type=signal_type_hint,
+            ma10_val=ma_val,
+            ma10_slope_up=slope_ok,
+            signal_type="low_absorb",
             trigger=trigger,
             prev_same_color_avg_vol=avg_vol,
             vol_multiple=vol_multiple,
@@ -364,7 +374,7 @@ def evaluate_t_signals(
             rule_pass=shrink_confirmed,
             fail_reason="" if shrink_confirmed else "shrink_not_confirmed_volume_reduction_insufficient",
             signal_price_override=signal_price,
-            signal_side=signal_side,
+            signal_side="sim_buy",     # 正 T 只产生买入信号
             window_minutes=best_window,
             move_pct=best_move_pct,
         )
@@ -498,6 +508,15 @@ def _make_row(signal: dict, report_date: str) -> dict:
     base["data_mode"] = "real"
     base["price_is_real"] = "True"
     base["stock_name_is_real"] = "True"
+    # 安全字段必须对所有信号行显式落盘，包括未触发/数据缺失的短返回行。
+    base["execution_mode"] = "simulate"
+    base["can_execute_live"] = "False"
+    base["live_block_reason"] = "simulated_observer_only"
+    base["max_position_limit_check"] = "observer_only"
+    base["risk_check_status"] = "observer_only"
+    base["order_status"] = "not_submitted"
+    base["broker_status"] = "not_connected"
+    base["observer_note"] = OBSERVER_NOTE
 
     for k, v in signal.items():
         if k in FIELDS:
@@ -613,7 +632,12 @@ def main() -> None:
     parser.add_argument("--input-minute-csv", action="append", default=[],
                         help="1分钟数据 CSV 路径（可多次指定，如 --input-minute-csv a.csv --input-minute-csv b.csv）")
     parser.add_argument("--ma10-override", action="append", default=[],
-                        help="MA10 覆盖值，格式 CODE:VALUE（如 300001:100.0）")
+                        help="MA10 覆盖值，格式 CODE:VALUE（旧参数，保留向后兼容）")
+    # 2026-06-02 用户新 T 规则：用 MA5 + 斜率向上检查
+    parser.add_argument("--ma5-override", action="append", default=[],
+                        help="MA5 覆盖值，格式 CODE:VALUE（朱哥 T 规则第 1 条用）")
+    parser.add_argument("--ma5-slope-override", action="append", default=[],
+                        help="MA5 斜率方向，格式 CODE:1|0 （1=向上 0=向下，朱哥 T 规则前置门）")
     parser.add_argument("--name-override", action="append", default=[],
                         help="股票名称，格式 CODE:名称（如 300001:龙辰科技），查不到名称时必填")
     args = parser.parse_args()
@@ -628,6 +652,13 @@ def main() -> None:
         return
 
     ma10_overrides = parse_ma10_overrides(args.ma10_override)
+    ma5_overrides = parse_ma10_overrides(args.ma5_override)  # 复用同名 parser
+    # ma5 斜率：CODE:1 → True, CODE:0 → False
+    ma5_slope_overrides: dict[str, bool] = {}
+    for item in args.ma5_slope_override:
+        parts = item.split(":")
+        if len(parts) == 2:
+            ma5_slope_overrides[parts[0].strip()] = (parts[1].strip() in ("1", "true", "True", "TRUE", "yes"))
     name_overrides = parse_name_overrides(args.name_override)
 
     all_signals = []
@@ -652,11 +683,24 @@ def main() -> None:
 
             for code in matched_codes:
                 ma10_val = ma10_overrides.get(code)
+                ma5_val = ma5_overrides.get(code)
+                ma5_slope = ma5_slope_overrides.get(code)
                 name_val = name_overrides.get(code, "")
-                ma10_info = f", ma10={ma10_val}" if ma10_val is not None else ", ma10=未指定"
+                ma_info_parts = []
+                if ma5_val is not None:
+                    slope_tag = "↑" if ma5_slope is True else ("↓" if ma5_slope is False else "?")
+                    ma_info_parts.append(f"ma5={ma5_val}{slope_tag}")
+                if ma10_val is not None:
+                    ma_info_parts.append(f"ma10={ma10_val}")
+                ma_info = (", " + " ".join(ma_info_parts)) if ma_info_parts else ", ma=未指定"
                 name_info = f", name={name_val}" if name_val else ""
-                print(f"  🔍 扫描 {code}{name_info}{ma10_info}{sample_tag} ...")
-                sigs = evaluate_t_signals(minute_bars, code, ma10_override=ma10_val)
+                print(f"  🔍 扫描 {code}{name_info}{ma_info}{sample_tag} ...")
+                sigs = evaluate_t_signals(
+                    minute_bars, code,
+                    ma10_override=ma10_val,
+                    ma5_override=ma5_val,
+                    ma5_slope_up=ma5_slope,
+                )
                 for s in sigs:
                     if is_sample:
                         # 测试样例模式：使用测试名称，标记为非真实

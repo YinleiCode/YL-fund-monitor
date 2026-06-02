@@ -16,11 +16,13 @@
 不会运行 run.py 任何子命令。
 """
 import csv
+import json
 import subprocess
 import sys
 import time as _time
 from datetime import date
 from pathlib import Path
+from typing import Optional
 
 PROJECT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT))
@@ -78,6 +80,7 @@ def _today_candidates_from_review() -> list[dict]:
                     "code": code,
                     "name": str(r.get("stock_name", "")).strip(),
                     "ma10": str(r.get("ma10", "")).strip(),
+                    "ma5":  str(r.get("ma5", "")).strip(),
                 })
                 seen_set.add(code)
     except Exception as e:
@@ -86,22 +89,82 @@ def _today_candidates_from_review() -> list[dict]:
     return _merge_open_t_positions(seen)
 
 
+def _load_or_build_ma5_slope_cache(codes: list[str], today: str) -> dict[str, bool]:
+    """加载今日 ma5 斜率缓存；不存在时拉历史日线现算并落盘。
+
+    2026-06-02 引入：朱哥 T 规则第 1 条「5 日均线向上」前置门。
+    缓存路径：data/minute_today/_ma5_slope_<today>.json，每天首次跑时建立，
+    每分钟后续跑直接读，避免每分钟拉网络。
+
+    Returns: {code: True/False}，True=ma5 斜率向上，False=向下/平/数据不足。
+    """
+    cache_path = PROJECT / "data" / "minute_today" / f"_ma5_slope_{today}.json"
+    if cache_path.exists():
+        try:
+            return json.loads(cache_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            print(f"[t_intraday] ma5 斜率缓存损坏（{e}），重新计算")
+    # 拉历史日线计算
+    try:
+        from data_fetcher import fetch_batch_history
+        # 拉 8 天历史，确保有 6 个交易日可算两个 ma5
+        hist_map = fetch_batch_history(codes, days=8, delay=0.2)
+    except Exception as e:
+        print(f"[t_intraday] 拉历史日线失败（{e}），ma5 斜率全部默认 True 兜底")
+        slope = {c: True for c in codes}
+        return slope
+    slope: dict[str, bool] = {}
+    for code in codes:
+        hist = hist_map.get(code)
+        if hist is None or len(hist) < 6:
+            slope[code] = True   # 数据不足兜底，避免误杀（让规则 1 的检查放过）
+            continue
+        try:
+            close = hist["close"]
+            ma5_today = float(close.iloc[-5:].mean())
+            ma5_prev  = float(close.iloc[-6:-1].mean())
+            slope[code] = (ma5_today > ma5_prev)
+        except Exception:
+            slope[code] = True
+    # 落盘缓存
+    try:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(json.dumps(slope, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as e:
+        print(f"[t_intraday] 写 ma5 斜率缓存失败（{e}），不阻塞")
+    return slope
+
+
 def _today_codes_from_review() -> list[str]:
     """兼容旧调用：只返回当日候选代码。"""
     return [r["code"] for r in _today_candidates_from_review()]
 
 
-def _append_signal_overrides(cmd: list[str], candidates: list[dict], fetched: list[str]) -> None:
-    """给 build_t_signal_observer.py 追加名称和 MA10，避免真实记录字段缺失。"""
+def _append_signal_overrides(
+    cmd: list[str],
+    candidates: list[dict],
+    fetched: list[str],
+    ma5_slope: Optional[dict] = None,
+) -> None:
+    """给 build_t_signal_observer.py 追加名称 + MA5/MA10 数值 + MA5 斜率。
+
+    2026-06-02 改：朱哥 T 规则用 MA5 + 斜率，旧 MA10 仍传以保持向后兼容。
+    """
     by_code = {r["code"]: r for r in candidates}
     for code in fetched:
         row = by_code.get(code, {})
         name = str(row.get("name", "")).strip()
         ma10 = str(row.get("ma10", "")).strip()
+        ma5  = str(row.get("ma5",  "")).strip()
         if name:
             cmd += ["--name-override", f"{code}:{name}"]
         if ma10:
             cmd += ["--ma10-override", f"{code}:{ma10}"]
+        if ma5:
+            cmd += ["--ma5-override", f"{code}:{ma5}"]
+        # MA5 斜率向上=1，否则=0
+        if ma5_slope is not None and code in ma5_slope:
+            cmd += ["--ma5-slope-override", f"{code}:{'1' if ma5_slope[code] else '0'}"]
 
 
 def main() -> int:
@@ -137,6 +200,15 @@ def main() -> int:
         print(f"[t_intraday] 全部股票拉取失败，跳过 signal 识别")
         return 0
 
+    # 1.5 2026-06-02 引入：朱哥 T 规则第 1 条「5 日均线向上」前置门
+    # 拉历史日线现算 ma5 斜率（缓存到 _ma5_slope_<today>.json，每天首次跑时建立）
+    try:
+        ma5_slope = _load_or_build_ma5_slope_cache(fetched, today)
+        print(f"[t_intraday] ma5 斜率: {ma5_slope}")
+    except Exception as e:
+        print(f"[t_intraday] 算 ma5 斜率失败（{e}），全部默认 True 兜底")
+        ma5_slope = {c: True for c in fetched}
+
     # 2. 调 build_t_signal_observer.py 识别信号
     observer = PROJECT / "scripts" / "build_t_signal_observer.py"
     cmd = [
@@ -146,7 +218,7 @@ def main() -> int:
     ]
     for code in fetched:
         cmd += ["--input-minute-csv", str(minute_dir / f"{today}_{code}.csv")]
-    _append_signal_overrides(cmd, candidates, fetched)
+    _append_signal_overrides(cmd, candidates, fetched, ma5_slope=ma5_slope)
 
     print(f"[t_intraday] 调用 build_t_signal_observer ...")
     r = subprocess.run(cmd, capture_output=True, text=True, cwd=str(PROJECT))
