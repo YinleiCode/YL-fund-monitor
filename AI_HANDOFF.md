@@ -1621,3 +1621,133 @@ cat output/state/t_summary_20260602.json 2>/dev/null
 | `ee5d2c7` | T 模块文档 | Codex |
 | `0145717` | T 模块实时 B/S + EOD（原始版本） | Codex |
 | `588d3c1` | fetch_minute_today | Codex |
+
+---
+
+## 2026-06-02 Claude（T 规则 3 升级：跌幅 0.7% + 分时均线低 1.5%）
+
+### 朱哥拍板的最新 T 规则（与上一版差异）
+
+> 1. 5 日均线向上
+> 2. 时间 09:33-10:15 之间
+> 3. **出现急跌 1-3 分钟跌幅大于等于 0.7% 且当前位置比分时图均线低三个格子及以上**
+> 4. 相比前 1-3 根绿分时成交量 1 倍以上的绿量
+> 5. 倍量以后下一个成交量明显缩量
+>
+> 如果有就正 T，先买再卖，卖的时候比买的点高 1.5%-3% 就可以卖
+
+**与 e4fef60 版本的差异**（用户第二次拍板）：
+
+| 项 | e4fef60 | e3a8987（本次）|
+|---|---|---|
+| 跌幅阈值 | ≥ 1% | **≥ 0.7%** |
+| 分时均线约束 | 无 | **新增：触发分钟 close 比分时均线（VWAP）低 ≥ 1.5%（3 个格子）** |
+| 时间窗口 | 09:33-10:15 | 09:33-10:15（不变） |
+| 量倍数 | ≥ 2.0 | ≥ 2.0（不变） |
+| 缩量比 | ≤ 0.5 | ≤ 0.5（不变） |
+| 止盈 | +1.5%/+3% | +1.5%/+3%（不变） |
+
+### "3 个格子 = 1.5%" 的推断
+
+通达信/同花顺分时图纵向网格按 ±0.5% / 格划分（标准做法），所以"3 个格子 = 1.5%"。
+
+如果朱哥后续指明是别的百分比（例如 2% 或 3%），改一行常量即可：
+
+```python
+# scripts/build_t_signal_observer.py:130
+BELOW_VWAP_PCT = 0.015   # 改这里
+```
+
+### 实现要点
+
+**分时均线（VWAP）算法**：
+```
+VWAP = Σ(close × volume) / Σ(volume)
+```
+- 从 **09:30 开盘**累计，不能只用 09:33-10:15 窗口
+- 分钟 K 没有 amount 字段，用 `close × volume` 近似（每根 K 内价格变化忽略）
+- 与通达信/同花顺的"分时均价线"算法一致
+
+### 修改文件
+
+- `scripts/build_t_signal_observer.py`
+  - 常量 `DROP_PCT_MIN`: 0.01 → **0.007**
+  - 常量 `BELOW_VWAP_PCT`: 已存在 0.015（沿用）
+  - 新增 `_annotate_vwap_inplace()` 函数
+  - `evaluate_t_signals()` 入口调一次 `_annotate_vwap_inplace`
+  - 规则 3 拆成两段：跌幅检查 + VWAP 距离检查
+  - 把硬编码 2.0 / 0.5 换成 `VOL_MULTIPLE_MIN` / `SHRINK_RATIO_MAX` 常量
+
+### 新增文件
+
+- 无
+
+### 禁改文件检查
+
+- `run.py`：未改
+- `trade_review.py`：未改
+- `output/trade_review.csv`：未改
+- `config/version_flags.yaml`：未改
+- `launchd/*.plist`：未改
+- 自动下单逻辑：未新增
+- 券商连接逻辑：未新增
+
+### 是否运行 python run.py
+
+- 否。仅本地 mock 单元测试
+
+### 验收
+
+- `py_compile build_t_signal_observer.py` 通过
+- 6 个场景 mock 测试全部正确：
+  1. VWAP 算法手算对比，误差 < 1e-6
+  2. 规则 3 第 1 段通过、第 2 段不过（vwap 差 0.7% < 1.5%）→ 不触发
+  3. 规则 3 完整版 + 缩量 → `sim_buy / rule_pass=True / signal_price=96.4`
+  4. 跌幅恰好 0.7% 边界 → 不触发（vwap 距离不够）
+  5. ma5 斜率向下 → `ma5_slope_not_up`
+  6. 红 K 大涨 → `no_signal_triggered`（反 T 已删除）
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：`e3a8987 feat(t-rule): 规则 3 升级 — 跌幅 0.7% + 分时均线低 1.5%（3 格）`
+- status：仅 1 个文件被改；Codex 工作区脏文件保持不动
+
+### 调参指南（给用户和未来 AI）
+
+所有阈值都在 `scripts/build_t_signal_observer.py` 第 128-135 行的常量区，改一行就生效：
+
+```python
+BELOW_VWAP_PCT = 0.015   # 规则 3 第 2 段: 低于 VWAP（3 格 = 1.5%）
+DROP_PCT_MIN  = 0.007    # 规则 3 第 1 段: 1-3 分钟跌幅阈值 0.7%
+VOL_MULTIPLE_MIN = 2.0   # 规则 4: 量倍数 ≥ 2.0
+SHRINK_RATIO_MAX = 0.5   # 规则 5: 缩量比 ≤ 0.5
+```
+
+**实战调参建议**：
+- 信号过密 → 上调 DROP_PCT_MIN（如 0.8%）或 BELOW_VWAP_PCT（如 2%）
+- 信号过稀 → 下调 BELOW_VWAP_PCT（如 1%）或 SHRINK_RATIO_MAX（如 0.6）
+- 假信号多 → 上调 VOL_MULTIPLE_MIN（如 2.5）
+
+### 主干 commit 时间线（最新在上）
+
+| commit | 内容 | 谁做 |
+|---|---|---|
+| `e3a8987` | T 规则 3 升级（跌幅 0.7% + VWAP 低 1.5%） | Claude（本轮） |
+| `789fb29` | md：T 模块重写 + 6 T bug | Claude |
+| `e4fef60` | T 模块按 5 条规则重写（第 1 版规则） | Claude |
+| `d7ecb77` | md 状态板 + 6 类全景扫描 | Claude |
+| `82e3375` | second_check / not_bought / _gf isinf | Claude |
+| `730a6fe` | md 第 2 段 | Claude |
+| `5e1f752` | tomorrow_plan 不更新 + indicators nan | Claude |
+| `3df6d1d` | md 第 1 段 | Claude |
+| `bf9ce11` | notifier nan/inf | Claude |
+| `36f5a97` | 自选池优先 + T 跨日字段 | Codex |
+| `ee5d2c7` | T 模块文档 | Codex |
+| `0145717` | T 模块实时 B/S + EOD（原始版本） | Codex |
+| `588d3c1` | fetch_minute_today | Codex |
+
+### Codex 工作区状态（不变）
+
+- `dashboard_app.py`（UI 文案 + RADAR 风格统一）— 本轮**完整保留**未触碰
+- AI 文档中 Codex 段 — 备份在 `/tmp/{handoff,changelog}_round5.md.bak`，恢复脚本在 commit 之后会自动跑

@@ -1341,3 +1341,94 @@ launchctl load   ~/Library/LaunchAgents/com.zhuge.stock.teod.plist
 - 每日首次跑 t_intraday 会自动建立 `data/minute_today/_ma5_slope_<today>.json` 缓存
 - Codex 工作区脏文件：仅剩 `dashboard_app.py`，本轮未触碰
 - 不要自作主张：V1.4 门槛 / 自选池逻辑 / 节假日识别 / launchd 其他 plist
+
+---
+
+## 2026-06-02 Claude（T 规则 3 升级：跌幅 0.7% + 分时均线低 1.5%）
+
+### 本次任务
+
+朱哥 2026-06-02 第二次拍板的规则 3 完整版：
+- 旧：跌幅 ≥ 1%
+- 新：**跌幅 ≥ 0.7% 且当前位置比分时图均线低 3 个格子（1.5%）及以上**
+- 时间窗口 09:33-10:15 不变
+
+### 修改文件
+
+- `scripts/build_t_signal_observer.py`
+  - 常量 `DROP_PCT_MIN`: 0.01 → 0.007
+  - 已存在常量 `BELOW_VWAP_PCT`: 0.015（沿用，3 格 × 0.5%/格）
+  - 新增 `_annotate_vwap_inplace()`：在每根 K 上附加 `vwap` 字段，从 09:30 开盘累计 Σ(close×volume)/Σ(volume)
+  - `evaluate_t_signals()` 入口调用一次该函数
+  - 规则 3 在原跌幅检查后追加一行：`if trigger_close > vwap × (1 - BELOW_VWAP_PCT): continue`
+  - 顺手把硬编码 2.0 / 0.5 换成 `VOL_MULTIPLE_MIN` / `SHRINK_RATIO_MAX` 常量
+
+### 新增文件
+
+- 无
+
+### 禁改文件检查
+
+- run.py：未改
+- trade_review.py：未改
+- output/trade_review.csv：未改
+- config/version_flags.yaml：未改
+- launchd/*.plist：未改
+- 自动下单逻辑：未新增
+- 券商连接逻辑：未新增
+
+### 是否运行 python run.py
+
+- 否
+
+### 验收
+
+- `py_compile build_t_signal_observer.py` 通过
+- 6 个 mock 场景全部正确分流：
+  1. VWAP 算法误差 < 1e-6
+  2. 规则 3 第 1 段过、第 2 段不过 → 不触发
+  3. 完整通过 → `sim_buy / rule_pass=True / signal_price=96.4 / move_pct=-3.26 / shrink_ratio=0.29`
+  4. 边界跌幅 0.7% + vwap 距离不够 → 不触发
+  5. ma5 斜率向下 → `ma5_slope_not_up`
+  6. 红 K 大涨 → `no_signal_triggered`
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：`e3a8987 feat(t-rule): 规则 3 升级 — 跌幅 0.7% + 分时均线低 1.5%（3 格）`
+- status：仅 1 文件改动；Codex 在 dashboard_app.py 的脏改保持不动
+
+### 调参指南
+
+所有阈值集中在 `scripts/build_t_signal_observer.py:128-135`，一行改：
+
+```python
+BELOW_VWAP_PCT = 0.015   # 改成 0.02 = 2 格 / 0.025 = 5 格 等
+DROP_PCT_MIN  = 0.007    # 跌幅基线
+VOL_MULTIPLE_MIN = 2.0
+SHRINK_RATIO_MAX = 0.5
+```
+
+### 关键提示
+
+- 本规则与 e4fef60 共用大部分代码，**只有跌幅阈值和 VWAP 距离这两个改动**
+- VWAP 是从 09:30 累计算，所以即使没出现 trigger 也会先附加 vwap 字段（轻微性能开销，每只股 240 根 K，可忽略）
+- "3 个格子 = 1.5%" 是基于通达信/同花顺纵向分格 0.5%/格 的标准做法的推断；如果朱哥指明别的百分比，改 `BELOW_VWAP_PCT` 一行即可
+
+### 主干 commit 时间线（最新在上）
+
+```
+e3a8987 T 规则 3 升级 0.7% + VWAP 1.5%       Claude（本轮）
+789fb29 md：T 模块重写 + 6 T bug              Claude
+e4fef60 T 模块按 5 条规则重写（第 1 版）       Claude
+d7ecb77 md 状态板 + 6 类全景扫描              Claude
+82e3375 second_check / not_bought / _gf isinf Claude
+730a6fe md 第 2 段                             Claude
+5e1f752 tomorrow_plan + indicators nan        Claude
+3df6d1d md 第 1 段                             Claude
+bf9ce11 notifier nan/inf                       Claude
+36f5a97 自选池优先 + T 跨日字段                Codex
+ee5d2c7 T 模块文档                              Codex
+0145717 T 模块实时 B/S + EOD                    Codex
+588d3c1 fetch_minute_today                     Codex
+```
