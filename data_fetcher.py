@@ -97,16 +97,142 @@ def get_run_provenance() -> dict:
 
 # =================== 底层工具 ===================
 
+# 2026-06-02 引入：节假日识别（中危 #2 修复）
+# 原版本 next_trading_date / prev_trading_date 注释明确「仅排除周末，不含节假日」，
+# 5e1f752 commit 让 update_review 自动生成 tomorrow_plan 后，节假日前后会指向非交易日。
+#
+# 修复策略：
+#   1. 启动时调 akshare tool_trade_date_hist_sina 拉真实交易日历，缓存到
+#      data/calendar/sse_calendar.json（30 天有效期，避免每次 import 都打网络）
+#   2. 网络失败时 fallback 到内置 2026 节假日 dict（国务院发布的标准节假日）
+#   3. _next_weekday / _prev_weekday 增加 holidays 集合检查（仍兼容旧调用）
+
+# 内置 2026 节假日 fallback（YYYYMMDD 格式）
+# 来源：国务院 2025-11 发布的 2026 年节假日安排
+_HOLIDAYS_2026_FALLBACK: set = {
+    # 元旦
+    "20260101", "20260102",
+    # 春节
+    "20260216", "20260217", "20260218", "20260219", "20260220", "20260223", "20260224",
+    # 清明
+    "20260403", "20260406",
+    # 劳动节
+    "20260501", "20260504", "20260505",
+    # 端午节
+    "20260619",
+    # 中秋节
+    "20260925",
+    # 国庆节 + 中秋
+    "20261001", "20261002", "20261005", "20261006", "20261007", "20261008",
+}
+
+_HOLIDAYS_CACHE: Optional[set] = None   # 模块级缓存，避免反复读盘
+
+
+def _load_trading_calendar() -> set:
+    """返回非交易日集合（YYYYMMDD 字符串）。
+
+    优先级：
+      1. 本地 cache (data/calendar/sse_calendar.json) < 30 天有效
+      2. 网络拉 akshare 交易日历，全集合 - 范围内所有日 = 非交易日
+      3. fallback 到 _HOLIDAYS_2026_FALLBACK
+    """
+    global _HOLIDAYS_CACHE
+    if _HOLIDAYS_CACHE is not None:
+        return _HOLIDAYS_CACHE
+
+    cache_path = Path(__file__).resolve().parent / "data" / "calendar" / "sse_calendar.json"
+    try:
+        if cache_path.exists():
+            import json as _json
+            data = _json.loads(cache_path.read_text(encoding="utf-8"))
+            built_at = data.get("built_at", "")
+            holidays = set(data.get("holidays", []))
+            if built_at and holidays:
+                # 缓存 30 天有效
+                try:
+                    bt = datetime.strptime(built_at, "%Y-%m-%d")
+                    if (datetime.now() - bt).days < 30:
+                        _HOLIDAYS_CACHE = holidays
+                        return _HOLIDAYS_CACHE
+                except Exception:
+                    pass
+    except Exception as e:
+        logger.warning(f"[calendar] 读 cache 失败: {e}")
+
+    # 缓存过期或不存在，调 akshare 拉
+    try:
+        import akshare as ak
+        df = ak.tool_trade_date_hist_sina()
+        if df is not None and len(df) > 0:
+            # df 是真实交易日 list，构造对应"非交易日"集合较复杂
+            # 简化：只把"未来 365 天内的非 weekday 交易日"提取作 holidays
+            # 实际上交易日历给的是 trade_date 列表，我们反推 holidays = weekday \ trade_date
+            from datetime import date as _date_cls
+            trade_dates: set = set()
+            for d in df.iloc[:, 0]:
+                try:
+                    if hasattr(d, "strftime"):
+                        trade_dates.add(d.strftime("%Y%m%d"))
+                    else:
+                        trade_dates.add(str(d).replace("-", "")[:8])
+                except Exception:
+                    continue
+            # 构造前后 1 年的 weekday 集合，减去 trade_dates 得 holidays
+            # 范围 (-365, 365) 覆盖当年 + 跨年节假日（如春节通常 2-3 月，但跨度可超过 30 天）
+            holidays: set = set()
+            today = _date_cls.today()
+            for i in range(-365, 365):
+                d = today + timedelta(days=i)
+                if d.weekday() < 5:
+                    ds = d.strftime("%Y%m%d")
+                    if ds not in trade_dates:
+                        holidays.add(ds)
+
+            # 写缓存
+            try:
+                import json as _json
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                cache_path.write_text(
+                    _json.dumps({
+                        "built_at": datetime.now().strftime("%Y-%m-%d"),
+                        "source":   "akshare:tool_trade_date_hist_sina",
+                        "holidays": sorted(holidays),
+                    }, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                logger.info(f"[calendar] 已写入 cache：{len(holidays)} 个非交易日")
+            except Exception as e:
+                logger.warning(f"[calendar] 写 cache 失败: {e}")
+
+            _HOLIDAYS_CACHE = holidays
+            return _HOLIDAYS_CACHE
+    except Exception as e:
+        logger.warning(f"[calendar] akshare 拉交易日历失败: {e}，使用内置 2026 fallback")
+
+    _HOLIDAYS_CACHE = set(_HOLIDAYS_2026_FALLBACK)
+    return _HOLIDAYS_CACHE
+
+
+def _is_trading_day(d: date) -> bool:
+    """周末或节假日均不是交易日。"""
+    if d.weekday() >= 5:
+        return False
+    return d.strftime("%Y%m%d") not in _load_trading_calendar()
+
+
 def _prev_weekday(d: date) -> date:
+    """命名沿用 _prev_weekday（向后兼容），实际跳过周末 + 节假日。"""
     d = d - timedelta(days=1)
-    while d.weekday() >= 5:
+    while not _is_trading_day(d):
         d -= timedelta(days=1)
     return d
 
 
 def _next_weekday(d: date) -> date:
+    """命名沿用 _next_weekday（向后兼容），实际跳过周末 + 节假日。"""
     d = d + timedelta(days=1)
-    while d.weekday() >= 5:
+    while not _is_trading_day(d):
         d += timedelta(days=1)
     return d
 
@@ -119,9 +245,8 @@ def calc_dates() -> Tuple[str, str]:
     """
     now     = datetime.now()
     today   = now.date()
-    weekday = today.weekday()
 
-    if weekday >= 5:
+    if not _is_trading_day(today):
         data_date   = _prev_weekday(today)
         report_date = _next_weekday(today)
     elif now.hour >= 15:
@@ -139,13 +264,13 @@ def _last_trading_date() -> str:
 
 
 def next_trading_date(date_str: str) -> str:
-    """返回 date_str 的下一个交易日（仅排除周末，不含节假日）。"""
+    """返回 date_str 的下一个交易日（排除周末 + 节假日）。"""
     d = datetime.strptime(date_str, "%Y%m%d").date()
     return _next_weekday(d).strftime("%Y%m%d")
 
 
 def prev_trading_date(date_str: str) -> str:
-    """返回 date_str 的前一个交易日（仅排除周末，不含节假日）。"""
+    """返回 date_str 的前一个交易日（排除周末 + 节假日）。"""
     d = datetime.strptime(date_str, "%Y%m%d").date()
     return _prev_weekday(d).strftime("%Y%m%d")
 

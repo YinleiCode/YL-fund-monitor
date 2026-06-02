@@ -800,7 +800,17 @@ def _v14_pregate_main_reason(row: pd.Series, mode: str, cfg: dict) -> Optional[s
     V1.4「有效推荐」预闸：返回主因代码或 None（通过）。
     theme_auto: theme_strength 必须达标
     full:       total_score / popularity_score / technical_score 同时达标
+
+    2026-06-02 修复：自选池 (is_custom_pool=True) 标的跳过预闸。
+    朱哥已手工筛选 13 只龙头自选池，分数关由人工保证；预闸放行后
+    仍走 V1.4 的「开盘涨幅 + 价格关 + 市场情绪」9:36 风险判定，
+    避免弱市误买。
     """
+    # 自选池标的：跳过分数门槛预闸（朱哥拍板）
+    is_custom = str(row.get("is_custom_pool", "")).strip().lower() in ("true", "1", "yes")
+    if is_custom:
+        return None
+
     v14 = cfg.get("buy_rules", {}).get("v1_4", {})
     if mode == "theme_auto":
         ts_min = float(v14.get("theme_strength_min", 50))
