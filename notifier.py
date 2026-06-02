@@ -3,6 +3,7 @@
 """
 import csv
 import logging
+import math
 import os
 from datetime import datetime
 from pathlib import Path
@@ -863,20 +864,37 @@ def format_monthly_review_message(summary: dict) -> tuple:
 
 
 def _fmt_pct(v, na: str = "—") -> str:
-    """把 0.0152 这样的小数格式化成 +1.52%；None / 非数字返回 na。"""
+    """把 0.0152 这样的小数格式化成 +1.52%；None / 非数字 / NaN / Inf 都返回 na。
+
+    2026-06-02 修：原版只拦 TypeError / ValueError，但 `float("nan")` 不抛异常，
+    会返回 NaN，然后 f-string 把 NaN 格式化成字符串 "nan%"，污染推送。
+    现在用 math.isnan / math.isinf 显式拦截。
+    """
     try:
         f = float(v)
-        sign = "+" if f >= 0 else ""
-        return f"{sign}{f * 100:.2f}%"
     except (TypeError, ValueError):
         return na
+    if math.isnan(f) or math.isinf(f):
+        return na
+    sign = "+" if f >= 0 else ""
+    return f"{sign}{f * 100:.2f}%"
 
 
 def _fmt_num(v, digits: int = 2, na: str = "—") -> str:
+    """数字格式化；None / 非数字 / NaN / Inf 都返回 na。
+
+    2026-06-02 修：见 _fmt_pct 同步注释。
+    实际案例：2026-06-01 早盘 3+3 推送里第 3 名 胜宏科技 显示 "总分 nan" /
+    "空间 nan"，就是 scorer 算出 NaN（某分项除零或缺历史数据）写进 CSV，
+    morning-digest 读出来 float() 不报错，格式化输出 "nan"。
+    """
     try:
-        return f"{float(v):.{digits}f}"
+        f = float(v)
     except (TypeError, ValueError):
         return na
+    if math.isnan(f) or math.isinf(f):
+        return na
+    return f"{f:.{digits}f}"
 
 
 def _format_morning_section(
