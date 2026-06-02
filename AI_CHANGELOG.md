@@ -1087,3 +1087,80 @@ launchctl load ~/Library/LaunchAgents/com.zhuge.stock.teod.plist
 3. 15:30 后核对 `output/t_trade/eod_summary_*.csv` 与 `logs/auto_run.log`。
 4. 评估是否把 `check_buy_v16.plist` 触发时间前移 1–2 分钟。
 5. 明早确认 morning-digest 龙头池字段不再出现 `nan`。
+
+---
+
+## 2026-06-02 Claude（实战首日两处致命 bug 修复）
+
+### 本次任务
+
+- 用户反馈"实战首日全天 0 笔买入信号"，要求查代码逻辑 bug。
+- 定位并修复两个真·代码 bug（非数据源问题）。
+
+### 修改文件
+
+- `scripts/run_update_review.sh`（+15 / −1）
+  - 在 `run.py --update-review` 之后追加 `python scripts/build_tomorrow_plan.py --merge-keep-manual`。
+  - 优先返回 update_review 的 exit code；update_review 成功后再返回 build_plan 的 exit code。
+
+- `indicators.py`（+22 / −2）
+  - 第 128-129 行：`dist_60d_pct` 在 `max_60d` 异常（0 / nan / inf / 负数）时兜底 0.0。
+  - 第 132 行原始：
+    ```python
+    below_ma20_pct = float(spot_row.get("below_ma20_pct", (cur_close / ma20 - 1) * 100))
+    ```
+    修复后：先 `try float` + `np.isfinite` 检查，命中 nan/inf/缺失/None/`'nan'` 字符串则回退到本地 `(cur_close/ma20-1)*100`；`ma20` 也不可用时兜底 0.0。
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- run.py：未改。
+- trade_review.py：未改。
+- output/trade_review.csv：未改。
+- config/version_flags.yaml：未改。
+- launchd/*.plist：未改。
+- 自动下单逻辑：未新增。
+- 券商连接逻辑：未新增。
+
+### 是否运行 python run.py
+
+- 否。仅本地 mock 单元测试。
+
+### 验收
+
+- `python -m py_compile indicators.py` 通过。
+- `bash -n scripts/run_update_review.sh` 通过。
+- mock 单元测试 7/7：
+  - `below_ma20_pct`：spot 正常值 / NaN / Inf / 缺失 / None / 字符串 `'nan'` / ma20 也 nan，全部正确兜底。
+  - `dist_60d_pct`：max_60d 正常 / 0 / nan / inf / 负数，全部正确兜底。
+- 复刻胜宏 6/1 真实数据：旧逻辑 → space_score=nan，新逻辑 → `_score_dist_ma20=2.0`，total 链路恢复有限值。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：`5e1f752 fix: 2026-06-02 实战首日两处致命 bug`
+- status：仅 2 个文件被改；Codex 工作区脏文件全部保持不动。
+
+### 影响范围回溯
+
+- Bug #1（plan 不更新）：5/29 之后**每个交易日**的 check_buy 都被影响（5/30 周末跳过、6/1、6/2 两个交易日均回退到 V1.4）。
+- Bug #2（nan 传染）：任何 spot 快照 below_ma20_pct 字段缺/nan 的股票都会产 total=nan。胜宏科技 6/1 巨幅震荡日触发。
+
+### 遗留问题（本轮未处理）
+
+1. **V1.4 预闸门槛对自选池一视同仁**：今日 3 只一线自选池标的最高 total=71.9，全部 < 78 门槛，即使修了 nan 也过不了。需要用户决策是否给自选池单独路径。三个选项 A/B/C 在 HANDOFF 已列。
+2. **mac 睡眠 launchd 跳期**：6/2 09:26~09:44 supervisor 整段缺触发，导致 check_buy 从 9:36 拖到 9:44。`check_buy_v16.plist` 缺 `WakeUp` 配置。
+3. **theme_auto 数据源稳定性**：6/2 08:55、09:01 东方财富 RemoteDisconnected 抖动，是对端问题，但二次重试间隔可能值得优化。
+
+### 给所有协作 AI 的关键提示
+
+- 已合入主干（最新在上）：`5e1f752` → `3df6d1d` → `bf9ce11` → `36f5a97` → `ee5d2c7` → `0145717` → `588d3c1`。
+- Codex 工作区脏文件清单：`dashboard_app.py` / `scripts/build_t_signal_observer.py` / `scripts/build_t_trade_tracker.py` / `scripts/run_t_eod.py`。
+- 验证窗口：
+  - 6/2 19:00 update_review 后，`output/tomorrow_plan/tomorrow_plan_20260602.csv` 应该生成，`tomorrow_plan_latest.csv` 应指向 20260603。
+  - 6/3 09:36 check_buy 后，`trade_review.csv` 候选不应再带"已回退 V1.4/V1.5"。
+- 不要自作主张改 V1.4 门槛或自选池逻辑，等用户决策。
+- 不要改 launchd plist，等用户确认 WakeUp 策略。

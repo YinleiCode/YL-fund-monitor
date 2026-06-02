@@ -1168,3 +1168,147 @@ cat output/state/t_summary_20260602.json 2>/dev/null
    - `logs/auto_run.log` 有无异常
 4. 顺手观察一下 09:36 check-buy 真实触发时间（今日 09:44），决定是否要把 plist 时间提前 1–2 分钟。
 5. 明早 08:30 morning-digest 出文后，确认龙头池字段不再出现 `nan`（验证我的 bf9ce11）。
+
+---
+
+## 2026-06-02 Claude（实战首日两处致命 bug 修复）
+
+### 本次任务背景
+
+2026-06-02 是 V1.6 + T 模块上线后第一个完整真实交易日。结果**全天 0 笔买入信号**（pre_gate 全数被否），用户要求"找代码逻辑错误"。
+
+通过对 `logs/auto_run.log`、`output/trade_review.csv`、`output/tomorrow_plan/tomorrow_plan_latest.csv` 的对照排查，定位到 **两个真·代码 bug**（不是行情/数据源问题），并修复。
+
+### 修改文件
+
+#### 1. `scripts/run_update_review.sh` — Bug #1（致命）
+
+- **现象**：`tomorrow_plan_latest.csv` 永远停留在 5/29 用户在 dashboard 手工点 build 那一次（`report_date=20260529, next_trade_date=20260601`）。
+- **根因**：原脚本只跑 `python run.py --update-review`，**从未调用 `scripts/build_tomorrow_plan.py`**。launchd 每天 19:00 跑 update_review，trade_review.csv 是补全了，但 tomorrow_plan 从来不会自动更新。
+- **后果链路**：
+  ```
+  tomorrow_plan 不更新
+    → trade_review.py:288 校验 plan.next_trade_date != report_date
+    → "明日计划日期不匹配 → 回退 V1.4/V1.5"
+    → V1.6 自选池/主线观察/avoid_themes 全失效
+    → 9:36 check_buy 完全没有 V1.6 优待
+  ```
+- **修复**：`run_update_review.sh` 在 `run.py --update-review` 之后追加 `python scripts/build_tomorrow_plan.py --merge-keep-manual`，并按 update_review 优先报错的规则返回 exit code。
+
+#### 2. `indicators.py` — Bug #2（nan 源头）
+
+- **现象**：2026-06-02 胜宏科技 `total_score=nan, space_score=nan`，notifier 推送显示"总分 nan / 空间 nan"。
+- **根因 A（132 行 below_ma20_pct）**：
+  ```python
+  # 旧代码：
+  below_ma20_pct = float(spot_row.get("below_ma20_pct", (cur_close / ma20 - 1) * 100))
+  ```
+  `dict.get(key, default)` **只在 key 不存在时返回 default**。当 key 存在但值是 NaN/Inf/None/`'nan'`，default 不会触发，`float(nan)` 不抛异常，直接吞下 nan。nan 进 `_score_dist_ma20` → `np.interp(nan, ...)` → nan → `space_score=nan` → `total_score=nan`。
+- **根因 B（128-129 行 dist_60d_pct）**：`max_60d` 为 0/nan/负数（脏数据或全空盘）时，`(cur_close / max_60d - 1) * 100` 直接 nan/inf，传染整条 space 链路。
+- **修复 A**：对齐同文件 `_get_turnover_rate`（49-66 行）的模式：先 `try float` + `np.isfinite` 检查 → 异常/nan/inf 时回退到本地 `(cur_close/ma20-1)*100`，`ma20` 也不可用时兜底 `0.0`。
+- **修复 B**：`max_60d` 非有限值或 ≤0 时 `dist_60d_pct` 兜底 `0.0`（按"刚好在 60 日高点"处理）。
+- **关联**：bf9ce11 notifier `_fmt_num/_fmt_pct` 增加 `math.isnan/isinf` 兜底，是文案层防线；本次是数据源头治理。两层都需要。
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- `run.py`：未改。
+- `trade_review.py`：未改。
+- `output/trade_review.csv`：未改。
+- `config/version_flags.yaml`：未改。
+- `launchd/*.plist`：未改（虽然定位到 mac 睡眠让 launchd 跳期 9:31/9:36/9:41 三次，但 plist 改动不属本轮范围）。
+
+### 是否运行 python run.py
+
+- 否。仅本地 mock 单元测试。
+
+### 验收
+
+- `python -m py_compile indicators.py` 通过。
+- `bash -n scripts/run_update_review.sh` 通过。
+- mock 单元测试 7/7：
+  - `below_ma20_pct`：spot 有正常值 / NaN / Inf / 缺失 / None / `'nan'` / ma20 也 nan，全部正确兜底
+  - `dist_60d_pct`：max_60d 正常 / 0 / nan / inf / 负数，全部正确兜底
+- 模拟胜宏科技 6/1 真实数据：旧逻辑产 nan，新逻辑产 `_score_dist_ma20=2.0`，total 链路恢复有限值。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：`5e1f752 fix: 2026-06-02 实战首日两处致命 bug`
+- status：`scripts/run_update_review.sh` (+15/−1) + `indicators.py` (+22/−2)，无附带改动。Codex 工作区脏文件全部保持不动（dashboard_app.py / scripts/build_t_signal_observer.py / scripts/build_t_trade_tracker.py / scripts/run_t_eod.py）。
+
+### 2026-06-02 完整 bug 排查记录（给所有 AI 看）
+
+#### 排查路径
+
+1. 用户反馈"今天还是没买卖" → 查 `output/trade_review.csv` 当日 3 条记录全部 `fail_reason=full_score_not_strong_enough`。
+2. 看到所有候选都带 `v16_plan_reason='明日计划日期不匹配...已回退 V1.4/V1.5'` → 发现 plan 错配。
+3. 读 `tomorrow_plan_latest.csv` → report_date 是 5/29，`next_trade_date=20260601`。
+4. `ls -lt output/tomorrow_plan/` 发现最新 plan 文件就是 `tomorrow_plan_20260529.*`，6/1 收盘后没生成新文件。
+5. `grep build_tomorrow_plan launchd/*.plist run.py scripts/*.sh` → 发现没有任何自动化路径调用它，只有 `dashboard_app.py` 的人工按钮。**确认 Bug #1**。
+6. 查 nan 来源：`grep "胜宏科技\|300476" logs/20260602.log` → 早上 8:55 picker 阶段就已经 `总分nan 空间nan`。
+7. 本地 reproduce 胜宏 6/1 历史数据：`dist_60d_pct=-14.97, ret_5d=-10.73, below_ma20_pct(本地)=-4.28`，本地算都不 nan。
+8. 顺 `indicators.py` 第 132 行读到 `spot_row.get("below_ma20_pct", fallback)` → 怀疑 spot 给了 nan。
+9. 对比第 49 行 `_get_turnover_rate` 的写法 → 确认 `_get_turnover_rate` 有 isnan 兜底，`below_ma20_pct` 没有。**确认 Bug #2**。
+
+#### 受影响范围
+
+- Bug #1：5/29 之后**每一个交易日**的 check_buy（共 5/30 周末、6/1、6/2 三个交易日）。
+- Bug #2：任何 spot 快照里 below_ma20_pct 字段缺/nan 的股票，均会产 total_score=nan。胜宏科技 6/1 受影响是因为当日巨幅震荡。
+
+### 当前遗留问题（本轮未处理，待用户决策）
+
+#### 1. V1.4 预闸门槛对自选池一视同仁
+
+- 实测今日 3 只候选最高 total=71.9，均 < 78；popularity 19.4/17.7/20.8，均 < 22；technical 全 16.0，< 20。
+- 即使修了 nan，今天的 V1.4 也全部过不了。
+- 这 3 只都是 `is_custom_pool=True, custom_pool_priority=1`（朱哥指定一线），但 V1.4 预闸把自选池当普通候选。
+- **三个候选方向（待用户拍板）**：
+  - A. 自选池跳过 V1.4 预闸（最激进）
+  - B. 自选池单独降门槛（如 total ≥ 65 / pop ≥ 18 / tec ≥ 14）
+  - C. 维持现状（自选池只影响排序）
+
+#### 2. launchd 睡眠跳期
+
+- `auto_run.log` 显示 6/2 09:26 ~ 09:44 supervisor 整段缺触发（漏 9:31/9:36/9:41）。
+- 原因：mac 睡眠时 `StartInterval` 类 launchd 任务被冻结。9:44 是醒来后第一次补跑。
+- `check_buy_v16.plist` 用 `StartCalendarInterval` 但没设 `WakeUp`，所以无法把 mac 唤醒。
+- 修复需改 plist，本轮未做。
+
+#### 3. theme_auto 数据源稳定性
+
+- 6/2 08:55、09:01 两次东方财富 `RemoteDisconnected, Connection aborted`，走 fallback 写空 CSV。
+- 是对端临时抖动，不是代码 bug，但缺少二次重试间隔，可能值得后续优化。
+
+### 给所有协作 AI 的状态板
+
+#### 已合入主干（commit 顺序，最新在上）
+
+| commit | 内容 | 谁做 |
+|---|---|---|
+| `5e1f752` | tomorrow_plan 不自动更新 + indicators nan 兜底 | Claude（本轮）|
+| `3df6d1d` | md 更新 + 2026-06-02 实战观察 + Codex 接力清单 | Claude |
+| `bf9ce11` | notifier `_fmt_num/_fmt_pct` 增加 math.isnan/isinf | Claude |
+| `36f5a97` | 自选池优先 + T 模块跨日字段 | Codex |
+| `ee5d2c7` | 2026-06-01 push 合并 + T 模块文档 | Codex |
+| `0145717` | T 模块实时 B/S + EOD | Codex |
+| `588d3c1` | fetch_minute_today | Codex |
+
+#### Codex 工作区脏文件（本轮未触碰，由 Codex 自己负责提交）
+
+- `dashboard_app.py`（UI 安全文案 + RADAR 风格统一）
+- `scripts/build_t_signal_observer.py`（本轮新增脏）
+- `scripts/build_t_trade_tracker.py`（跨日字段）
+- `scripts/run_t_eod.py`（open_count）
+- `AI_HANDOFF.md` / `AI_CHANGELOG.md` 内 Codex 段（备份在 `/tmp/handoff_codex_round2.md.bak` 与 `/tmp/changelog_codex_round2.md.bak`，已恢复到本文件）
+
+#### 给下一个 AI 的注意事项
+
+1. **不要再担心 nan 文案 bug**：notifier 层（bf9ce11）+ indicators 层（5e1f752）双重防线已就位。
+2. **明天 19:00 update_review 后**，请检查 `output/tomorrow_plan/tomorrow_plan_20260602.csv` 是否生成、`tomorrow_plan_latest.csv` 是否指向 20260603。
+3. **明早 09:36 check_buy 后**，请确认 `trade_review.csv` 里候选不再带 `已回退 V1.4/V1.5`，而是出现真实的 v16_trade_permission 等字段值。
+4. **V1.4 门槛问题（遗留 #1）**：用户尚未决策，请不要自作主张改 V1.4 门槛或自选池逻辑。
+5. **launchd 睡眠（遗留 #2）**：plist 改动建议先和用户确认硬件唤醒策略再动。
