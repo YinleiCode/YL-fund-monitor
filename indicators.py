@@ -126,10 +126,31 @@ def compute(
     # ----- 距60日高点 -----
     lookback = min(60, n)
     max_60d = float(high.iloc[-lookback:].max())
-    dist_60d_pct = (cur_close / max_60d - 1) * 100  # 负 = 低于高点
+    # 2026-06-02 修复：max_60d 异常（0 / nan）时 dist_60d_pct 会变 nan/inf，
+    # 进 _interp 后传染整条 space 链路，必须回退到 0（"刚好在 60 日高点"）。
+    if not np.isfinite(max_60d) or max_60d <= 0:
+        dist_60d_pct = 0.0
+    else:
+        dist_60d_pct = (cur_close / max_60d - 1) * 100  # 负 = 低于高点
 
     # ----- 距MA20 -----
-    below_ma20_pct = float(spot_row.get("below_ma20_pct", (cur_close / ma20 - 1) * 100))
+    # 2026-06-02 修复：原 spot_row.get("below_ma20_pct", fallback) 在 key 存在但值为 NaN 时
+    # 不会触发 fallback（dict.get 只看 key 是否存在），nan 会沿 _interp → space_score → total_score
+    # 全链路传染（典型 2026-06-02 胜宏科技 total_score=nan 即源于此）。
+    # 修法对齐同文件 _get_turnover_rate：先试 spot，nan/异常时回退到本地 ma20 计算。
+    _spot_bm20 = spot_row.get("below_ma20_pct")
+    below_ma20_pct = None
+    try:
+        _f = float(_spot_bm20)
+        if np.isfinite(_f):
+            below_ma20_pct = _f
+    except (TypeError, ValueError):
+        pass
+    if below_ma20_pct is None:
+        if ma20 is not None and not np.isnan(ma20) and ma20 > 0:
+            below_ma20_pct = (cur_close / float(ma20) - 1) * 100
+        else:
+            below_ma20_pct = 0.0  # ma20 也不可用时按"刚好等于 ma20"处理，避免 nan 污染下游
 
     # ----- 平台突破 -----
     lb = ic["platform_lookback"]
