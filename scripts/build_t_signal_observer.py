@@ -253,15 +253,15 @@ def evaluate_t_signals(
     ma5_slope_up: Optional[bool] = None,
 ) -> list[dict]:
     """
-    朱哥 V1.6 做 T 规则（2026-06-02 最新版，正 T only）：
-      1. 5 日均线向上（ma5_slope_up=True）                ← 前置门
-      2. 时间在 09:33-10:15 之间
-      3. 急跌 1-3 分钟跌幅 ≥ 0.7%（DROP_PCT_MIN）
+    朱哥 V1.6 做 T 规则（2026-06-03 朱哥拍板，删掉规则 1，正 T only）：
+      [删除] ~~5 日均线向上~~（朱哥 2026-06-03 删除）
+      1. 时间在 09:33-10:15 之间
+      2. 急跌 1-3 分钟跌幅 ≥ 0.7%（DROP_PCT_MIN）
          **且** 触发分钟 close 比分时图均线（VWAP）低 ≥ 1.3%（BELOW_VWAP_PCT）
-      4. 触发分钟相比前 1-3 根绿分时量 ≥ 2 倍（"1 倍以上的绿量"）
-      5. 倍量后下一根明显缩量（缩量比 ≤ 0.5）
+      3. 触发分钟相比前 1-3 根绿分时量 ≥ 2 倍（"1 倍以上的绿量"）
+      4. 倍量后下一根明显缩量（缩量比 ≤ 0.5）
 
-    通过 5 条全部规则 → sim_buy（正 T，先买）。止盈在 tracker 里按
+    通过 4 条全部规则 → sim_buy（正 T，先买）。止盈在 tracker 里按
     买入价 +1.5% / +3% 自动配对，本函数只负责识别 B 点。
 
     ⚠️ 用户明确：本规则只做正 T（先买再卖），不再产生 high_throw（高抛）信号。
@@ -294,24 +294,13 @@ def evaluate_t_signals(
             "fail_reason": "insufficient_bars_in_window",
         }]
 
-    # 规则 1: 5 日均线向上（前置门，不通过整只股直接 skip）
-    # ma5_override 是 trade_review.csv 的 ma5 数值，ma5_slope_up 由 run_t_intraday 算出来的
-    # 兼容旧调用：未传 ma5_* 时 fallback 用 ma10_override（不算斜率，但避免破坏旧 sample）
+    # 2026-06-03 朱哥拍板：删掉「5 日均线向上」前置门
+    # 旧逻辑会拒绝 ma5 缺失或斜率向下的票，导致整只股全天跳过。
+    # 现在 ma5 / ma5_slope_up 仅作为输出字段记录，不参与判定。
     ma_val = ma5_override if ma5_override is not None else ma10_override
     if ma_val is None or ma_val <= 0:
-        return [{
-            "stock_code": stock_code,
-            "rule_pass": False,
-            "fail_reason": "ma5_missing",
-        }]
-    # 旧测试 / sample 模式：ma5_slope_up 未传时按 True 兜底（不阻塞老用法）
+        ma_val = 0.0   # 仅作展示占位
     slope_ok = True if ma5_slope_up is None else bool(ma5_slope_up)
-    if not slope_ok:
-        return [{
-            "stock_code": stock_code,
-            "rule_pass": False,
-            "fail_reason": "ma5_slope_not_up",
-        }]
 
     signals = []
 
