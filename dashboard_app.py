@@ -8076,6 +8076,243 @@ def _wl_identify(query: str) -> dict[str, str | bool]:
     return {"matched": False, "code": "", "name": "", "error": f"未匹配到 {q}"}
 
 
+def page_holding_track(df_all: pd.DataFrame) -> None:
+    """🔥 持仓追踪 — 2026-06-03 朱哥需求：买入后持续记录直到止损/手动卖出。
+
+    数据源：trade_review.csv 的 16 个持仓追踪字段（commit bddfcfd 加的）：
+      holding_status / days_held / latest_close / latest_return_pct /
+      peak_high / peak_low / peak_return_pct / peak_drawdown_pct /
+      exit_date / exit_price / exit_reason /
+      post_stop_max_return_pct / post_stop_max_drawdown_pct /
+      post_stop_days_tracked / post_stop_tracking_done_date
+
+    页面风格：跟 Codex 的 RADAR 玻璃卡片 V2 一致（glass_card_html + kpi_card + chip_html）。
+    """
+    if df_all.empty:
+        status_banner("当前无数据。", "info")
+        return
+
+    render_page_header(
+        "持仓追踪",
+        "HOLDING TRACK",
+        "买入后到卖出的完整记录。包含每只票从买入起的最高价、最低价、最大收益、"
+        "最大回撤、当前状态；止损卖出后继续追踪 30 个交易日，判断是否卖飞。",
+        badges=["朱哥 06-02 拍板", "持仓不限天数", "止损后追 30 天"],
+        aside_title="数据口径",
+        aside_body=(
+            "<code>holding_status</code> 分 5 类：<br>"
+            "• <b>holding</b>：持仓中（未触发止损）<br>"
+            "• <b>stopped</b>：已止损 + 30 天追踪中<br>"
+            "• <b>post_stop_done</b>：30 天追踪完成<br>"
+            "• <b>manual_sell</b>：手动卖出<br>"
+            "• <b>legacy_t1_sell</b>：老逻辑 T+1 必卖（≤ 06-02 买入）"
+        ),
+    )
+
+    df = df_all.copy()
+    status_col = df.get("holding_status", pd.Series([""] * len(df))).astype(str).str.strip().str.lower()
+
+    df_holding   = df[status_col == "holding"]
+    df_stopped   = df[status_col == "stopped"]
+    df_post_done = df[status_col == "post_stop_done"]
+    df_manual    = df[status_col == "manual_sell"]
+    df_legacy    = df[status_col == "legacy_t1_sell"]
+
+    # —— KPI 四张卡片 ——
+    n_holding = len(df_holding)
+    n_stopped = len(df_stopped)
+    n_post = len(df_post_done)
+    n_total_tracked = n_holding + n_stopped + n_post + len(df_manual)
+
+    avg_holding_ret = None
+    if n_holding > 0:
+        rets = [_gf(v) for v in df_holding.get("latest_return_pct", [])]
+        rets = [r for r in rets if r is not None]
+        if rets:
+            avg_holding_ret = sum(rets) / len(rets)
+
+    flew_away_count = 0
+    for v in df_stopped.get("post_stop_max_return_pct", []):
+        r = _gf(v)
+        if r is not None and r >= 0.03:
+            flew_away_count += 1
+
+    st.markdown(
+        _h(f"""
+        <div class="t1-kpi-grid">
+          {kpi_card("持仓中", n_holding, COLOR_BOUGHT, "实时滚动追踪 peak")}
+          {kpi_card("已止损", n_stopped, COLOR_DROP, "继续追踪 30 个交易日")}
+          {kpi_card("平均当前收益", (f"{avg_holding_ret*100:+.2f}%" if avg_holding_ret is not None else "—"),
+                    (COLOR_BOUGHT if (avg_holding_ret or 0) > 0 else COLOR_DROP if (avg_holding_ret or 0) < 0 else COLOR_TEXT),
+                    "持仓中的票相对买入价")}
+          {kpi_card("已止损卖飞", flew_away_count, COLOR_MAGENTA_NEON, "止损后反弹 ≥ 3%")}
+        </div>
+        """),
+        unsafe_allow_html=True,
+    )
+
+    # —— 一个标签函数：渲染单只票卡片 ——
+    def _track_card(row: pd.Series, *, show_post_stop: bool = False) -> str:
+        code = str(row.get("stock_code", "")).strip()
+        name = str(row.get("stock_name", "")).strip()
+        report_date = str(row.get("report_date", "")).strip()
+        adj_buy = _gf(row.get("adjusted_buy_price")) or _gf(row.get("buy_price"))
+        stop_price = _gf(row.get("stop_price"))
+        days_held = str(row.get("days_held", "—")).strip() or "—"
+        latest_close = _gf(row.get("latest_close"))
+        latest_ret = _gf(row.get("latest_return_pct"))
+        peak_high = _gf(row.get("peak_high"))
+        peak_low = _gf(row.get("peak_low"))
+        peak_ret = _gf(row.get("peak_return_pct"))
+        peak_dd = _gf(row.get("peak_drawdown_pct"))
+
+        status = str(row.get("holding_status", "")).strip().lower()
+        is_stopped = (status == "stopped" or status == "post_stop_done")
+
+        head_color = COLOR_DROP if is_stopped else COLOR_BOUGHT
+        head_label = "已止损" if status == "stopped" else ("30 天追踪完成" if status == "post_stop_done" else "持仓中")
+
+        # 数值格式化
+        def _fmt_money(v): return f"{v:.2f}" if v is not None else "—"
+        def _fmt_pct(v):
+            if v is None: return "—"
+            sign = "+" if v >= 0 else ""
+            color = COLOR_BOUGHT if v > 0 else COLOR_MAGENTA_NEON if v < 0 else COLOR_TEXT
+            return f"<span style='color:{color};'>{sign}{v*100:.2f}%</span>"
+
+        rows_html = f"""
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px 24px;margin-top:14px;font-family:{FONT_MONO};font-size:12px;">
+            <div><span style="color:{COLOR_MUTED};">买入日 </span><span style="color:{COLOR_TEXT};">{_h(report_date)}</span></div>
+            <div><span style="color:{COLOR_MUTED};">持仓天数 </span><span style="color:{COLOR_TEXT};">{_h(days_held)}</span></div>
+            <div><span style="color:{COLOR_MUTED};">买入价 </span><span style="color:{COLOR_TEXT};">{_fmt_money(adj_buy)}</span></div>
+            <div><span style="color:{COLOR_MUTED};">止损价 </span><span style="color:{COLOR_TEXT};">{_fmt_money(stop_price)}</span></div>
+            <div><span style="color:{COLOR_MUTED};">最新收盘 </span><span style="color:{COLOR_TEXT};">{_fmt_money(latest_close)}</span></div>
+            <div><span style="color:{COLOR_MUTED};">当前收益 </span>{_fmt_pct(latest_ret)}</div>
+            <div><span style="color:{COLOR_MUTED};">期间最高 </span><span style="color:{COLOR_TEXT};">{_fmt_money(peak_high)}</span></div>
+            <div><span style="color:{COLOR_MUTED};">期间最低 </span><span style="color:{COLOR_TEXT};">{_fmt_money(peak_low)}</span></div>
+            <div><span style="color:{COLOR_MUTED};">最大收益 </span>{_fmt_pct(peak_ret)}</div>
+            <div><span style="color:{COLOR_MUTED};">最大回撤 </span>{_fmt_pct(peak_dd)}</div>
+          </div>
+        """
+
+        post_stop_html = ""
+        if show_post_stop:
+            exit_date = str(row.get("exit_date", "")).strip()
+            exit_price = _gf(row.get("exit_price"))
+            post_max_ret = _gf(row.get("post_stop_max_return_pct"))
+            post_max_dd = _gf(row.get("post_stop_max_drawdown_pct"))
+            post_days = str(row.get("post_stop_days_tracked", "—")).strip() or "—"
+            flew = "🚀 卖飞了" if (post_max_ret is not None and post_max_ret >= 0.03) else ""
+            post_stop_html = f"""
+            <div style="margin-top:12px;padding-top:12px;border-top:1px dashed {COLOR_GLASS_EDGE};font-family:{FONT_MONO};font-size:12px;">
+              <div style="color:{COLOR_MUTED};margin-bottom:6px;letter-spacing:0.1em;text-transform:uppercase;">POST-STOP TRACK</div>
+              <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px 24px;">
+                <div><span style="color:{COLOR_MUTED};">止损日 </span><span style="color:{COLOR_TEXT};">{_h(exit_date)}</span></div>
+                <div><span style="color:{COLOR_MUTED};">追踪天数 </span><span style="color:{COLOR_TEXT};">{_h(post_days)}/30</span></div>
+                <div><span style="color:{COLOR_MUTED};">止损价 </span><span style="color:{COLOR_TEXT};">{_fmt_money(exit_price)}</span></div>
+                <div><span style="color:{COLOR_MUTED};">最高反弹 </span>{_fmt_pct(post_max_ret)} <span style="color:{COLOR_MAGENTA_NEON};">{flew}</span></div>
+                <div><span style="color:{COLOR_MUTED};">最低回撤 </span>{_fmt_pct(post_max_dd)}</div>
+              </div>
+            </div>
+            """
+
+        inner = f"""
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <div style="font-family:{FONT_MONO};font-size:12px;color:{COLOR_MUTED};letter-spacing:0.1em;">{_h(code)}</div>
+              <div style="font-size:16px;font-weight:600;color:{COLOR_TEXT};margin-top:2px;">{_h(name)}</div>
+            </div>
+            {chip_html(head_label, color=head_color)}
+          </div>
+          {rows_html}
+          {post_stop_html}
+        """
+        return glass_card_html(inner, padding="16px 18px", accent=head_color, extra_style="margin-bottom:12px;")
+
+    # —— 持仓中 ——
+    if not df_holding.empty:
+        st.markdown(
+            _h(f"""
+            <div class="t1-section-head" style="margin-top:24px;">
+              <div>
+                <div class="t1-section-kicker">HOLDING NOW</div>
+                <div class="t1-section-title">持仓中（{n_holding} 只）</div>
+              </div>
+              {chip_html("实时追踪", color=COLOR_BOUGHT)}
+            </div>
+            """),
+            unsafe_allow_html=True,
+        )
+        for _, row in df_holding.iterrows():
+            st.markdown(_track_card(row), unsafe_allow_html=True)
+    else:
+        status_banner("暂无持仓中的票。明早 9:36 check_buy 真正买入后，这里会显示滚动追踪。", "info")
+
+    # —— 已止损（30 天追踪）——
+    if not df_stopped.empty:
+        st.markdown(
+            _h(f"""
+            <div class="t1-section-head" style="margin-top:24px;">
+              <div>
+                <div class="t1-section-kicker">POST-STOP TRACK</div>
+                <div class="t1-section-title">已止损 · 30 天追踪中（{n_stopped} 只）</div>
+              </div>
+              {chip_html(f"卖飞 {flew_away_count} 只", color=COLOR_MAGENTA_NEON if flew_away_count else COLOR_MUTED)}
+            </div>
+            """),
+            unsafe_allow_html=True,
+        )
+        for _, row in df_stopped.iterrows():
+            st.markdown(_track_card(row, show_post_stop=True), unsafe_allow_html=True)
+
+    # —— 30 天追踪完成 ——
+    if not df_post_done.empty:
+        st.markdown(
+            _h(f"""
+            <div class="t1-section-head" style="margin-top:24px;">
+              <div>
+                <div class="t1-section-kicker">COMPLETED</div>
+                <div class="t1-section-title">30 天追踪完成（{n_post} 只）</div>
+              </div>
+              {chip_html("归档", color=COLOR_MUTED)}
+            </div>
+            """),
+            unsafe_allow_html=True,
+        )
+        for _, row in df_post_done.iterrows():
+            st.markdown(_track_card(row, show_post_stop=True), unsafe_allow_html=True)
+
+    # —— 手动卖出 ——
+    if not df_manual.empty:
+        n_manual = len(df_manual)
+        st.markdown(
+            _h(f"""
+            <div class="t1-section-head" style="margin-top:24px;">
+              <div>
+                <div class="t1-section-kicker">MANUAL EXIT</div>
+                <div class="t1-section-title">手动卖出（{n_manual} 只）</div>
+              </div>
+              {chip_html("人工", color=COLOR_WAIT_T1)}
+            </div>
+            """),
+            unsafe_allow_html=True,
+        )
+        for _, row in df_manual.iterrows():
+            st.markdown(_track_card(row), unsafe_allow_html=True)
+
+    # 底部说明
+    st.markdown(
+        _h(f"""
+        <div style="margin-top:24px;padding:14px;font-size:12px;color:{COLOR_MUTED};font-family:{FONT_MONO};border-top:1px solid {COLOR_GLASS_EDGE};">
+          数据来源: trade_review.csv 滚动字段 (commit bddfcfd 引入).<br>
+          每天 19:00 update_review 自动滚动一次, 不可在此页编辑.<br>
+          如需手动卖出, 编辑 trade_review.csv 改 exit_reason=manual_sell + holding_status=manual_sell.
+        </div>
+        """),
+        unsafe_allow_html=True,
+    )
+
+
 def page_watchlist() -> None:
     exists = WATCHLIST_PATH.exists()
     rows = _wl_load()
@@ -9900,7 +10137,7 @@ def main() -> None:
     render_shell_topbar()
     nav_pages = [
         "今日总览", "买入确认", "T+1 复盘",
-        "未买入跟踪", "周月复盘",
+        "持仓追踪", "未买入跟踪", "周月复盘",
         "候选复盘", "明日计划",
         "做T观察", "⭐ 我的自选", "手动补跑",
     ]
@@ -10010,6 +10247,8 @@ def main() -> None:
         page_buy_check(df_all)
     elif page == "T+1 复盘":
         page_t1_review(df_all)
+    elif page == "持仓追踪":
+        page_holding_track(df_all)
     elif page == "未买入跟踪":
         page_not_bought(df_all)
     elif page == "周月复盘":
