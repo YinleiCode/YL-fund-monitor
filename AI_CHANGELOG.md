@@ -2561,3 +2561,63 @@ sudo pmset repeat wake MTWRF 09:25:00
 
 - 浏览器截图 API 本轮多次超时，但 DOM 验证和页面点击已成功；如果继续精修，可让用户刷新肉眼确认首屏。
 - 本轮只做 dashboard 展示层，不影响选股、买入、做 T、T+1 结算和历史记录。
+
+---
+
+## 2026-06-03 Claude（dashboard 持仓追踪页 + T 规则 1 删除）
+
+### 本次任务
+
+1. T 规则 1（5 日均线斜率向上）删除 — 朱哥 06-03 拍板
+2. 给 commit bddfcfd 的 16 个持仓追踪字段加 dashboard UI
+
+### 修改文件
+
+- `scripts/build_t_signal_observer.py`（commit `9433419`）
+  - 删除 ma5_missing / ma5_slope_not_up 两条 fail return
+  - docstring 5 条规则 → 4 条规则
+  - ma5 保留为输出字段（复盘展示）但不参与判定
+
+- `dashboard_app.py`（commit `d883861`）
+  - 新增 `page_holding_track(df_all)` 函数
+  - 导航第 4 位插入「持仓追踪」
+  - 主流程 dispatch 加 `elif page == "持仓追踪"`
+  - 严格沿用 Codex 的 RADAR V2 风格
+
+- `朱哥策略说明.md`（commit `9433419`）
+  - T 模块章节 5 条规则 → 4 条规则
+
+### 新增文件
+
+- 无
+
+### 禁改文件检查
+
+- run.py：未改
+- trade_review.py：未改
+- output/trade_review.csv：未改
+- config/version_flags.yaml：未改
+- launchd/*.plist：未改
+- 自动下单 / 券商：未新增
+
+### 是否运行 python run.py
+
+- 否
+
+### 验收
+
+- py_compile 通过（dashboard_app.py + build_t_signal_observer.py）
+- Streamlit AppTest 11 页 non-crash 通过
+- T 规则 3/3 mock 测试通过
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commits：`9433419` + `d883861`
+
+### 给所有 AI 的关键提示
+
+- T 规则确定为 4 条（不再变动除非朱哥再拍）
+- 持仓追踪 UI 已就绪，明早 06-04 9:36 真买入后即可看到
+- Codex 的 RADAR V2 风格被严格沿用，无视觉割裂
+- 不动 Codex 的脏区设计（这次 dashboard 是 Codex 已 commit 状态后我加的新 page）

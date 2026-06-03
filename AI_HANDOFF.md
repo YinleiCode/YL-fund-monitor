@@ -3094,3 +3094,99 @@ Claude 提交 `notifier.py` nan/inf 修复后，用户要求 Codex 先检查 md 
   - 未运行 `python run.py` 或任何 `run.py` 子命令。
   - 未修改 `run.py`、`trade_review.py`、`output/trade_review.csv`、`config/version_flags.yaml`、`launchd/*.plist`。
   - 未新增自动下单或券商连接逻辑。
+
+---
+
+## 2026-06-03 Claude（dashboard 持仓追踪页 + T 规则 1 删除）
+
+### 朱哥本日新增需求
+
+1. **T 规则 1（5 日均线斜率向上）删掉** — `9433419`
+2. **持仓追踪 csv 字段需要在 dashboard 显示** — `d883861`（本轮）
+
+### 修改文件
+
+**1. `scripts/build_t_signal_observer.py`**（`9433419`）
+- 删除 `ma5_missing` / `ma5_slope_not_up` 两条 fail return
+- `ma_val` / `slope_ok` 保留为输出字段，但不参与判定
+- docstring 5 条规则 → 4 条规则
+
+**2. `dashboard_app.py`**（`d883861`）
+- 新增 `page_holding_track(df_all)` 函数（约 200 行）
+- 导航第 4 位插入「持仓追踪」
+- 主流程 dispatch 加 `elif page == "持仓追踪"`
+
+**3. `朱哥策略说明.md`**（`9433419`）
+- T 模块章节由 5 条规则改成 4 条
+- 规则编号重排，加注 ma5 仅记录不参与判定
+
+### dashboard 持仓追踪页面结构
+
+**风格**：严格沿用 Codex 的 RADAR V2 玻璃卡片
+- 复用 `render_page_header / kpi_card / glass_card_html / chip_html`
+- 颜色：`COLOR_BOUGHT`（持仓中绿）/ `COLOR_DROP`（止损红）/ `COLOR_MAGENTA_NEON`（卖飞）
+- 字体：`FONT_MONO`（JetBrains Mono）
+- **不改任何后端代码，不动 Codex 已 commit 的页面**
+
+**4 个 KPI 卡片**：
+- 持仓中 N 只
+- 已止损 N 只
+- 平均当前收益
+- 已止损卖飞 N 只（post_stop_max_return_pct ≥ 3% 算卖飞）
+
+**4 个分组卡片区**：
+| 分组 | holding_status | 显示字段 |
+|---|---|---|
+| 持仓中 | `holding` | 10 字段（买入日 / 持仓天数 / 买入价 / 止损价 / 最新收盘 / 当前收益 / 期间最高 / 期间最低 / 最大收益 / 最大回撤）|
+| 已止损 30 天追踪 | `stopped` | 10 字段 + POST-STOP TRACK 子块（止损日 / 追踪天数 / 止损价 / 最高反弹 / 最低回撤 + 卖飞 🚀 标记）|
+| 30 天追踪完成 | `post_stop_done` | 同上 |
+| 手动卖出 | `manual_sell` | 10 字段 |
+
+### 是否运行 python run.py
+
+- 否
+
+### 验收
+
+- `py_compile dashboard_app.py` 通过
+- Streamlit AppTest 全 11 页 non-crash 通过
+- '持仓追踪' 在导航第 4 位正确注册
+- `9433419` 3/3 mock 测试通过（ma5 缺失 / 斜率 False / 正常 三场景）
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commits：
+  - `9433419 feat(t-rule): 删除规则 1「5 日均线斜率向上」前置门`
+  - `d883861 feat(dashboard): 新增「持仓追踪」页面`
+
+### 当前生效的 T 模块 4 条规则
+
+```python
+# scripts/build_t_signal_observer.py:128-135
+BELOW_VWAP_PCT   = 0.013   # 规则 2b: 离 VWAP ≥ 1.3%
+DROP_PCT_MIN     = 0.007   # 规则 2a: 1-3 分钟跌 ≥ 0.7%
+VOL_MULTIPLE_MIN = 2.0     # 规则 3:  绿量 ≥ 前 1-3 根绿 K 均量 × 2
+SHRINK_RATIO_MAX = 0.5     # 规则 4:  下一根缩量比 ≤ 0.5
+```
+
+时间窗口（规则 1）：`09:33-10:15`。
+
+### 给所有 AI 的状态
+
+- T 规则确定为 4 条（不再变动除非朱哥再拍）
+- 持仓追踪 UI 已就绪，明早 06-04 9:36 真买入后即可在 dashboard 看到
+- Codex 的 RADAR V2 风格被严格沿用，无视觉割裂
+- 至今合入主干 27 个 Claude commit + 3 个 Codex 大 commit
+
+### 主干 commit 时间线（最新在上）
+
+| commit | 内容 | 谁做 |
+|---|---|---|
+| `d883861` | dashboard 持仓追踪页面 | Claude（本轮）|
+| `9433419` | 删除 T 规则 1 ma5 斜率 | Claude |
+| `86347f3` | dashboard watchlist + T review UI | Codex |
+| `ecf4f1c` | update_review 完整 4-step 链路 | Claude |
+| `68aafec` | 策略说明 md | Claude |
+| `3dc5ab2` | RADAR dashboard 大重构 | Codex |
+| ... | （早 24 个 commit）| Claude |
