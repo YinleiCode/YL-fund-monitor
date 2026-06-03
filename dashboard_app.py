@@ -8250,7 +8250,40 @@ def page_holding_track(df_all: pd.DataFrame) -> None:
         for _, row in df_holding.iterrows():
             st.markdown(_track_card(row), unsafe_allow_html=True)
     else:
-        status_banner("暂无持仓中的票。明早 9:36 check_buy 真正买入后，这里会显示滚动追踪。", "info")
+        # 空状态：显示一张"演示卡片"+ 说明，让朱哥看到买入后页面会怎样
+        sample_row = pd.Series({
+            "stock_code": "300476", "stock_name": "胜宏科技（演示）",
+            "report_date": "20260603", "buy_price": "100.00",
+            "adjusted_buy_price": "100.10", "stop_price": "97.10",
+            "holding_status": "holding", "days_held": "3",
+            "latest_close": "102.50", "latest_return_pct": "0.024",
+            "peak_high": "105.00", "peak_low": "98.50",
+            "peak_return_pct": "0.049", "peak_drawdown_pct": "-0.016",
+        })
+        st.markdown(
+            _h(f"""
+            <div class="t1-section-head" style="margin-top:24px;">
+              <div>
+                <div class="t1-section-kicker">PREVIEW（DEMO）</div>
+                <div class="t1-section-title">持仓中（暂无真实数据 · 演示样例）</div>
+              </div>
+              {chip_html("等明早 9:36 买入", color=COLOR_WAIT_T1)}
+            </div>
+            """),
+            unsafe_allow_html=True,
+        )
+        st.markdown(_track_card(sample_row), unsafe_allow_html=True)
+        st.markdown(
+            _h(f"""
+            <div style="margin:-4px 0 10px 0;padding:10px 14px;background:rgba(0,218,243,0.06);
+                        border-left:3px solid {COLOR_WAIT_T1};border-radius:6px;
+                        font-size:12px;color:{COLOR_MUTED};font-family:{FONT_MONO};">
+              ↑ 这是<b style="color:{COLOR_WAIT_T1};">演示样例</b>，不是真实持仓。
+              明早 9:36 check_buy 真正买入后，这里会显示真实数据，每天 19:00 自动滚动。
+            </div>
+            """),
+            unsafe_allow_html=True,
+        )
 
     # —— 已止损（30 天追踪）——
     if not df_stopped.empty:
@@ -8268,6 +8301,46 @@ def page_holding_track(df_all: pd.DataFrame) -> None:
         )
         for _, row in df_stopped.iterrows():
             st.markdown(_track_card(row, show_post_stop=True), unsafe_allow_html=True)
+    elif df_holding.empty:
+        # 持仓 + 止损 都空 → 给止损追踪也加一张演示卡（让朱哥看到 POST-STOP 字段）
+        sample_stop = pd.Series({
+            "stock_code": "300308", "stock_name": "中际旭创（演示）",
+            "report_date": "20260601", "buy_price": "1130.00",
+            "adjusted_buy_price": "1131.13", "stop_price": "1097.20",
+            "holding_status": "stopped", "days_held": "5",
+            "latest_close": "1097.20", "latest_return_pct": "-0.030",
+            "peak_high": "1180.50", "peak_low": "1097.20",
+            "peak_return_pct": "0.044", "peak_drawdown_pct": "-0.030",
+            "exit_date": "20260605", "exit_price": "1097.20",
+            "exit_reason": "stop_loss",
+            "post_stop_days_tracked": "12",
+            "post_stop_max_return_pct": "0.052",
+            "post_stop_max_drawdown_pct": "-0.018",
+        })
+        st.markdown(
+            _h(f"""
+            <div class="t1-section-head" style="margin-top:24px;">
+              <div>
+                <div class="t1-section-kicker">PREVIEW（DEMO）</div>
+                <div class="t1-section-title">已止损 30 天追踪（暂无真实数据 · 演示样例）</div>
+              </div>
+              {chip_html("看是否卖飞", color=COLOR_MAGENTA_NEON)}
+            </div>
+            """),
+            unsafe_allow_html=True,
+        )
+        st.markdown(_track_card(sample_stop, show_post_stop=True), unsafe_allow_html=True)
+        st.markdown(
+            _h(f"""
+            <div style="margin:-4px 0 10px 0;padding:10px 14px;background:rgba(255,61,138,0.06);
+                        border-left:3px solid {COLOR_MAGENTA_NEON};border-radius:6px;
+                        font-size:12px;color:{COLOR_MUTED};font-family:{FONT_MONO};">
+              ↑ 演示样例：若止损后反弹 ≥ 3%，会标 🚀 <b style="color:{COLOR_MAGENTA_NEON};">卖飞了</b>，
+              帮你判断止损规则是否过严。
+            </div>
+            """),
+            unsafe_allow_html=True,
+        )
 
     # —— 30 天追踪完成 ——
     if not df_post_done.empty:
