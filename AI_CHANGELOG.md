@@ -2431,3 +2431,133 @@ sudo pmset repeat wake MTWRF 09:25:00
 
 - 如果用户确认 UI 可接受，建议提交 `dashboard_app.py`、`AI_HANDOFF.md`、`AI_CHANGELOG.md`。
 - 不建议提交 `data/calendar/`、`data/minute_today/`。
+
+## 2026-06-03 Codex（T+1 / 自选页精修）
+
+### 本次任务
+
+- 按朱哥要求优先精修 `T+1 复盘` 和 `⭐ 我的自选`。
+- 目标：精细化、保持和 `今日总览` 一致的 RADAR_TERMINAL 终端风格。
+- 重点：自选池优先评估文案、双列自选卡片、T+1 终端审计模块。
+
+### 修改文件
+
+- `dashboard_app.py`
+- `AI_HANDOFF.md`
+- `AI_CHANGELOG.md`
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- `run.py`：未改。
+- `trade_review.py`：未改。
+- `output/trade_review.csv`：未改。
+- `config/version_flags.yaml`：未改。
+- `launchd/*.plist`：未改。
+- 自动下单逻辑：未新增。
+- 券商连接逻辑：未新增。
+
+### 是否运行 python run.py
+
+- 没有。
+- 未运行任何 `python run.py` 子命令。
+
+### 验收
+
+- `.venv/bin/python3 -m py_compile dashboard_app.py` 通过。
+- `git diff --check` 通过。
+- Streamlit AppTest：
+  - `T+1 复盘` 无异常。
+  - `⭐ 我的自选` 无异常。
+- 浏览器验证：
+  - `T+1 复盘` 无 raw HTML、无 `nan`。
+  - `⭐ 我的自选` 显示 27 只、存在“自选优先”文案、无 raw HTML、无 `nan`。
+  - 自选卡片双列生效，浏览器测得 grid columns 为 `525px 525px`。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：未提交，等用户确认。
+- status：dirty；待提交文件预计为 `dashboard_app.py`、`AI_HANDOFF.md`、`AI_CHANGELOG.md`。
+- 未追踪：`data/calendar/`、`data/minute_today/`，不建议随 UI 提交。
+
+### 遗留问题
+
+- 如果继续 UI 第二轮，建议下一步处理 `手动补跑`，它目前和今日总览风格差距最大。
+- 本轮只做展示层，不影响选股、买入、做 T、T+1 结算和历史记录。
+
+### 追加修正
+
+- `做T观察`：今日真实 T 信号改为按股票合并展示，同一股票多条信号记录不再视觉重复。
+- `⭐ 我的自选`：去掉重复的“自选优先 / 自选 ≠ 买入”chip，只保留全局安全说明和必要状态标签。
+- `⭐ 我的自选`：快速添加 / 搜索筛选从原生 expander 大横条改为小型 `打开控制台` 弹层入口，保留原有识别、添加、搜索和筛选功能。
+- 根据浏览器截图复核，`RESEARCH INPUT` 二级标题仍然突兀；已继续移除该二级标题，主页面默认不再摊开输入框。
+- AppTest 复核：
+  - `做T观察` 无异常，页面包含“同一股票多条信号已合并展示”。
+  - `⭐ 我的自选` 无异常，旧的“展开：快速添加 / 搜索筛选”文案已移除；后续浏览器复核后 `RESEARCH INPUT` 二级标题也已移除。
+- 浏览器复核：
+  - `⭐ 我的自选` 页面存在。
+  - 旧的“展开：快速添加 / 搜索筛选”不存在。
+  - `RESEARCH INPUT` 不存在。
+  - 快速添加输入框移动到 `打开控制台` 弹层内。
+  - 自选卡片仍为双列，首屏卡片宽度约 525px。
+
+## 2026-06-03 Codex（自选页首屏控件清理）
+
+### 本次任务
+
+- 继续修复 `⭐ 我的自选` 页面首屏 UI。
+- 朱哥指出首屏仍有突兀的原生控件横条和大按钮，和 `今日总览` 终端风格不一致。
+
+### 修改文件
+
+- `dashboard_app.py`
+- `AI_HANDOFF.md`
+- `AI_CHANGELOG.md`
+
+### 新增文件
+
+- 无。
+
+### 禁改文件检查
+
+- `run.py`：未改。
+- `trade_review.py`：未改。
+- `output/trade_review.csv`：未改。
+- `config/version_flags.yaml`：未改。
+- `launchd/*.plist`：未改。
+- 自动下单逻辑：未新增。
+- 券商连接逻辑：未新增。
+
+### 是否运行 python run.py
+
+- 没有。
+- 未运行任何 `python run.py` 子命令。
+
+### 验收
+
+- `.venv/bin/python3 -m py_compile dashboard_app.py` 通过。
+- 浏览器 DOM 验证 `http://localhost:8501/`：
+  - `⭐ 我的自选` 已选中。
+  - 旧的 `打开控制台` 不存在。
+  - 旧的 `默认展示全部自选股，需要新增...` 不存在。
+  - `active / p1` 不存在。
+  - `priority / stock_code` 不存在。
+  - `MARKET RESEARCH FEED` 不存在。
+  - 自选卡片正常显示。
+  - `展开维护自选池` 仍存在，保留新增、识别、搜索、筛选、保存能力。
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：未提交，等用户确认。
+- status：dirty；待提交文件预计为 `dashboard_app.py`、`AI_HANDOFF.md`、`AI_CHANGELOG.md`。
+- 未追踪：`data/calendar/`、`data/minute_today/`，不建议随 UI 提交。
+
+### 遗留问题
+
+- 浏览器截图 API 本轮多次超时，但 DOM 验证和页面点击已成功；如果继续精修，可让用户刷新肉眼确认首屏。
+- 本轮只做 dashboard 展示层，不影响选股、买入、做 T、T+1 结算和历史记录。

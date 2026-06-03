@@ -2999,3 +2999,98 @@ Claude 提交 `notifier.py` nan/inf 修复后，用户要求 Codex 先检查 md 
 - 不建议提交：
   - `data/calendar/`
   - `data/minute_today/`
+
+## 2026-06-03 Codex T+1 / 自选页精修
+
+### 本次任务
+
+- 按朱哥要求优先精修 `T+1 复盘` 和 `⭐ 我的自选` 两页。
+- 目标是更贴近 `今日总览` 的 RADAR_TERMINAL 终端风格，同时明确“自选池优先评估，但不是买入指令”。
+
+### 修改范围
+
+- `dashboard_app.py`
+  - `T+1 复盘`：
+    - 新增页面专属终端 CSS。
+    - KPI 改成高密度终端栅格。
+    - 等待 T+1 样本改成卡片队列。
+    - 已完成样本保留结算流卡片，并新增更清晰的 `SETTLEMENT STREAM` / `PERFORMANCE CHARTS` 区块。
+    - 止盈/止损说明改成两张规则卡，仍然只读展示，不改变任何结算规则。
+  - `⭐ 我的自选`：
+    - 页面宽度从偏宽布局收敛到 1060px 左右。
+    - 自选卡片改为双列高密度网格。
+    - 明确文案：自选池优先进入候选评估，但仍必须通过安全过滤、V1.6 计划层和 9:36 技术确认。
+    - 修复 Streamlit 分段 `st.markdown` 导致 CSS grid 不生效的问题：卡片组改为一次性渲染整组 HTML。
+
+### 验收
+
+- `.venv/bin/python3 -m py_compile dashboard_app.py` 通过。
+- `git diff --check` 通过。
+- Streamlit AppTest：
+  - `T+1 复盘` 无异常。
+  - `⭐ 我的自选` 无异常。
+- 浏览器检查 `http://localhost:8501/`：
+  - `T+1 复盘` 有 KPI、结算流、规则卡，无 raw HTML，无 `nan`。
+  - `⭐ 我的自选` 显示 27 只，自选优先文案存在，无 raw HTML，无 `nan`。
+  - 自选卡片已实际变为双列：浏览器测得 grid columns 为 `525px 525px`。
+
+### 安全边界
+
+- 未运行 `python run.py` 或任何 `run.py` 子命令。
+- 未修改 `run.py`。
+- 未修改 `trade_review.py`。
+- 未修改 `output/trade_review.csv` 历史记录。
+- 未修改 `config/version_flags.yaml`。
+- 未修改 `launchd/*.plist`。
+- 未新增自动下单或券商连接逻辑。
+
+### 当前状态
+
+- 当前改动尚未提交。
+- 待提交文件预计为：
+  - `dashboard_app.py`
+  - `AI_HANDOFF.md`
+  - `AI_CHANGELOG.md`
+- 仍不建议提交未追踪数据目录：
+  - `data/calendar/`
+  - `data/minute_today/`
+
+### 追加修正
+
+- `做T观察` 的“今日真实 T 信号”按股票代码合并展示，避免同一股票多条 low/high/no-trigger 记录看起来像重复推荐。
+- `⭐ 我的自选` 去掉重复 chip：
+  - 不再在 hero、工具条、列表头、每张卡里反复显示“自选优先 / 自选 ≠ 买入”。
+  - 保留全局安全说明：自选池优先进入候选评估，但仍需安全过滤、V1.6 计划层和 9:36 技术确认。
+- `⭐ 我的自选` 的“快速添加 / 搜索筛选”从 Streamlit 原生 expander 大横条改为小型 `打开控制台` 弹层入口：
+  - 保留股票识别、加入自选、搜索、status/priority 筛选、主题/理由勾选能力。
+  - 只改展示布局，不改变 `_wl_identify()`、`_wl_save()` 或自选池 CSV 写入逻辑。
+- 追加修正：`RESEARCH INPUT` 二级标题已移除，主页面默认不再摊开输入框；需要新增/筛选时点击 `打开控制台`。
+- 浏览器复核 `⭐ 我的自选`：
+  - 旧的“展开：快速添加 / 搜索筛选”不存在。
+  - `RESEARCH INPUT` 不存在。
+  - 快速添加输入框移动到 `打开控制台` 弹层内，placeholder 为 `例如 300476 / 胜宏科技`。
+  - 自选卡片仍为双列，浏览器测得首屏卡片宽度约 525px。
+- 这次仍是纯 dashboard 展示层修改，不改变任何 T 信号生成、选股、买入或记录逻辑。
+
+### 2026-06-03 10:29 追加：自选页首屏控件清理
+
+- 根据朱哥最新浏览器截图，`⭐ 我的自选` 首屏仍有原生 Streamlit 控件横条，视觉上与 `今日总览` 不一致。
+- 已继续调整 `dashboard_app.py`：
+  - 删除旧的 `watchlist-controls-anchor` / `watchlist-popover-anchor` 相关 CSS。
+  - 首屏不再渲染“打开控制台”大按钮或横向输入控件。
+  - `搜索、识别与观察筛选` 改为只读说明卡：`观察池优先评估`。
+  - “快速识别 / 新增”和“搜索 / 筛选展示”移动到页面底部 `展开维护自选池` 内。
+  - 去掉首屏 `active / p1`、`priority / stock_code`、`MARKET RESEARCH FEED` 等半英文/冗余标签。
+- 浏览器 DOM 复核 `http://localhost:8501/`：
+  - `⭐ 我的自选` 已选中。
+  - 旧的 `打开控制台` 不存在。
+  - 旧的 `默认展示全部自选股，需要新增...` 不存在。
+  - `active / p1`、`priority / stock_code`、`MARKET RESEARCH FEED` 不存在。
+  - `中电港`、`大族激光` 等自选卡片正常显示。
+  - `展开维护自选池` 仍存在，保留新增、识别、搜索、筛选和保存能力。
+- 验证：
+  - `.venv/bin/python3 -m py_compile dashboard_app.py` 通过。
+- 安全边界：
+  - 未运行 `python run.py` 或任何 `run.py` 子命令。
+  - 未修改 `run.py`、`trade_review.py`、`output/trade_review.csv`、`config/version_flags.yaml`、`launchd/*.plist`。
+  - 未新增自动下单或券商连接逻辑。

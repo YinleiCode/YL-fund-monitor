@@ -2820,6 +2820,148 @@ def page_buy_check(df_all: pd.DataFrame) -> None:
 
 # ─── PAGE 3: T+1 复盘（卡片化 + 友好空态）────────────────────────────
 
+def _t1_review_style_html() -> str:
+    """T+1 页面专属视觉层：仅 CSS，不影响结算/选股逻辑。"""
+    return _h(f"""
+    <style>
+      .t1-page-shell {{
+        max-width: 1180px;
+        margin: -4px auto 0 auto;
+      }}
+      .t1-kpi-grid {{
+        display:grid;
+        grid-template-columns:repeat(4,minmax(0,1fr));
+        gap:10px;
+        margin:8px 0 10px 0;
+      }}
+      .t1-section-head {{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:12px;
+        margin:12px 0 8px 0;
+        padding:10px 12px;
+        border-radius:13px;
+        border:1px solid {COLOR_GLASS_EDGE};
+        background:
+          radial-gradient(circle at top right, rgba(0,218,243,0.08), transparent 32%),
+          linear-gradient(180deg, rgba(15,20,27,0.94), rgba(10,14,23,0.86));
+        box-shadow:inset 0 1px 0 rgba(255,255,255,0.03);
+      }}
+      .t1-section-title {{
+        font-family:{FONT_HEADLINE};
+        font-size:18px;
+        font-weight:800;
+        color:{COLOR_TEXT};
+        letter-spacing:-0.01em;
+      }}
+      .t1-section-kicker {{
+        font-family:{FONT_MONO};
+        font-size:10px;
+        color:{COLOR_SECOND};
+        letter-spacing:0.18em;
+        font-weight:800;
+      }}
+      .t1-wait-grid {{
+        display:grid;
+        grid-template-columns:repeat(auto-fit,minmax(360px,1fr));
+        gap:10px;
+        margin:8px 0 10px 0;
+      }}
+      .t1-wait-card {{
+        border:1px solid {COLOR_GLASS_EDGE};
+        border-left:3px solid {COLOR_WAIT_T1};
+        border-radius:14px;
+        padding:14px 15px;
+        background:
+          radial-gradient(circle at top right, rgba(0,218,243,0.10), transparent 32%),
+          linear-gradient(180deg, rgba(17,24,33,0.94), rgba(9,13,20,0.90));
+        box-shadow:inset 0 1px 0 rgba(255,255,255,0.035);
+      }}
+      .t1-rule-grid {{
+        display:grid;
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:10px;
+        margin:8px 0 12px 0;
+      }}
+      .t1-chart-grid {{
+        display:grid;
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:12px;
+        margin-top:10px;
+      }}
+      .t1-chart-title {{
+        font-family:{FONT_MONO};
+        font-size:10px;
+        letter-spacing:0.16em;
+        color:{COLOR_MUTED};
+        font-weight:800;
+        margin:0 0 8px 0;
+      }}
+      @media (max-width: 980px) {{
+        .t1-kpi-grid, .t1-rule-grid, .t1-chart-grid {{
+          grid-template-columns:1fr;
+        }}
+      }}
+    </style>
+    """)
+
+
+def _t1_wait_cards_html(wait_rows: list[dict]) -> str:
+    """等待 T+1 样本卡片。只读展示，不改变补全调度。"""
+    if not wait_rows:
+        return ""
+    cards = []
+    for row in wait_rows:
+        cards.append(f"""
+        <div class="t1-wait-card">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+            <div>
+              <div style="font-family:{FONT_MONO};font-size:10px;letter-spacing:0.14em;color:{COLOR_MUTED};">WAITING SETTLEMENT</div>
+              <div style="margin-top:6px;font-family:{FONT_HEADLINE};font-size:20px;font-weight:800;color:{COLOR_TEXT};">
+                {_eh(row.get("名称"))}
+              </div>
+              <div style="margin-top:3px;font-family:{FONT_MONO};font-size:12px;color:{COLOR_SECOND};font-weight:800;">
+                {_eh(row.get("代码"))} · {_eh(row.get("模式"))} · {_eh(row.get("主题"))}
+              </div>
+            </div>
+            {chip_html("等待 T+1", color=COLOR_WAIT_T1)}
+          </div>
+          <div style="margin-top:12px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;">
+            <div><div class="tt-card-label">买入价</div><div class="tt-card-value">{_eh(row.get("买入价"))}</div></div>
+            <div><div class="tt-card-label">滑点后</div><div class="tt-card-value">{_eh(row.get("滑点后"))}</div></div>
+            <div><div class="tt-card-label">止损价</div><div class="tt-card-value" style="color:{COLOR_ERROR};">{_eh(row.get("止损价"))}</div></div>
+          </div>
+          <div style="margin-top:10px;color:{COLOR_MUTED};font-size:12px;line-height:1.65;">
+            T+1 收盘后由复盘补全任务写入收益、回撤和止损判定。当前页面不触发任何买卖动作。
+          </div>
+        </div>
+        """)
+    return _h(f"<div class='t1-wait-grid'>{''.join(cards)}</div>")
+
+
+def _t1_rule_cards_html() -> str:
+    """T+1 规则提示卡片。"""
+    return _h(f"""
+    <div class="t1-rule-grid">
+      {glass_card_html(f'''
+        <div style="font-family:{FONT_MONO};font-size:10px;letter-spacing:0.16em;color:{COLOR_WARN_YELLOW};font-weight:800;">TAKE PROFIT NOTE</div>
+        <div style="margin-top:7px;font-size:16px;font-weight:800;color:{COLOR_TEXT};">9:36 模拟确认层不主动止盈</div>
+        <div style="margin-top:7px;color:{COLOR_MUTED};font-size:12px;line-height:1.7;">
+          系统统计冲高 3% / 5% 用于事后质量评估，但不会因为冲高自动卖出。当前出口只有触发止损或持有到 T+1 收盘。
+        </div>
+      ''', accent=COLOR_WARN_YELLOW)}
+      {glass_card_html(f'''
+        <div style="font-family:{FONT_MONO};font-size:10px;letter-spacing:0.16em;color:{COLOR_WAIT_T1};font-weight:800;">STOP LOSS RULE</div>
+        <div style="margin-top:7px;font-size:16px;font-weight:800;color:{COLOR_TEXT};">止损价 = 滑点后买入价 × 0.97</div>
+        <div style="margin-top:7px;color:{COLOR_MUTED};font-size:12px;line-height:1.7;">
+          T+1 开盘低于止损价按开盘止损；盘中最低触及止损线按止损价结算；否则按 T+1 收盘价结算。
+        </div>
+      ''', accent=COLOR_WAIT_T1)}
+    </div>
+    """)
+
+
 def _resolve_settlement(row) -> Tuple[str, str]:
     """
     展示层推导：根据当前 _calc_row 已写入 CSV 的字段，反推 T+1 结算方式。
@@ -2959,6 +3101,7 @@ def page_t1_review(df_all: pd.DataFrame) -> None:
         status_banner("当前无数据。", "info")
         return
 
+    st.markdown(_t1_review_style_html(), unsafe_allow_html=True)
     df = enrich_df(df_all.copy())
     df_bought = df[df.apply(is_bought, axis=1)]
     render_page_header(
@@ -2987,147 +3130,77 @@ def page_t1_review(df_all: pd.DataFrame) -> None:
     succ_rate = (n_succ / n_done * 100) if n_done > 0 else None
     stop_rate = (n_stop / n_done * 100) if n_done > 0 else None
 
-    # 顶部状态横幅
-    if n_done == 0 and n_wait > 0:
-        status_banner(
-            f"当前已有 <b>{n_wait}</b> 只模拟买入样本，但还未到 T+1 复盘时间。"
-            "系统将在 T+1 收盘后自动补全收益、回撤、止损和成功率。",
-            "warning",
-        )
-    elif n_done > 0:
-        succ_txt = f"{succ_rate:.0f}%" if succ_rate is not None else "暂无样本"
-        status_banner(
-            f"已完成 T+1 复盘 <b>{n_done}</b> 单 ｜ 风险调整成功率 <b>{succ_txt}</b>",
-            "success",
-        )
-
-    cols = st.columns(4)
-    cols[0].markdown(
-        kpi_card("已完成T+1", n_done, COLOR_TEXT, "可参与复盘胜率统计"),
+    st.markdown("<div class='t1-page-shell'>", unsafe_allow_html=True)
+    st.markdown(
+        _h(f"""
+        <div class="t1-kpi-grid">
+          {kpi_card("已完成T+1", n_done, COLOR_TEXT, "可参与复盘胜率统计")}
+          {kpi_card("等待T+1", n_wait, COLOR_WAIT_T1, "已模拟买入，等待补全")}
+          {kpi_card("风险调整成功率", f"{succ_rate:.0f}%" if succ_rate is not None else "暂无", COLOR_BOUGHT if succ_rate else COLOR_MUTED, "冲高≥3% 且未先触止损")}
+          {kpi_card("止损率", f"{stop_rate:.0f}%" if stop_rate is not None else "暂无", COLOR_ERROR if stop_rate else COLOR_MUTED, "触发 -3% 止损线")}
+        </div>
+        """),
         unsafe_allow_html=True,
     )
-    cols[1].markdown(
-        kpi_card("等待T+1", n_wait, COLOR_WAIT_T1, "buy_signal=true 但 T+1 未补"),
-        unsafe_allow_html=True,
-    )
-    cols[2].markdown(
-        kpi_card(
-            "风险调整成功率",
-            f"{succ_rate:.0f}%" if succ_rate is not None else "暂无样本",
-            COLOR_BOUGHT if succ_rate else COLOR_MUTED,
-            "冲高≥3% 且 未先触止损",
-        ),
-        unsafe_allow_html=True,
-    )
-    cols[3].markdown(
-        kpi_card(
-            "止损率",
-            f"{stop_rate:.0f}%" if stop_rate is not None else "暂无样本",
-            COLOR_ERROR if stop_rate else COLOR_MUTED,
-            "触发 -3% 止损线",
-        ),
-        unsafe_allow_html=True,
-    )
-
-    st.divider()
 
     # —— 等待 T+1 卡片 ——
     if not df_wait.empty:
-        st.markdown(f"### ⏳ 等待 T+1 复盘（{n_wait} 只）")
+        st.markdown(
+            _h(f"""
+            <div class="t1-section-head">
+              <div>
+                <div class="t1-section-kicker">PENDING QUEUE</div>
+                <div class="t1-section-title">等待 T+1 复盘（{n_wait} 只）</div>
+              </div>
+              {chip_html("只读观察", color=COLOR_WAIT_T1)}
+            </div>
+            """),
+            unsafe_allow_html=True,
+        )
+        wait_rows = []
         for _, r in df_wait.iterrows():
-            bp  = _num_str(r["buy_price"], 3)
-            adj = _num_str(r["adjusted_buy_price"], 3)
-            stp = _num_str(r["stop_price"], 3)
-            st.markdown(
-                f"""
-                <div style="background:{COLOR_CARD};border:1px solid {COLOR_BORDER};
-                            border-left:4px solid {COLOR_WAIT_T1};
-                            border-radius:8px;padding:14px 16px;margin-bottom:10px;">
-                  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-                    <div style="font-size:16px;font-weight:600;color:{COLOR_TEXT};">
-                      {r['stock_name']} <span style="font-size:13px;color:{COLOR_MUTED};font-weight:normal;">（{r['stock_code']}）</span>
-                    </div>
-                    <span style="background:{COLOR_WAIT_T1}1A;color:{COLOR_WAIT_T1};
-                                 padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;">
-                      ⏳ 等待 T+1 复盘
-                    </span>
-                  </div>
-                  <div style="display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:{COLOR_MUTED};margin-top:8px;">
-                    <span>模式：<b style="color:{COLOR_TEXT};">{r['mode_cn']}</b></span>
-                    <span>主题：<b style="color:{COLOR_TEXT};">{r['theme_name'] or '—'}</b></span>
-                    <span>买入价：<b style="color:{COLOR_TEXT};">{bp}</b></span>
-                    <span>滑点后：<b style="color:{COLOR_TEXT};">{adj}</b></span>
-                    <span>止损价：<b style="color:{COLOR_ERROR};">{stp}</b></span>
-                  </div>
-                  <div style="font-size:12px;color:{COLOR_MUTED};margin-top:6px;">
-                    预计复盘时间：T+1 15:25 后自动补全 ｜ 当前状态：等待 T+1 复盘
-                  </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+            wait_rows.append({
+                "名称": r["stock_name"],
+                "代码": r["stock_code"],
+                "模式": r["mode_cn"],
+                "主题": r["theme_name"] or "—",
+                "买入价": _num_str(r["buy_price"], 3),
+                "滑点后": _num_str(r["adjusted_buy_price"], 3),
+                "止损价": _num_str(r["stop_price"], 3),
+            })
+        st.markdown(_t1_wait_cards_html(wait_rows), unsafe_allow_html=True)
 
     if df_done.empty:
-        st.info(
-            f"📊 当前已有 **{n_wait}** 只模拟买入样本，但还未到 T+1 复盘时间。"
-            f"系统将在 T+1 收盘后自动补全收益、回撤、止损和成功率。"
+        st.markdown(
+            _h(glass_card_html(
+                f"""
+                <div style="font-family:{FONT_MONO};font-size:10px;letter-spacing:0.16em;color:{COLOR_WARN_YELLOW};font-weight:800;">NO SETTLEMENT YET</div>
+                <div style="margin-top:8px;font-size:18px;font-weight:800;color:{COLOR_TEXT};">暂无已完成 T+1 复盘样本</div>
+                <div style="margin-top:7px;color:{COLOR_MUTED};font-size:12px;line-height:1.7;">
+                  当前已有 {n_wait} 只等待样本。T+1 数据补全后，本页会自动显示收益、回撤、止损和风险调整结果。
+                </div>
+                """,
+                accent=COLOR_WARN_YELLOW,
+            )),
+            unsafe_allow_html=True,
         )
+        st.markdown("</div>", unsafe_allow_html=True)
         return
 
     # —— 已完成 T+1 明细 ——
-    st.markdown(f"### ✅ 已完成 T+1 复盘明细（{n_done}）")
-
-    # —— V1.6 止盈规则说明（**展示层警示**：止盈未启用，避免用户误解为"系统漏了止盈"）——
     st.markdown(
-        f"""
-        <div style="
-            background:{COLOR_BANNER_INFO};
-            border-left:4px solid {COLOR_SECOND};
-            border-radius:6px;
-            padding:12px 16px;
-            margin-bottom:10px;
-            font-size:12.5px;
-            color:{COLOR_TEXT};
-            line-height:1.8;">
-          💡 <b>当前 9:36 模拟确认层没有主动止盈规则（不是 bug，是设计）：</b><br>
-          ・ 系统会统计 <b>是否冲高 ≥3%</b>（`is_active_success`）和 <b>是否冲高 ≥5%</b>（`is_strong_surge`），
-              但<b>不会因为冲高自动卖出</b>。<br>
-          ・ 当前模拟复盘口径只有两种出口：<b>触发止损线</b> 或 <b>持有到 T+1 收盘</b>。<br>
-          ・ "冲高 3%/5%" 仅用于事后判定 <b>风险调整后是否成功</b>（冲高≥3% 且 未先触止损 ⇒ 成功），
-              不参与买卖动作。
-          <span style="color:{COLOR_MUTED};font-size:11.5px;display:block;margin-top:4px;">
-          后续研究"冲高 3% 后部分出局"的主动止盈规则；当前 9:36 技术确认层一律不止盈。
-          </span>
+        _h(f"""
+        <div class="t1-section-head">
+          <div>
+            <div class="t1-section-kicker">SETTLEMENT STREAM</div>
+            <div class="t1-section-title">已完成 T+1 复盘明细（{n_done}）</div>
+          </div>
+          {chip_html("模拟复盘", color=COLOR_BOUGHT)}
         </div>
-        """,
+        """),
         unsafe_allow_html=True,
     )
-
-    # —— V1.6 止损规则说明（展示层，不改任何规则）——
-    st.markdown(
-        f"""
-        <div style="
-            background:{COLOR_CARD_DEEP};
-            border-left:4px solid {COLOR_WAIT_T1};
-            border-radius:6px;
-            padding:12px 16px;
-            margin-bottom:14px;
-            font-size:12.5px;
-            color:{COLOR_TEXT};
-            line-height:1.8;">
-          📐 <b>当前 9:36 技术确认层止损规则（仅做事后回测模拟，非实盘自动卖出）：</b><br>
-          ・ <b>止损价 = 滑点后买入价 × 0.97</b><br>
-          ・ 如果 <b>T+1 开盘价</b> 低于/等于止损价 → <b>开盘止损</b>，按 T+1 开盘价结算<br>
-          ・ 否则 如果 <b>T+1 盘中最低价</b> 跌破止损价 → <b>盘中止损</b>，按止损价结算<br>
-          ・ 否则按 <b>T+1 收盘价</b> 结算<br>
-          <span style="color:{COLOR_MUTED};font-size:11.5px;">
-          系统使用日 K 数据，因此只要 T+1 最低价触及止损线，就视为盘中止损已触发——
-          不会因为收盘前股价拉回而"洗白"。这是模拟回测限制，不是实盘行为。
-          </span>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.markdown(_t1_rule_cards_html(), unsafe_allow_html=True)
 
     done_rows = []
     for _, r in df_done.sort_values("report_date", ascending=False).iterrows():
@@ -3178,9 +3251,22 @@ def page_t1_review(df_all: pd.DataFrame) -> None:
         })
     cdf = pd.DataFrame(chart_rows)
 
+    st.markdown(
+        _h(f"""
+        <div class="t1-section-head">
+          <div>
+            <div class="t1-section-kicker">PERFORMANCE CHARTS</div>
+            <div class="t1-section-title">收益、回撤与成功率</div>
+          </div>
+          {chip_html("只读统计", color=COLOR_SECOND)}
+        </div>
+        """),
+        unsafe_allow_html=True,
+    )
+
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown("##### 模拟交易收益")
+        st.markdown("<div class='t1-chart-title'>模拟交易收益</div>", unsafe_allow_html=True)
         fig = px.bar(
             cdf, x="name", y="ret", color="ret",
             # 中点用奶油底色，避免 0 处出现刺眼白色
@@ -3201,7 +3287,7 @@ def page_t1_review(df_all: pd.DataFrame) -> None:
         st.plotly_chart(fig, width="stretch", config=PLOTLY_SAFE_CONFIG)
 
     with col2:
-        st.markdown("##### 最大回撤")
+        st.markdown("<div class='t1-chart-title'>最大回撤</div>", unsafe_allow_html=True)
         fig = px.bar(
             cdf, x="name", y="dd",
             labels={"dd": "回撤", "name": ""},
@@ -3216,7 +3302,7 @@ def page_t1_review(df_all: pd.DataFrame) -> None:
         fig.update_layout(**_plotly_terminal_layout(yaxis_tickformat=".0%"))
         st.plotly_chart(fig, width="stretch", config=PLOTLY_SAFE_CONFIG)
 
-    st.markdown("##### 成功 / 失败统计")
+    st.markdown("<div class='t1-chart-title'>成功 / 失败统计</div>", unsafe_allow_html=True)
     succ_df = cdf["success"].value_counts().reset_index()
     succ_df.columns = ["结果", "数量"]
     fig = px.pie(
@@ -3232,6 +3318,7 @@ def page_t1_review(df_all: pd.DataFrame) -> None:
         legend=dict(font=dict(color=COLOR_TEXT)),
     )
     st.plotly_chart(fig, width="stretch", config=PLOTLY_SAFE_CONFIG)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 # ─── PAGE 4: 未买入跟踪（bug 修复 + 灰色不再红）──────────────────────
@@ -7507,29 +7594,70 @@ def _tt_text(v, default: str = "—") -> str:
 def _tt_signal_cards_html(signals: pd.DataFrame) -> str:
     if signals is None or signals.empty:
         return ""
+    grouped_rows = []
+    source = signals.copy()
+    if "stock_code" not in source.columns:
+        source["stock_code"] = ""
+    if "stock_name" not in source.columns:
+        source["stock_name"] = ""
+    for code, group in source.head(30).groupby(source["stock_code"].astype(str), sort=False):
+        first = group.iloc[0]
+        sig_parts = []
+        fail_parts = []
+        pass_count = 0
+        latest_time = ""
+        latest_price = ""
+        for _, item in group.iterrows():
+            passed = str(item.get("rule_pass", "")).strip().lower() in ("true", "1")
+            pass_count += int(passed)
+            sig_type = _tt_text(item.get("signal_type", ""), "")
+            sig_label = _T_SIGNAL_CN.get(sig_type, sig_type or "无触发")
+            if sig_label not in sig_parts:
+                sig_parts.append(sig_label)
+            fail_raw = _tt_text(item.get("fail_reason", ""), "")
+            fail_text = _FAIL_REASON_CN.get(fail_raw, fail_raw or "")
+            if fail_text and fail_text != "—" and fail_text not in fail_parts:
+                fail_parts.append(fail_text)
+            if _tt_text(item.get("signal_time", ""), ""):
+                latest_time = _tt_text(item.get("signal_time", ""), "")
+                latest_price = item.get("signal_price", "")
+        grouped_rows.append({
+            "stock_code": code,
+            "stock_name": first.get("stock_name", ""),
+            "signals": sig_parts or ["无触发"],
+            "fail_reasons": fail_parts or ["未触发任何信号"],
+            "pass_count": pass_count,
+            "raw_count": len(group),
+            "latest_time": latest_time,
+            "latest_price": latest_price,
+        })
+
     rows_html = []
-    for _, r in signals.head(10).iterrows():
-        passed = str(r.get("rule_pass", "")).strip().lower() in ("true", "1")
-        sig_type = _tt_text(r.get("signal_type", ""), "")
-        sig_label = _T_SIGNAL_CN.get(sig_type, sig_type or "无触发")
+    for r in grouped_rows[:10]:
+        passed = int(r.get("pass_count", 0) or 0) > 0
         accent = COLOR_BOUGHT if passed else COLOR_WAIT_T1
-        fail_raw = _tt_text(r.get("fail_reason", ""), "")
-        fail_text = _FAIL_REASON_CN.get(fail_raw, fail_raw or "—")
-        status_text = "规则通过" if passed else "未通过"
+        signal_chips = "".join(
+            f"<span style='display:inline-flex;padding:4px 9px;border-radius:999px;border:1px solid {accent}88;"
+            f"color:{accent};background:{accent}12;font-family:{FONT_MONO};font-size:11px;font-weight:700;margin-right:6px;margin-bottom:4px;'>{_eh(sig)}</span>"
+            for sig in r["signals"]
+        )
+        fail_text = "；".join(r["fail_reasons"])
+        status_text = "有通过信号" if passed else "未通过"
+        raw_count = int(r.get("raw_count", 1) or 1)
+        merge_note = f"合并 {raw_count} 条记录" if raw_count > 1 else "单条记录"
         rows_html.append(_h(f"""
         <div style="display:grid;grid-template-columns:1.1fr .9fr .9fr .9fr;gap:12px;align-items:center;
                     padding:12px 0;border-bottom:1px solid {COLOR_DIVIDER};">
           <div>
             <div style="font-family:{FONT_HEADLINE};font-size:15px;font-weight:700;color:{COLOR_TEXT};">{_eh(_tt_text(r.get('stock_name', ''), '—'))}</div>
-            <div style="font-family:{FONT_MONO};font-size:11px;color:{COLOR_MUTED};margin-top:3px;">{_eh(_tt_text(r.get('stock_code', ''), '—'))}</div>
+            <div style="font-family:{FONT_MONO};font-size:11px;color:{COLOR_MUTED};margin-top:3px;">{_eh(_tt_text(r.get('stock_code', ''), '—'))} · {merge_note}</div>
           </div>
           <div>
-            <span style="display:inline-flex;padding:4px 9px;border-radius:999px;border:1px solid {accent}88;
-                         color:{accent};background:{accent}12;font-family:{FONT_MONO};font-size:11px;font-weight:700;">{_eh(sig_label)}</span>
+            {signal_chips}
           </div>
           <div style="font-family:{FONT_MONO};font-size:12px;color:{COLOR_TEXT};">
-            {_eh(_tt_text(r.get('signal_time', ''), '—'))}<br>
-            <span style="color:{COLOR_MUTED};">{_tt_price_text(r.get('signal_price'))}</span>
+            {_eh(_tt_text(r.get('latest_time', ''), '—'))}<br>
+            <span style="color:{COLOR_MUTED};">{_tt_price_text(r.get('latest_price'))}</span>
           </div>
           <div style="text-align:right;">
             <div style="font-family:{FONT_BODY};font-size:12px;font-weight:700;color:{accent};">{status_text}</div>
@@ -7543,8 +7671,9 @@ def _tt_signal_cards_html(signals: pd.DataFrame) -> str:
           <div>
             <div style="font-family:{FONT_MONO};font-size:10px;color:{COLOR_SECOND};letter-spacing:0.16em;">T 信号流</div>
             <div style="margin-top:3px;font-family:{FONT_HEADLINE};font-size:18px;color:{COLOR_TEXT};font-weight:700;">今日真实 T 信号</div>
+            <div style="margin-top:3px;font-family:{FONT_BODY};font-size:12px;color:{COLOR_MUTED};">同一股票多条信号已合并展示，避免误看成重复推荐。</div>
           </div>
-          <span style="font-family:{FONT_MONO};font-size:12px;color:{COLOR_MUTED};">只读观察</span>
+          <span style="font-family:{FONT_MONO};font-size:12px;color:{COLOR_MUTED};">只读观察 · {len(grouped_rows)} 只股票</span>
         </div>
         {''.join(rows_html)}
         """),
@@ -7961,20 +8090,20 @@ def page_watchlist() -> None:
         """
         <style>
           .main .block-container {
-            max-width: 1240px !important;
+            max-width: 1120px !important;
             padding-left: 24px !important;
             padding-right: 24px !important;
           }
           .watchlist-page-head {
-            max-width: 1180px;
-            margin: -118px auto 8px auto;
+            max-width: 1060px;
+            margin: -112px auto 8px auto;
           }
           .watchlist-hero {
             display: grid;
-            grid-template-columns: minmax(0, 1fr) 240px;
+            grid-template-columns: minmax(0, 1fr) 230px;
             gap: 12px;
             align-items: center;
-            padding: 13px 15px;
+            padding: 14px 16px;
             border-radius: 14px;
             background:
               radial-gradient(circle at top right, rgba(0,218,243,0.08), transparent 32%),
@@ -8044,10 +8173,10 @@ def page_watchlist() -> None:
             white-space: nowrap;
           }
           .watchlist-alert-row {
-            max-width: 1180px;
+            max-width: 1060px;
             margin: 6px auto;
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr;
             gap: 8px;
           }
           .watchlist-alert-row span {
@@ -8064,7 +8193,7 @@ def page_watchlist() -> None:
             display: grid;
             grid-template-columns: repeat(5, minmax(0, 1fr));
             gap: 8px;
-            max-width: 1180px;
+            max-width: 1060px;
             margin: 0 auto 8px auto;
           }
           .watchlist-metric {
@@ -8105,7 +8234,7 @@ def page_watchlist() -> None:
             display: block;
             min-height: 0;
             position: relative;
-            max-width: 1180px;
+            max-width: 1060px;
             margin: 0 auto;
           }
           .watchlist-board::before {
@@ -8158,13 +8287,16 @@ def page_watchlist() -> None:
             min-height: 0;
             max-height: none;
             overflow: visible;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
             padding-right: 0;
           }
           .watchlist-card-shell {
             position: relative;
             overflow: hidden;
             border-radius: 14px;
-            margin-bottom: 10px;
+            margin-bottom: 0;
           }
           .watchlist-card-shell::after {
             content: "";
@@ -8192,10 +8324,10 @@ def page_watchlist() -> None:
             border: 1px solid rgba(255,255,255,0.05);
           }
           .watchlist-tools {
-            max-width: 1180px;
-            margin: 0 auto 8px auto;
+            max-width: 1060px;
+            margin: 0 auto 0 auto;
             padding: 10px 12px;
-            border-radius: 14px;
+            border-radius: 14px 14px 0 0;
             background:
               radial-gradient(circle at top right, rgba(0,218,243,0.07), transparent 28%),
               linear-gradient(180deg, rgba(15,20,27,0.97) 0%, rgba(16,22,34,0.93) 100%);
@@ -8224,7 +8356,7 @@ def page_watchlist() -> None:
             color: rgba(222,226,236,0.62);
           }
           .watchlist-feed-head {
-            max-width: 1180px;
+            max-width: 1060px;
             margin: 0 auto 4px auto;
             display: flex;
             align-items: center;
@@ -8248,8 +8380,8 @@ def page_watchlist() -> None:
           }
           .watchlist-feed-card {
             display: grid;
-            grid-template-columns: minmax(0, 1fr) 270px;
-            min-height: 128px;
+            grid-template-columns: minmax(0, 1fr);
+            min-height: 0;
             border-radius: 14px;
             background:
               radial-gradient(circle at 88% 12%, rgba(0,218,243,0.06), transparent 24%),
@@ -8259,9 +8391,9 @@ def page_watchlist() -> None:
             overflow: hidden;
           }
           .watchlist-feed-card__main {
-            padding: 14px 16px;
+            padding: 14px 15px 12px 15px;
             display: grid;
-            gap: 10px;
+            gap: 9px;
           }
           .watchlist-feed-card__top {
             display: flex;
@@ -8276,7 +8408,7 @@ def page_watchlist() -> None:
             flex-wrap: wrap;
           }
           .watchlist-feed-card__name {
-            font-size: 20px;
+            font-size: 19px;
             line-height: 1.12;
             font-weight: 800;
             color: #F7F9FD;
@@ -8298,7 +8430,7 @@ def page_watchlist() -> None:
             flex-wrap: wrap;
           }
           .watchlist-feed-card__reason {
-            max-width: 640px;
+            max-width: none;
           }
           .watchlist-feed-card__label {
             font-size: 10px;
@@ -8318,16 +8450,17 @@ def page_watchlist() -> None:
             overflow: hidden;
           }
           .watchlist-feed-card__side {
-            border-left: 1px solid rgba(255,255,255,0.07);
+            border-left: none;
+            border-top: 1px solid rgba(255,255,255,0.07);
             background: linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.014));
-            padding: 13px 14px;
+            padding: 11px 14px 12px 14px;
             display: grid;
             align-content: space-between;
-            gap: 10px;
+            gap: 9px;
           }
           .watchlist-feed-card__sidegrid {
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-columns: repeat(3, minmax(0, 1fr));
             gap: 9px 12px;
           }
           .watchlist-feed-card__sidevalue {
@@ -8365,7 +8498,7 @@ def page_watchlist() -> None:
             font-weight: 700;
           }
           div[data-testid="stExpander"]:has(div[data-testid="stMarkdown"] + div) {
-            max-width: 1180px;
+            max-width: 1060px;
             margin-left: auto;
             margin-right: auto;
           }
@@ -8405,25 +8538,6 @@ def page_watchlist() -> None:
             font-size: 11px;
             font-family: "JetBrains Mono", monospace;
             letter-spacing: 0.04em;
-          }
-          .watchlist-control-shell {
-            margin-top: 8px;
-            padding: 9px 10px 8px 10px;
-            border-radius: 12px;
-            background: linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.016));
-            border: 1px solid rgba(255,255,255,0.05);
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
-          }
-          .watchlist-control-shell + .watchlist-control-shell {
-            margin-top: 10px;
-          }
-          .watchlist-control-title {
-            font-size: 10px;
-            letter-spacing: 0.16em;
-            text-transform: uppercase;
-            color: rgba(222,226,236,0.48);
-            font-family: "JetBrains Mono", monospace;
-            margin-bottom: 10px;
           }
           .watchlist-feature-grid {
             display: grid;
@@ -8556,7 +8670,7 @@ def page_watchlist() -> None:
             border-top: 1px solid rgba(255,255,255,0.045);
           }
           .watchlist-maintenance {
-            max-width: 1180px;
+            max-width: 1060px;
             margin: 12px auto 0 auto;
             padding: 15px 16px;
             border-radius: 14px;
@@ -8605,6 +8719,7 @@ def page_watchlist() -> None:
             .watchlist-card-grid {
               max-height: none;
               overflow: visible;
+              grid-template-columns: 1fr;
             }
             .watchlist-feature-grid {
               grid-template-columns: 1fr;
@@ -8612,9 +8727,8 @@ def page_watchlist() -> None:
             .watchlist-feed-card {
               grid-template-columns: 1fr;
             }
-            .watchlist-feed-card__side {
-              border-left: none;
-              border-top: 1px solid rgba(255,255,255,0.07);
+            .watchlist-feed-card__sidegrid {
+              grid-template-columns: repeat(2, minmax(0, 1fr));
             }
           }
         </style>
@@ -8650,8 +8764,7 @@ def page_watchlist() -> None:
           </div>
         </div>
         <div class="watchlist-alert-row">
-          <span>自选池只是观察池，不是买入指令。</span>
-          <span>{_eh(completion_note)}</span>
+          <span>自选池优先进入候选评估，但仍要通过安全过滤、V1.6 计划层和 9:36 技术确认。{_eh(completion_note)}</span>
         </div>
         """,
         unsafe_allow_html=True,
@@ -8695,11 +8808,11 @@ def page_watchlist() -> None:
           <div class="watchlist-tools__head">
             <div>
               <div class="watchlist-panel__kicker">研究控制台</div>
-              <div class="watchlist-tools__title">搜索、识别与观察筛选</div>
-              <div class="watchlist-tools__sub">输入代码或名称先识别，再加入观察池；筛选仅影响当前展示，不触发任何交易动作。</div>
+              <div class="watchlist-tools__title">观察池优先评估</div>
+              <div class="watchlist-tools__sub">观察池优先进入候选评估，实际买入仍以安全过滤、V1.6 计划层和 9:36 技术确认为准。</div>
             </div>
             <div class="watchlist-feed-head__meta">
-              <span class="watchlist-filter-chip">active / p1 {active_count}/{p1_count}</span>
+              <span class="watchlist-filter-chip">活跃 {active_count} / 高优先 {p1_count}</span>
               <span class="watchlist-safe-chip">观察池 ≠ 买入指令</span>
             </div>
           </div>
@@ -8708,80 +8821,158 @@ def page_watchlist() -> None:
         unsafe_allow_html=True,
     )
 
-    keyword = ""
-    status_filter = "全部"
-    priority_filter = "全部"
-    only_theme = False
-    only_reason = False
-    with st.expander("展开：快速添加 / 搜索筛选", expanded=False):
-        add_col, search_col, status_col, priority_col = st.columns([1.45, 1.45, 0.8, 0.8], gap="small")
-        with add_col:
-            with st.form("wl_quick_add_form", clear_on_submit=False):
-                query = st.text_input("股票代码 / 名称", value="", placeholder="例如 300476 / 胜宏科技", key="wl_quick_query")
-                submitted = st.form_submit_button("识别", width="stretch")
-        with search_col:
-            keyword = st.text_input("搜索股票代码 / 名称", value="", placeholder="筛选当前观察池", key="wl_filter_kw")
-        with status_col:
-            status_filter = st.selectbox("status 筛选", ["全部", "active", "inactive"], index=0)
-        with priority_col:
-            priority_filter = st.selectbox("priority 筛选", ["全部", "1", "2", "3"], index=0)
+    keyword = str(st.session_state.get("wl_filter_kw", "") or "")
+    status_filter = str(st.session_state.get("wl_status_filter", "全部") or "全部")
+    priority_filter = str(st.session_state.get("wl_priority_filter", "全部") or "全部")
+    only_theme = bool(st.session_state.get("wl_only_theme", False))
+    only_reason = bool(st.session_state.get("wl_only_reason", False))
 
-        option_col, result_col = st.columns([1.2, 2.8], gap="small")
-        with option_col:
-            only_theme = st.checkbox("只看已填写主题", value=False)
-            only_reason = st.checkbox("只看已填写研究理由", value=False)
-        with result_col:
-            submitted = bool(locals().get("submitted", False))
-            query = str(locals().get("query", ""))
+    show_df = df.copy()
+    kw = keyword.strip().lower()
+    if kw:
+        show_df = show_df[
+            show_df["stock_code"].astype(str).str.lower().str.contains(kw, na=False)
+            | show_df["stock_name"].astype(str).str.lower().str.contains(kw, na=False)
+        ]
+    if status_filter != "全部":
+        show_df = show_df[show_df["status"] == status_filter]
+    if priority_filter != "全部":
+        show_df = show_df[show_df["priority"] == priority_filter]
+    if only_theme:
+        show_df = show_df[show_df["theme"].astype(str).str.strip() != ""]
+    if only_reason:
+        show_df = show_df[show_df["reason"].astype(str).str.strip() != ""]
+
+    if show_df.empty:
+        status_banner("当前筛选条件下没有匹配股票。", "info")
+    else:
+        watchlist_cards = []
+        for _, row in show_df.iterrows():
+            _, status_color, status_text = _wl_status_badge(str(row.get("status", "")))
+            theme = _wl_card_value(row.get("theme", ""), "未填写")
+            theme_class = "watchlist-card-theme is-empty" if theme == "未填写" else "watchlist-card-theme"
+            reason = _wl_card_value(row.get("reason", ""), "待补充")
+            max_pos = _wl_card_value(row.get("max_position_pct", ""), "未设置")
+            note = _wl_card_value(row.get("note", ""), "无")
+            research_date = _wl_card_value(row.get("research_date", ""), "未填写")
+            code_text = str(row.get("stock_code", ""))
+            filled_score = int(theme != "未填写") + int(reason != "待补充") + int(research_date != "未填写") + int(max_pos != "未设置")
+            completion_pct = int(filled_score / 4 * 100)
+            watchlist_cards.append(
+                f"""
+                <div class="watchlist-card-shell">
+                  <div class="watchlist-feed-card">
+                    <div class="watchlist-feed-card__main">
+                      <div class="watchlist-feed-card__top">
+                        <div class="watchlist-feed-card__identity">
+                          <div class="watchlist-feed-card__name">{_eh(_wl_card_value(row.get('stock_name', ''), '未命名'))}</div>
+                          <div class="watchlist-feed-card__code">{_eh(code_text)}</div>
+                          <div class="watchlist-feed-card__badges">
+                            <span class="watchlist-badge-soft">P{_eh(row.get('priority', '3'))}</span>
+                            <span class="watchlist-badge-soft" style="color:{status_color};">{_eh(status_text)}</span>
+                            <span class="{theme_class}">{_eh(theme)}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="watchlist-feed-card__reason">
+                        <div class="watchlist-feed-card__label">研究理由</div>
+                        <div class="watchlist-feed-card__copy">{_eh(reason)}</div>
+                      </div>
+                      <div style="font-size:12px;color:{COLOR_MUTED};line-height:1.45;"><b style="color:{COLOR_TEXT};">观察备注：</b>{_eh(note)}</div>
+                    </div>
+                    <div class="watchlist-feed-card__side">
+                      <div class="watchlist-feed-card__sidegrid">
+                        <div>
+                          <div class="watchlist-feed-card__label">研究日期</div>
+                          <div class="watchlist-feed-card__sidevalue">{_eh(research_date)}</div>
+                        </div>
+                        <div>
+                          <div class="watchlist-feed-card__label">仓位参考</div>
+                          <div class="watchlist-feed-card__sidevalue">{_eh(max_pos)}</div>
+                        </div>
+                        <div>
+                          <div class="watchlist-feed-card__label">候选关系</div>
+                          <div class="watchlist-feed-card__sidevalue" style="color:{COLOR_SECOND};">优先评估</div>
+                        </div>
+                      </div>
+                      <div>
+                        <div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:6px;">
+                          <span class="watchlist-feed-card__label">信息完整度</span>
+                          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:{COLOR_SECOND};font-weight:700;">{completion_pct}%</span>
+                        </div>
+                        <div style="height:6px;border-radius:999px;background:rgba(255,255,255,0.06);overflow:hidden;">
+                          <span style="display:block;height:100%;width:{completion_pct}%;border-radius:999px;background:{COLOR_SECOND};box-shadow:0 0 10px {COLOR_SECOND}66;"></span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                """
+            )
+        st.markdown(
+            _h(f"""
+            <div class="watchlist-board">
+              <div class="watchlist-card-grid">
+                {''.join(watchlist_cards)}
+              </div>
+            </div>
+            """),
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<div class='watchlist-maintenance'><div class='watchlist-maintenance__kicker'>池子维护</div><div class='watchlist-maintenance__title'>维护自选池</div></div>", unsafe_allow_html=True)
+    with st.expander("展开维护自选池", expanded=False):
+        st.caption("这里仅维护观察池内容，保存后会写回 `data/watchlist/custom_stock_pool.csv`，不会触发任何买入、下单或交易行为。")
+
+        add_col, filter_col = st.columns([1, 1.4], gap="large")
+        with add_col:
+            st.markdown("**快速识别 / 新增**")
+            with st.form("wl_quick_add_form", clear_on_submit=False):
+                query = st.text_input(
+                    "股票代码 / 名称",
+                    value="",
+                    placeholder="例如 300476 / 胜宏科技",
+                    key="wl_quick_query",
+                )
+                submitted = st.form_submit_button("识别股票", width="stretch")
             if submitted:
                 st.session_state["wl_identify_result"] = _wl_identify(query)
+
             result = st.session_state.get("wl_identify_result")
             if result:
                 if result.get("matched"):
                     code = str(result.get("code", "")).strip().zfill(6)
                     name = str(result.get("name", "")).strip()
-                    # 预先判断该股票是否已在自选池里，按状态切换按钮文案 + 提示色
-                    # （修 Codex 2026-06-01 HANDOFF 中提到的"按钮文案误导"问题）
                     existing_table = _wl_clean_rows(_wl_load())
                     existing_row = next(
-                        (r for r in existing_table
-                         if str(r.get("stock_code", "")).strip().zfill(6) == code),
-                        None
+                        (
+                            r for r in existing_table
+                            if str(r.get("stock_code", "")).strip().zfill(6) == code
+                        ),
+                        None,
                     )
                     existing_status = (
                         str(existing_row.get("status", "")).strip().lower()
                         if existing_row else ""
                     )
 
-                    # 按三种情况切换提示和按钮
                     if existing_row is None:
-                        # 情况 1：未在池里 → 新增
                         st.success(f"识别成功：{code} {name} · 未在观察池")
                         btn_label = "加入自选池"
                         btn_disabled = False
                         action_mode = "add"
                     elif existing_status == "active":
-                        # 情况 2：已在池里且 active → 按钮禁用，提示用户
-                        st.info(
-                            f"识别成功：{code} {name} · 已在自选池（状态：active），"
-                            f"无需再次添加"
-                        )
+                        st.info(f"识别成功：{code} {name} · 已在自选池，无需重复添加")
                         btn_label = "已在自选池"
                         btn_disabled = True
                         action_mode = "noop"
                     else:
-                        # 情况 3：已在池里但 status 非 active（例如 inactive / watch）→ 重新激活
-                        st.warning(
-                            f"识别成功：{code} {name} · 已在池里（当前状态："
-                            f"{existing_status or '空'}），可重新激活"
-                        )
+                        st.warning(f"识别成功：{code} {name} · 当前状态：{existing_status or '空'}，可重新激活")
                         btn_label = "更新为 active"
                         btn_disabled = False
                         action_mode = "activate"
 
-                    if st.button(btn_label, type="primary", key="wl_add_btn",
-                                 disabled=btn_disabled):
-                        # 重新读一次（防止 race），并按 action_mode 执行
+                    if st.button(btn_label, type="primary", key="wl_add_btn", disabled=btn_disabled):
                         table = _wl_clean_rows(_wl_load())
                         success_msg = ""
                         if action_mode == "add":
@@ -8804,7 +8995,6 @@ def page_watchlist() -> None:
                                     row["status"] = "active"
                                     break
                             success_msg = f"已激活：{code} {name}（状态更新为 active）"
-                        # noop 不会进入这里（按钮 disabled）
                         if _wl_save(_wl_clean_rows(table)):
                             status_banner(success_msg, "success")
                             time.sleep(0.4)
@@ -8814,105 +9004,34 @@ def page_watchlist() -> None:
                 else:
                     st.warning(str(result.get("error", "未匹配到股票")))
 
-    show_df = df.copy()
-    kw = keyword.strip().lower()
-    if kw:
-        show_df = show_df[
-            show_df["stock_code"].astype(str).str.lower().str.contains(kw, na=False)
-            | show_df["stock_name"].astype(str).str.lower().str.contains(kw, na=False)
-        ]
-    if status_filter != "全部":
-        show_df = show_df[show_df["status"] == status_filter]
-    if priority_filter != "全部":
-        show_df = show_df[show_df["priority"] == priority_filter]
-    if only_theme:
-        show_df = show_df[show_df["theme"].astype(str).str.strip() != ""]
-    if only_reason:
-        show_df = show_df[show_df["reason"].astype(str).str.strip() != ""]
-
-    st.markdown("<div class='watchlist-board'>", unsafe_allow_html=True)
-    st.markdown(
-        f"""
-        <div class="watchlist-feed-head">
-          <div class="watchlist-feed-head__meta">
-            <span class="watchlist-filter-chip">展示 {len(show_df)} / {total_count}</span>
-            <span class="watchlist-filter-chip">基础视图</span>
-            <span class="watchlist-filter-chip">优先级排序</span>
-            <span class="watchlist-safe-chip">不构成买入指令</span>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.markdown("<div class='watchlist-card-grid'>", unsafe_allow_html=True)
-    if show_df.empty:
-        status_banner("当前筛选条件下没有匹配股票。", "info")
-    else:
-        for _, row in show_df.iterrows():
-            _, status_color, status_text = _wl_status_badge(str(row.get("status", "")))
-            theme = _wl_card_value(row.get("theme", ""), "未填写")
-            theme_class = "watchlist-card-theme is-empty" if theme == "未填写" else "watchlist-card-theme"
-            reason = _wl_card_value(row.get("reason", ""), "待补充")
-            max_pos = _wl_card_value(row.get("max_position_pct", ""), "未设置")
-            note = _wl_card_value(row.get("note", ""), "无")
-            research_date = _wl_card_value(row.get("research_date", ""), "未填写")
-            code_text = str(row.get("stock_code", ""))
-            filled_score = int(theme != "未填写") + int(reason != "待补充") + int(research_date != "未填写") + int(max_pos != "未设置")
-            completion_pct = int(filled_score / 4 * 100)
-            st.markdown(
-                f"""
-                <div class="watchlist-card-shell">
-                  <div class="watchlist-feed-card">
-                    <div class="watchlist-feed-card__main">
-                      <div class="watchlist-feed-card__top">
-                        <div class="watchlist-feed-card__identity">
-                          <div class="watchlist-feed-card__name">{_eh(_wl_card_value(row.get('stock_name', ''), '未命名'))}</div>
-                          <div class="watchlist-feed-card__code">{_eh(code_text)}</div>
-                          <div class="watchlist-feed-card__badges">
-                            <span class="watchlist-badge-soft">P{_eh(row.get('priority', '3'))}</span>
-                            <span class="watchlist-badge-soft" style="color:{status_color};">{_eh(status_text)}</span>
-                            <span class="{theme_class}">{_eh(theme)}</span>
-                          </div>
-                        </div>
-                        <span class="watchlist-safe-chip">自选 ≠ 买入</span>
-                      </div>
-                      <div class="watchlist-feed-card__reason">
-                        <div class="watchlist-feed-card__label">研究理由</div>
-                        <div class="watchlist-feed-card__copy">{_eh(reason)}</div>
-                      </div>
-                      <div style="font-size:12px;color:{COLOR_MUTED};line-height:1.45;"><b style="color:{COLOR_TEXT};">观察备注：</b>{_eh(note)}</div>
-                    </div>
-                    <div class="watchlist-feed-card__side">
-                      <div class="watchlist-feed-card__sidegrid">
-                        <div>
-                          <div class="watchlist-feed-card__label">研究日期</div>
-                          <div class="watchlist-feed-card__sidevalue">{_eh(research_date)}</div>
-                        </div>
-                        <div>
-                          <div class="watchlist-feed-card__label">仓位参考</div>
-                          <div class="watchlist-feed-card__sidevalue">{_eh(max_pos)}</div>
-                        </div>
-                      </div>
-                      <div>
-                        <div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:6px;">
-                          <span class="watchlist-feed-card__label">信息完整度</span>
-                          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:{COLOR_SECOND};font-weight:700;">{completion_pct}%</span>
-                        </div>
-                        <div style="height:6px;border-radius:999px;background:rgba(255,255,255,0.06);overflow:hidden;">
-                          <span style="display:block;height:100%;width:{completion_pct}%;border-radius:999px;background:{COLOR_SECOND};box-shadow:0 0 10px {COLOR_SECOND}66;"></span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
+        with filter_col:
+            st.markdown("**搜索 / 筛选展示**")
+            st.text_input(
+                "搜索股票代码 / 名称",
+                placeholder="筛选当前观察池",
+                key="wl_filter_kw",
             )
-    st.markdown("</div></div>", unsafe_allow_html=True)
+            fc1, fc2 = st.columns(2, gap="small")
+            with fc1:
+                st.selectbox(
+                    "status 筛选",
+                    ["全部", "active", "inactive"],
+                    index=["全部", "active", "inactive"].index(status_filter)
+                    if status_filter in ["全部", "active", "inactive"] else 0,
+                    key="wl_status_filter",
+                )
+            with fc2:
+                st.selectbox(
+                    "priority 筛选",
+                    ["全部", "1", "2", "3"],
+                    index=["全部", "1", "2", "3"].index(priority_filter)
+                    if priority_filter in ["全部", "1", "2", "3"] else 0,
+                    key="wl_priority_filter",
+                )
+            st.checkbox("只看已填写主题", value=only_theme, key="wl_only_theme")
+            st.checkbox("只看已填写研究理由", value=only_reason, key="wl_only_reason")
 
-    st.markdown("<div class='watchlist-maintenance'><div class='watchlist-maintenance__kicker'>池子维护</div><div class='watchlist-maintenance__title'>维护自选池</div></div>", unsafe_allow_html=True)
-    with st.expander("展开维护自选池", expanded=False):
-        st.caption("这里仅维护观察池内容，保存后会写回 `data/watchlist/custom_stock_pool.csv`，不会触发任何买入、下单或交易行为。")
+        st.divider()
         edit_df = df[WL_COLUMNS].copy() if not df.empty else pd.DataFrame(columns=WL_COLUMNS)
         edited = st.data_editor(
             edit_df,
