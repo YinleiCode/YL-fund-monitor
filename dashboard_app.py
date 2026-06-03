@@ -8184,20 +8184,21 @@ def page_holding_track(df_all: pd.DataFrame) -> None:
             color = COLOR_BOUGHT if v > 0 else COLOR_MAGENTA_NEON if v < 0 else COLOR_TEXT
             return f"<span style='color:{color};'>{sign}{v*100:.2f}%</span>"
 
-        rows_html = f"""
-          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px 24px;margin-top:14px;font-family:{FONT_MONO};font-size:12px;">
-            <div><span style="color:{COLOR_MUTED};">买入日 </span><span style="color:{COLOR_TEXT};">{_h(report_date)}</span></div>
-            <div><span style="color:{COLOR_MUTED};">持仓天数 </span><span style="color:{COLOR_TEXT};">{_h(days_held)}</span></div>
-            <div><span style="color:{COLOR_MUTED};">买入价 </span><span style="color:{COLOR_TEXT};">{_fmt_money(adj_buy)}</span></div>
-            <div><span style="color:{COLOR_MUTED};">止损价 </span><span style="color:{COLOR_TEXT};">{_fmt_money(stop_price)}</span></div>
-            <div><span style="color:{COLOR_MUTED};">最新收盘 </span><span style="color:{COLOR_TEXT};">{_fmt_money(latest_close)}</span></div>
-            <div><span style="color:{COLOR_MUTED};">当前收益 </span>{_fmt_pct(latest_ret)}</div>
-            <div><span style="color:{COLOR_MUTED};">期间最高 </span><span style="color:{COLOR_TEXT};">{_fmt_money(peak_high)}</span></div>
-            <div><span style="color:{COLOR_MUTED};">期间最低 </span><span style="color:{COLOR_TEXT};">{_fmt_money(peak_low)}</span></div>
-            <div><span style="color:{COLOR_MUTED};">最大收益 </span>{_fmt_pct(peak_ret)}</div>
-            <div><span style="color:{COLOR_MUTED};">最大回撤 </span>{_fmt_pct(peak_dd)}</div>
-          </div>
-        """
+        # 拼接成单行 HTML 避免 Streamlit 把多空格缩进当代码块
+        rows_html = (
+            f'<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px 24px;margin-top:14px;font-family:{FONT_MONO};font-size:12px;">'
+            f'<div><span style="color:{COLOR_MUTED};">买入日 </span><span style="color:{COLOR_TEXT};">{_h(report_date)}</span></div>'
+            f'<div><span style="color:{COLOR_MUTED};">持仓天数 </span><span style="color:{COLOR_TEXT};">{_h(days_held)}</span></div>'
+            f'<div><span style="color:{COLOR_MUTED};">买入价 </span><span style="color:{COLOR_TEXT};">{_fmt_money(adj_buy)}</span></div>'
+            f'<div><span style="color:{COLOR_MUTED};">止损价 </span><span style="color:{COLOR_TEXT};">{_fmt_money(stop_price)}</span></div>'
+            f'<div><span style="color:{COLOR_MUTED};">最新收盘 </span><span style="color:{COLOR_TEXT};">{_fmt_money(latest_close)}</span></div>'
+            f'<div><span style="color:{COLOR_MUTED};">当前收益 </span>{_fmt_pct(latest_ret)}</div>'
+            f'<div><span style="color:{COLOR_MUTED};">期间最高 </span><span style="color:{COLOR_TEXT};">{_fmt_money(peak_high)}</span></div>'
+            f'<div><span style="color:{COLOR_MUTED};">期间最低 </span><span style="color:{COLOR_TEXT};">{_fmt_money(peak_low)}</span></div>'
+            f'<div><span style="color:{COLOR_MUTED};">最大收益 </span>{_fmt_pct(peak_ret)}</div>'
+            f'<div><span style="color:{COLOR_MUTED};">最大回撤 </span>{_fmt_pct(peak_dd)}</div>'
+            f'</div>'
+        )
 
         post_stop_html = ""
         if show_post_stop:
@@ -8207,30 +8208,32 @@ def page_holding_track(df_all: pd.DataFrame) -> None:
             post_max_dd = _gf(row.get("post_stop_max_drawdown_pct"))
             post_days = str(row.get("post_stop_days_tracked", "—")).strip() or "—"
             flew = "🚀 卖飞了" if (post_max_ret is not None and post_max_ret >= 0.03) else ""
-            post_stop_html = f"""
-            <div style="margin-top:12px;padding-top:12px;border-top:1px dashed {COLOR_GLASS_EDGE};font-family:{FONT_MONO};font-size:12px;">
-              <div style="color:{COLOR_MUTED};margin-bottom:6px;letter-spacing:0.1em;text-transform:uppercase;">POST-STOP TRACK</div>
-              <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px 24px;">
-                <div><span style="color:{COLOR_MUTED};">止损日 </span><span style="color:{COLOR_TEXT};">{_h(exit_date)}</span></div>
-                <div><span style="color:{COLOR_MUTED};">追踪天数 </span><span style="color:{COLOR_TEXT};">{_h(post_days)}/30</span></div>
-                <div><span style="color:{COLOR_MUTED};">止损价 </span><span style="color:{COLOR_TEXT};">{_fmt_money(exit_price)}</span></div>
-                <div><span style="color:{COLOR_MUTED};">最高反弹 </span>{_fmt_pct(post_max_ret)} <span style="color:{COLOR_MAGENTA_NEON};">{flew}</span></div>
-                <div><span style="color:{COLOR_MUTED};">最低回撤 </span>{_fmt_pct(post_max_dd)}</div>
-              </div>
-            </div>
-            """
+            post_stop_html = (
+                f'<div style="margin-top:12px;padding-top:12px;border-top:1px dashed {COLOR_GLASS_EDGE};font-family:{FONT_MONO};font-size:12px;">'
+                f'<div style="color:{COLOR_MUTED};margin-bottom:6px;letter-spacing:0.1em;text-transform:uppercase;">POST-STOP TRACK</div>'
+                f'<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px 24px;">'
+                f'<div><span style="color:{COLOR_MUTED};">止损日 </span><span style="color:{COLOR_TEXT};">{_h(exit_date)}</span></div>'
+                f'<div><span style="color:{COLOR_MUTED};">追踪天数 </span><span style="color:{COLOR_TEXT};">{_h(post_days)}/30</span></div>'
+                f'<div><span style="color:{COLOR_MUTED};">止损价 </span><span style="color:{COLOR_TEXT};">{_fmt_money(exit_price)}</span></div>'
+                f'<div><span style="color:{COLOR_MUTED};">最高反弹 </span>{_fmt_pct(post_max_ret)} <span style="color:{COLOR_MAGENTA_NEON};">{flew}</span></div>'
+                f'<div><span style="color:{COLOR_MUTED};">最低回撤 </span>{_fmt_pct(post_max_dd)}</div>'
+                f'</div>'
+                f'</div>'
+            )
 
-        inner = f"""
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <div>
-              <div style="font-family:{FONT_MONO};font-size:12px;color:{COLOR_MUTED};letter-spacing:0.1em;">{_h(code)}</div>
-              <div style="font-size:16px;font-weight:600;color:{COLOR_TEXT};margin-top:2px;">{_h(name)}</div>
-            </div>
-            {chip_html(head_label, color=head_color)}
-          </div>
-          {rows_html}
-          {post_stop_html}
-        """
+        # 一定要去前缀缩进 + 拼成单行，否则 Streamlit markdown 会把多空格行
+        # 当代码块渲染，HTML 源码会直接显示在页面上（不会被 unsafe_allow_html 兜底）
+        inner = (
+            f'<div style="display:flex;justify-content:space-between;align-items:center;">'
+            f'<div>'
+            f'<div style="font-family:{FONT_MONO};font-size:12px;color:{COLOR_MUTED};letter-spacing:0.1em;">{_h(code)}</div>'
+            f'<div style="font-size:16px;font-weight:600;color:{COLOR_TEXT};margin-top:2px;">{_h(name)}</div>'
+            f'</div>'
+            f'{chip_html(head_label, color=head_color)}'
+            f'</div>'
+            f'{rows_html}'
+            f'{post_stop_html}'
+        )
         return glass_card_html(inner, padding="16px 18px", accent=head_color, extra_style="margin-bottom:12px;")
 
     # —— 持仓中 ——
