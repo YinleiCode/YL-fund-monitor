@@ -8092,6 +8092,10 @@ def page_holding_track(df_all: pd.DataFrame) -> None:
         status_banner("当前无数据。", "info")
         return
 
+    # 复用 page_t1_review 的样式：4 列 KPI 网格、章节头、玻璃容器等
+    # 不重复写一套，省得视觉割裂
+    st.markdown(_t1_review_style_html(), unsafe_allow_html=True)
+
     render_page_header(
         "持仓追踪",
         "HOLDING TRACK",
