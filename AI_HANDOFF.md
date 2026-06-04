@@ -3190,3 +3190,66 @@ SHRINK_RATIO_MAX = 0.5     # 规则 4:  下一根缩量比 ≤ 0.5
 | `68aafec` | 策略说明 md | Claude |
 | `3dc5ab2` | RADAR dashboard 大重构 | Codex |
 | ... | （早 24 个 commit）| Claude |
+
+---
+
+## 2026-06-03 Claude（T 模块候选股改成自选池）
+
+### 朱哥拍板的需求
+
+> 每天推送发的票池 不做 T。自选的所有票池都做 T 并且计入。
+> 如果自选的票池和推荐的票池重复了 那就也做 T。
+
+### 修改文件
+
+- `scripts/run_t_intraday.py` — `_today_candidates_from_review()` 重写
+  - 旧逻辑：从 trade_review.csv 当日 3+3 候选读
+  - 新逻辑：从 `data/watchlist/custom_stock_pool.csv` 读所有 `status=active` 的票
+  - 如果自选股恰好被主链路推荐过 → 从 trade_review.csv 拿 ma5 / ma10 真实指标
+  - 没被推荐过的 → 字段留空，`evaluate_t_signals` 已有兜底（规则 1 删了，ma5 缺失不阻塞）
+  - 函数名保留为 `_today_candidates_from_review`（避免破坏调用方接口）
+
+- `朱哥策略说明.md` — T 模块候选股章节改写
+
+### 影响范围
+
+`run_t_intraday`（每分钟）和 `run_t_eod`（15:35）都用这函数，**两个脚本同时受益**。
+
+### 是否运行 python run.py
+
+- 否
+
+### 验收
+
+- 当日 27 只 active 自选股全部进 T 候选
+- 今日主链路推荐 3 只（新易盛 / 中际旭创 / 沪电股份）全部也在自选池，照样做 T
+- 另外 24 只自选股也进 T 候选
+
+### 容量评估
+
+- 之前 T 候选数 3-6 只 → 现在 27 只
+- 每分钟拉数据多花约 5-10 秒
+- launchd 60 秒间隔仍充足
+- T 信号 csv 行数可能从 3-6 增长到 ~50（每股 1-2 个占位 + 实际触发）
+
+### Git
+
+- branch：`restore/radar-terminal-keep-t`
+- commit：`b60969f feat(t-module): 候选股改成只读自选池（朱哥拍板）`
+
+### 主干 commit 时间线（最新在上）
+
+| commit | 内容 | 谁做 |
+|---|---|---|
+| `b60969f` | T 候选股改成只读自选池 | Claude（本轮）|
+| `7a34775` | 持仓追踪卡片 HTML 单行拼接 | Claude |
+| `f070b37` | 持仓追踪页空状态加演示卡片 | Claude |
+| `5deab76` | 持仓追踪 KPI 横排 | Claude |
+| `b430a14` | 持仓追踪 UI md | Claude |
+| `d883861` | dashboard 持仓追踪页 | Claude |
+| `9433419` | 删除 T 规则 1 | Claude |
+| `86347f3` | dashboard watchlist + T review UI | Codex |
+| `ecf4f1c` | 19:00 update_review 完整 4 步链路 | Claude |
+| `68aafec` | 策略说明 md | Claude |
+| `3dc5ab2` | RADAR dashboard 大重构 | Codex |
+| ...（早 25 个 commit）| Claude |

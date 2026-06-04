@@ -2621,3 +2621,30 @@ sudo pmset repeat wake MTWRF 09:25:00
 - 持仓追踪 UI 已就绪，明早 06-04 9:36 真买入后即可看到
 - Codex 的 RADAR V2 风格被严格沿用，无视觉割裂
 - 不动 Codex 的脏区设计（这次 dashboard 是 Codex 已 commit 状态后我加的新 page）
+
+---
+
+## 2026-06-03 Claude（T 候选股改成自选池）
+
+### 本次任务
+
+朱哥拍板：T 模块候选股不再用主链路推荐池，改成从自选池读所有 active 股票。
+
+### 修改文件
+
+- `scripts/run_t_intraday.py` — `_today_candidates_from_review()` 重写
+- `朱哥策略说明.md` — T 模块候选股章节更新
+
+### 是否运行 python run.py
+
+- 否
+
+### 验收
+
+- 27 只 active 自选股全部进 T 候选
+- 今日推荐 3 只与自选池有交集，全部照样做 T
+- syntax + 函数级单元测试通过
+
+### Git
+
+- commit：`b60969f feat(t-module): 候选股改成只读自选池`
