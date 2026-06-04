@@ -57,35 +57,73 @@ def _merge_open_t_positions(candidates: list[dict]) -> list[dict]:
 
 
 def _today_candidates_from_review() -> list[dict]:
-    """读当日 3+3 候选，并合并历史 open T 单（去重，按出现顺序）。"""
-    csv_path = PROJECT / "output" / "trade_review.csv"
-    if not csv_path.exists():
-        return _merge_open_t_positions([])
+    """
+    2026-06-03 朱哥拍板：T 模块候选股不再从 trade_review.csv 的 3+3 推荐池读，
+    改成从 data/watchlist/custom_stock_pool.csv 的所有 active 自选股读。
+
+    新逻辑：
+      - 每天推送的票池（main 3 + theme_auto 3）→ 不做 T
+      - 自选池所有 active 股票 → 都做 T
+      - 自选池 ∩ 推荐池 重叠的股票 → 也做 T（因为它在自选池里）
+      - 跨日 open T 单 → 仍然 merge 进来追踪止盈/止损
+
+    函数名保留为 _today_candidates_from_review 以避免破坏调用方接口，
+    但语义已变成"自选池候选"。
+    """
+    # 先尝试从 trade_review.csv 拿到 ma5/ma10 等历史指标（如果自选股恰好被
+    # 主链路推荐过，能拿到对应行的指标；否则字段留空，evaluate_t_signals
+    # 端已经做了 ma5 缺失的兜底）
+    review_path = PROJECT / "output" / "trade_review.csv"
     today_yyyymmdd = date.today().strftime("%Y%m%d")
+    review_index: dict = {}
+    if review_path.exists():
+        try:
+            with review_path.open(encoding="utf-8-sig") as f:
+                for r in csv.DictReader(f):
+                    rd = str(r.get("report_date", "")).strip().replace("-", "")
+                    if rd != today_yyyymmdd:
+                        continue
+                    code = str(r.get("stock_code", "")).strip().zfill(6)
+                    if code:
+                        review_index[code] = {
+                            "name": str(r.get("stock_name", "")).strip(),
+                            "ma10": str(r.get("ma10", "")).strip(),
+                            "ma5":  str(r.get("ma5", "")).strip(),
+                        }
+        except Exception as e:
+            print(f"[t_intraday] 读 trade_review.csv 失败: {e}")
+
+    # 主候选源：自选股池（custom_stock_pool.csv）
+    wl_path = PROJECT / "data" / "watchlist" / "custom_stock_pool.csv"
     seen: list[dict] = []
     seen_set: set[str] = set()
-    try:
-        with csv_path.open(encoding="utf-8-sig") as f:
-            for r in csv.DictReader(f):
-                rd = str(r.get("report_date", "")).strip().replace("-", "")
-                if rd != today_yyyymmdd:
-                    continue
-                raw_code = str(r.get("stock_code", "")).strip()
-                if not raw_code:
-                    continue
-                code = raw_code.zfill(6)
-                if code in seen_set:
-                    continue
-                seen.append({
-                    "code": code,
-                    "name": str(r.get("stock_name", "")).strip(),
-                    "ma10": str(r.get("ma10", "")).strip(),
-                    "ma5":  str(r.get("ma5", "")).strip(),
-                })
-                seen_set.add(code)
-    except Exception as e:
-        print(f"[t_intraday] 读 trade_review.csv 失败: {e}")
-        return _merge_open_t_positions([])
+    if wl_path.exists():
+        try:
+            with wl_path.open(encoding="utf-8-sig") as f:
+                for r in csv.DictReader(f):
+                    status = str(r.get("status", "")).strip().lower()
+                    if status != "active":
+                        continue
+                    raw_code = str(r.get("stock_code", "")).strip()
+                    if not raw_code:
+                        continue
+                    code = raw_code.zfill(6)
+                    if code in seen_set:
+                        continue
+                    # 优先用 review_index 里的真实指标，没有则用自选池里的字段
+                    idx_data = review_index.get(code, {})
+                    seen.append({
+                        "code": code,
+                        "name": idx_data.get("name") or str(r.get("stock_name", "")).strip(),
+                        "ma10": idx_data.get("ma10", ""),
+                        "ma5":  idx_data.get("ma5",  ""),
+                    })
+                    seen_set.add(code)
+        except Exception as e:
+            print(f"[t_intraday] 读自选池失败: {e}")
+    else:
+        print(f"[t_intraday] 自选池 csv 不存在: {wl_path}")
+
     return _merge_open_t_positions(seen)
 
 
