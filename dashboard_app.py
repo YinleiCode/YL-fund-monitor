@@ -7600,7 +7600,9 @@ def _tt_signal_cards_html(signals: pd.DataFrame) -> str:
         source["stock_code"] = ""
     if "stock_name" not in source.columns:
         source["stock_name"] = ""
-    for code, group in source.head(30).groupby(source["stock_code"].astype(str), sort=False):
+    # 2026-06-03 朱哥改 T 候选股为自选池后, 候选数 27 (之前 3-6),
+    # 把限制从 head(30) 放宽到 head(200), 覆盖即使每股 5+ 信号的情况
+    for code, group in source.head(200).groupby(source["stock_code"].astype(str), sort=False):
         first = group.iloc[0]
         sig_parts = []
         fail_parts = []
@@ -7633,7 +7635,8 @@ def _tt_signal_cards_html(signals: pd.DataFrame) -> str:
         })
 
     rows_html = []
-    for r in grouped_rows[:10]:
+    # 2026-06-03 朱哥要求看到全部自选池票, 取消 [:10] 限制 → 显示全部
+    for r in grouped_rows:
         passed = int(r.get("pass_count", 0) or 0) > 0
         accent = COLOR_BOUGHT if passed else COLOR_WAIT_T1
         signal_chips = "".join(
