@@ -8121,12 +8121,25 @@ def page_holding_track(df_all: pd.DataFrame) -> None:
 
     df_holding   = df[status_col == "holding"]
     df_stopped   = df[status_col == "stopped"]
+
+    # 2026-06-04 朱哥反馈：今天 9:36 买入了 3 只 (buy_signal_0935=true)
+    # 但 holding_status 还是空, 因为这个字段是 19:00 update_review 才填.
+    # 加一个'今日新买入'分组, 让朱哥立刻能看到, 标'等今晚 19:00 数据'.
+    from datetime import date as _date
+    today_yyyymmdd = _date.today().strftime("%Y%m%d")
+    buy_signal_col = df.get("buy_signal_0935", pd.Series([""] * len(df))).astype(str).str.strip().str.lower()
+    report_date_col = df.get("report_date", pd.Series([""] * len(df))).astype(str).str.strip().str.replace("-", "")
+    df_today_new = df[
+        (status_col == "") &
+        (buy_signal_col == "true") &
+        (report_date_col == today_yyyymmdd)
+    ]
     df_post_done = df[status_col == "post_stop_done"]
     df_manual    = df[status_col == "manual_sell"]
     df_legacy    = df[status_col == "legacy_t1_sell"]
 
     # —— KPI 四张卡片 ——
-    n_holding = len(df_holding)
+    n_holding = len(df_holding) + len(df_today_new)   # 今日刚买入也算"持仓中"
     n_stopped = len(df_stopped)
     n_post = len(df_post_done)
     n_total_tracked = n_holding + n_stopped + n_post + len(df_manual)
@@ -8239,6 +8252,57 @@ def page_holding_track(df_all: pd.DataFrame) -> None:
         )
         return glass_card_html(inner, padding="16px 18px", accent=head_color, extra_style="margin-bottom:12px;")
 
+    # —— 今日新买入（buy_signal_0935=true 但 holding_status 还没填）——
+    if not df_today_new.empty:
+        n_new = len(df_today_new)
+        st.markdown(
+            _h(f"""
+            <div class="t1-section-head" style="margin-top:24px;">
+              <div>
+                <div class="t1-section-kicker">JUST BOUGHT TODAY</div>
+                <div class="t1-section-title">今日 9:36 刚买入（{n_new} 只 · 等今晚 19:00 滚动数据）</div>
+              </div>
+              {chip_html("等 19:00 update_review", color=COLOR_WAIT_T1)}
+            </div>
+            """),
+            unsafe_allow_html=True,
+        )
+        for _, row in df_today_new.iterrows():
+            # 显示初始字段（买入价 / 止损价 / 9:36 价 / 今日开盘），peak_* / latest_* 留空待 19:00
+            code = str(row.get("stock_code", "")).strip()
+            name = str(row.get("stock_name", "")).strip()
+            buy_p = _gf(row.get("buy_price"))
+            adj_buy = _gf(row.get("adjusted_buy_price")) or buy_p
+            stop_p = _gf(row.get("stop_price"))
+            open_p = _gf(row.get("open_price"))
+            p_0935 = _gf(row.get("price_0935"))
+            mode = str(row.get("mode", "")).strip()
+            theme = str(row.get("theme_name", "")).strip()
+
+            inner = (
+                f'<div style="display:flex;justify-content:space-between;align-items:center;">'
+                f'<div>'
+                f'<div style="font-family:{FONT_MONO};font-size:12px;color:{COLOR_MUTED};letter-spacing:0.1em;">{_h(code)}</div>'
+                f'<div style="font-size:16px;font-weight:600;color:{COLOR_TEXT};margin-top:2px;">{_h(name)}</div>'
+                f'</div>'
+                f'{chip_html("新买入", color=COLOR_BOUGHT)}'
+                f'</div>'
+                f'<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px 24px;margin-top:14px;font-family:{FONT_MONO};font-size:12px;">'
+                f'<div><span style="color:{COLOR_MUTED};">买入日 </span><span style="color:{COLOR_TEXT};">今日 ({today_yyyymmdd})</span></div>'
+                f'<div><span style="color:{COLOR_MUTED};">持仓天数 </span><span style="color:{COLOR_TEXT};">0 (刚买入)</span></div>'
+                f'<div><span style="color:{COLOR_MUTED};">买入价(含滑点) </span><span style="color:{COLOR_TEXT};">{(f"{adj_buy:.2f}" if adj_buy else "—")}</span></div>'
+                f'<div><span style="color:{COLOR_MUTED};">止损价(-3%) </span><span style="color:{COLOR_TEXT};">{(f"{stop_p:.2f}" if stop_p else "—")}</span></div>'
+                f'<div><span style="color:{COLOR_MUTED};">9:36 现价 </span><span style="color:{COLOR_TEXT};">{(f"{p_0935:.2f}" if p_0935 else "—")}</span></div>'
+                f'<div><span style="color:{COLOR_MUTED};">今日开盘 </span><span style="color:{COLOR_TEXT};">{(f"{open_p:.2f}" if open_p else "—")}</span></div>'
+                f'<div><span style="color:{COLOR_MUTED};">入选模式 </span><span style="color:{COLOR_TEXT};">{_h(mode)}</span></div>'
+                f'<div><span style="color:{COLOR_MUTED};">主题 </span><span style="color:{COLOR_TEXT};">{_h(theme) or "—"}</span></div>'
+                f'</div>'
+                f'<div style="margin-top:10px;padding:8px 12px;background:rgba(0,218,243,0.06);border-left:2px solid {COLOR_WAIT_T1};border-radius:4px;font-size:11px;color:{COLOR_MUTED};font-family:{FONT_MONO};">'
+                f'今晚 19:00 update_review 跑完后, 这里会显示: 最新收盘 / 当前收益 / 期间最高/最低 / 最大收益/回撤 / 持仓天数 等滚动字段.'
+                f'</div>'
+            )
+            st.markdown(glass_card_html(inner, padding="16px 18px", accent=COLOR_BOUGHT, extra_style="margin-bottom:12px;"), unsafe_allow_html=True)
+
     # —— 持仓中 ——
     if not df_holding.empty:
         st.markdown(
@@ -8255,8 +8319,8 @@ def page_holding_track(df_all: pd.DataFrame) -> None:
         )
         for _, row in df_holding.iterrows():
             st.markdown(_track_card(row), unsafe_allow_html=True)
-    else:
-        # 空状态：显示一张"演示卡片"+ 说明，让朱哥看到买入后页面会怎样
+    elif df_today_new.empty:
+        # 持仓中 + 今日新买入都空 → 才显示演示卡片
         sample_row = pd.Series({
             "stock_code": "300476", "stock_name": "胜宏科技（演示）",
             "report_date": "20260603", "buy_price": "100.00",
@@ -8307,8 +8371,8 @@ def page_holding_track(df_all: pd.DataFrame) -> None:
         )
         for _, row in df_stopped.iterrows():
             st.markdown(_track_card(row, show_post_stop=True), unsafe_allow_html=True)
-    elif df_holding.empty:
-        # 持仓 + 止损 都空 → 给止损追踪也加一张演示卡（让朱哥看到 POST-STOP 字段）
+    elif df_holding.empty and df_today_new.empty:
+        # 持仓 + 止损 + 今日新买入 都空 → 给止损追踪也加一张演示卡
         sample_stop = pd.Series({
             "stock_code": "300308", "stock_name": "中际旭创（演示）",
             "report_date": "20260601", "buy_price": "1130.00",
