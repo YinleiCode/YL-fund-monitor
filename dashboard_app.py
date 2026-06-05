@@ -293,21 +293,32 @@ def is_bought(row) -> bool:
 
 
 def is_v16_only_observe(row) -> bool:
-    """V1.6 计划层标记仅观察 (跳过 V1.4/V1.5 判定, 没拉行情, 但 9:36 已检查过)."""
-    if _gb(row.get("v16_only_observe")) is True:
-        return True
-    # notes 含 v16_plan_only_observe 也算
+    """V1.6 计划层"真实拦截"过的票 (check_buy 跳过了 V1.4/V1.5)。
+
+    严格依赖 notes 含 `v16_plan_only_observe` —— 这是 check_buy **真的拦截时**才写。
+    仅看 `v16_only_observe` 字段不够：从 2026-06-05 起 affect_check_buy=false 后，
+    plan 仍会给候选股打 v16_only_observe=true 这个**标签**，但票其实跑了 V1.4/V1.5，
+    可能买入了也可能 fail，这时不应该显示「V1.6 只观察」。
+    """
     notes = str(row.get("notes", "")).strip()
     return "v16_plan_only_observe" in notes
 
 
 def is_manual_observe_row(row) -> bool:
-    """用户手动「只观察」开关 (朱哥 2026-06-05 加)。"""
-    code = str(row.get("stock_code", "")).strip().zfill(6) if row.get("stock_code") else ""
-    if code and is_manual_observe(code):
-        return True
-    notes = str(row.get("notes", "")).strip()
-    return "manual_observe" in notes
+    """用户手动「只观察」开关 (朱哥 2026-06-05 加)。
+
+    严格 live-state: 只看 manual_observe.json 文件 (当前用户意图)。
+    不看 notes — notes 是历史轨迹, 可能过时:
+      场景: 用户勾上 → check_buy 跑过 → notes 写 manual_observe → 用户取消 →
+            重跑 → 走 V1.4 但 notes 残留. 此时不应该显示 ✋ 标签.
+    """
+    code_raw = row.get("stock_code", "")
+    if code_raw is None:
+        return False
+    code = str(code_raw).strip()
+    if not code or not code.isdigit() or len(code) > 6:
+        return False
+    return is_manual_observe(code)
 
 
 def is_not_checked(row) -> bool:
@@ -1005,8 +1016,9 @@ def _v16_mf_layer_html(row) -> str:
         return ""
 
     only_observe = _gb(row.get("v16_only_observe"))
+    # 2026-06-05 朱哥改: V1.6 plan 不再自动拦截 9:36 买入 → 这里降级为"建议"
     observe_text = (
-        "只观察，不进入 9:36 模拟买入"
+        "计划建议只观察（默认不拦截买入，仅供参考）"
         if only_observe is True else
         ("否" if only_observe is False else "暂无")
     )
@@ -5476,6 +5488,7 @@ LIFECYCLE_REASON_LABEL = {
     "unable_to_buy_limit_up":         "一字涨停，买不进",
     "v16_plan_only_observe":          "V1.6 复盘计划要求只观察",
     "v16_only_observe":               "只观察，不进入 9:36 模拟买入",
+    "manual_observe":                 "用户手动标记只观察",
     # —— 资金条件层 资金 ——
     "money_flow_not_healthy":         "近 3 日资金不健康",
     "money_flow_fetch_failed":        "资金数据获取失败",

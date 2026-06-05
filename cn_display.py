@@ -149,6 +149,7 @@ NOTES_CN: dict = {
     "v16_action_plan_missing":         "无复盘计划数据",
     "v16_plan_only_observe":           "V1.6 复盘计划要求只观察",
     "v16_only_observe":                "只观察，不进入 9:36 模拟买入",
+    "manual_observe":                  "用户手动标记只观察",
     "realtime_data_missing":           "实时行情获取失败",
     "realtime_price_invalid":          "价格数据无效",
 }

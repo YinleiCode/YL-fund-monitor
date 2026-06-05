@@ -230,6 +230,7 @@ def _reason_cn(reason: str) -> str:
         "market_sentiment_below_5": "大盘情绪不足5分",
         "v16_plan_only_observe": "V1.6 复盘计划要求只观察",
         "v16_only_observe": "只观察，不进入 9:36 模拟买入",
+        "manual_observe": "用户手动标记只观察",
         "price_below_open": "9:36 低于开盘价",
         "price_below_ma5": "9:36 低于5日均线",
         "unable_to_buy_limit_up": "一字涨停买不进",
@@ -410,6 +411,7 @@ def format_check_buy_message(results: list, report_date: str) -> tuple:
         "open_change_too_low_hard":        "开盘跌幅超过3%，明显弱开，直接放弃",
         "v16_plan_only_observe":           "V1.6 复盘计划要求只观察",
         "v16_only_observe":                "只观察，不进入 9:36 模拟买入",
+        "manual_observe":                  "用户手动标记只观察",
         # 9:36 技术确认层辅助提示
         "open_change_weak_watch":          "低开超过1%，开盘偏弱，但不单独否决",
     }
