@@ -38,6 +38,18 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+# 手动「只观察」开关（朱哥 2026-06-05 加，替代 V1.6 plan 自动拦截）
+from manual_observe import (
+    load_manual_observe,
+    load_manual_observe_codes,
+    is_manual_observe,
+    set_manual_observe,
+    clear_manual_observe,
+    toggle_manual_observe,
+    get_manual_observe_meta,
+    MANUAL_OBSERVE_PATH,
+)
+
 
 # ─── 路径 ────────────────────────────────────────────────────────────────────
 BASE_DIR    = Path(__file__).parent
@@ -289,11 +301,22 @@ def is_v16_only_observe(row) -> bool:
     return "v16_plan_only_observe" in notes
 
 
+def is_manual_observe_row(row) -> bool:
+    """用户手动「只观察」开关 (朱哥 2026-06-05 加)。"""
+    code = str(row.get("stock_code", "")).strip().zfill(6) if row.get("stock_code") else ""
+    if code and is_manual_observe(code):
+        return True
+    notes = str(row.get("notes", "")).strip()
+    return "manual_observe" in notes
+
+
 def is_not_checked(row) -> bool:
     """9:36 尚未跑。"""
     # 2026-06-05 修复: V1.6 plan 拦下 (v16_only_observe=true) 时, price_0935 等字段是空
     # 但 9:36 已经检查过 (只是没拉行情). 不能再显示"待 9:36 检查".
     if is_v16_only_observe(row):
+        return False
+    if is_manual_observe_row(row):
         return False
     if str(row.get("realtime_data_status", "") or "").strip():
         return False
@@ -1910,6 +1933,8 @@ def _v2_stock_card(r) -> str:
     # 状态分类（中文）
     if is_bought(r):
         status_label, accent = "9:36 已确认", COLOR_BOUGHT
+    elif is_manual_observe_row(r):
+        status_label, accent = "✋ 手动只观察", COLOR_WARN_YELLOW
     elif is_v16_only_observe(r):
         status_label, accent = "V1.6 只观察", COLOR_WAIT_T1
     elif is_not_checked(r):
@@ -2246,6 +2271,8 @@ def _v2_signal_stream(df: pd.DataFrame) -> str:
         # 信号类型（中文化）
         if is_bought(r):
             sig_label, sig_color = "9:36 已确认", COLOR_BOUGHT
+        elif is_manual_observe_row(r):
+            sig_label, sig_color = "✋ 手动只观察", COLOR_WARN_YELLOW
         elif is_v16_only_observe(r):
             sig_label, sig_color = "V1.6 只观察", COLOR_WAIT_T1
         elif is_not_checked(r):
@@ -8501,6 +8528,10 @@ def page_holding_track(df_all: pd.DataFrame) -> None:
         for _, row in df_manual.iterrows():
             st.markdown(_track_card(row), unsafe_allow_html=True)
 
+    # ── ✋ 手动只观察名单 (朱哥 2026-06-05 加) ──
+    # 持仓追踪页也提供入口, 让用户看持仓时随手就能切换观察池
+    _render_manual_observe_panel(_wl_load())
+
     # 底部说明
     st.markdown(
         _h(f"""
@@ -8512,6 +8543,133 @@ def page_holding_track(df_all: pd.DataFrame) -> None:
         """),
         unsafe_allow_html=True,
     )
+
+
+def _render_manual_observe_panel(watchlist_rows: list[dict]) -> None:
+    """
+    手动「只观察」名单管理面板（朱哥 2026-06-05 加）。
+
+    用法：
+        - 直接放在自选池页和持仓追踪页内
+        - 用户勾选/添加后，写入 data/manual_observe.json
+        - check_buy 启动时读这份名单，命中的票跳过 9:36 买入判定
+
+    watchlist_rows：来自 _wl_load() 的自选池行，用于「从自选池快捷勾选」
+    """
+    st.markdown(
+        f"<div style='margin-top:14px;margin-bottom:10px;'>"
+        f"<div style='font-size:11px;letter-spacing:0.18em;color:{COLOR_WARN_YELLOW};font-weight:700;'>MANUAL_OBSERVE</div>"
+        f"<div style='font-size:18px;color:{COLOR_TEXT};font-weight:700;margin-top:4px;'>✋ 手动只观察名单</div>"
+        f"<div style='font-size:12px;color:{COLOR_MUTED};margin-top:4px;'>"
+        f"勾选后该股 9:36 跳过 V1.4/V1.5 买入判定（只参与观察 / 不下单）。"
+        f"V1.6 计划层不再自动拦截 — 默认全部允许买，只观察由你手动决定。</div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+    with st.expander("展开「只观察」名单管理", expanded=False):
+        observed = load_manual_observe()           # {code: {set_at, reason}}
+        observed_codes = set(observed.keys())
+
+        # —— 区块 1：当前名单 ——
+        if observed:
+            st.markdown(f"**当前「只观察」名单（{len(observed)} 只）**")
+            for code in sorted(observed.keys()):
+                meta = observed[code]
+                # 从自选池找名字
+                name = ""
+                for r in watchlist_rows:
+                    rc = str(r.get("stock_code", "") or "").strip().zfill(6)
+                    if rc == code:
+                        name = str(r.get("stock_name", "") or "").strip()
+                        break
+                set_at_short = meta.get("set_at", "")[:16].replace("T", " ")
+                reason = meta.get("reason", "")
+                col_info, col_btn = st.columns([5, 1])
+                with col_info:
+                    reason_html = (
+                        f"<span style='color:{COLOR_MUTED};margin-left:8px;'>· {_eh(reason)}</span>"
+                        if reason else ""
+                    )
+                    st.markdown(
+                        f"<div style='padding:6px 0;border-bottom:1px solid {COLOR_DIVIDER};'>"
+                        f"<span style='font-family:JetBrains Mono,monospace;color:{COLOR_WARN_YELLOW};font-weight:700;'>{code}</span>"
+                        f"<span style='color:{COLOR_TEXT};margin-left:10px;font-weight:600;'>{_eh(name) or '—'}</span>"
+                        f"<span style='color:{COLOR_MUTED};margin-left:12px;font-size:11px;'>设于 {_eh(set_at_short)}</span>"
+                        f"{reason_html}"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+                with col_btn:
+                    if st.button("移除", key=f"mo_clear_{code}", use_container_width=True):
+                        if clear_manual_observe(code):
+                            status_banner(f"已从只观察名单移除：{code} {name}", "success")
+                            st.rerun()
+                        else:
+                            status_banner(f"移除失败：{code}", "error")
+            st.markdown("&nbsp;", unsafe_allow_html=True)
+        else:
+            st.info("当前「只观察」名单为空 — 所有自选池股票默认走 9:36 买入判定。")
+
+        # —— 区块 2：新增（输入框） ——
+        st.markdown("**手动新增到只观察名单**")
+        with st.form("manual_observe_add_form", clear_on_submit=True):
+            col_a, col_b, col_c = st.columns([1, 2, 1])
+            with col_a:
+                add_code = st.text_input("股票代码", placeholder="002015", key="mo_add_code")
+            with col_b:
+                add_reason = st.text_input("原因（可选）", placeholder="高位回避 / 等回调", key="mo_add_reason")
+            with col_c:
+                st.markdown("<div style='height:28px;'></div>", unsafe_allow_html=True)
+                add_submitted = st.form_submit_button("加入名单", type="primary", use_container_width=True)
+            if add_submitted:
+                code_clean = str(add_code or "").strip()
+                if not code_clean:
+                    status_banner("请填写股票代码", "warning")
+                elif not code_clean.isdigit() or len(code_clean) > 6:
+                    status_banner(f"非法代码：{code_clean}（需要 1-6 位数字）", "error")
+                elif set_manual_observe(code_clean, add_reason):
+                    code_n = code_clean.zfill(6)
+                    status_banner(f"已加入只观察名单：{code_n}", "success")
+                    st.rerun()
+                else:
+                    status_banner("写入失败，检查 data/manual_observe.json 权限", "error")
+
+        # —— 区块 3：从自选池一键切换 ——
+        if watchlist_rows:
+            active_rows = [
+                r for r in watchlist_rows
+                if str(r.get("status", "") or "active").strip() in ("", "active")
+                and str(r.get("stock_code", "") or "").strip()
+            ]
+            if active_rows:
+                st.markdown(f"**从自选池快捷切换（共 {len(active_rows)} 只 active）**")
+                st.caption("勾选的股票会立即写入只观察名单，取消勾选则移除。")
+                # 按 4 列排
+                n_cols = 4
+                # 切片成多行
+                for row_start in range(0, len(active_rows), n_cols):
+                    chunk = active_rows[row_start:row_start + n_cols]
+                    cols = st.columns(n_cols)
+                    for i, r in enumerate(chunk):
+                        code_r = str(r.get("stock_code", "")).strip().zfill(6)
+                        name_r = str(r.get("stock_name", "")).strip()
+                        with cols[i]:
+                            cur = code_r in observed_codes
+                            label = f"{code_r} {name_r}"
+                            new_val = st.checkbox(label, value=cur, key=f"mo_wl_cb_{code_r}")
+                            if new_val != cur:
+                                if new_val:
+                                    set_manual_observe(code_r, "")
+                                else:
+                                    clear_manual_observe(code_r)
+                                st.rerun()
+
+        try:
+            _mo_rel = MANUAL_OBSERVE_PATH.relative_to(BASE_DIR.resolve())
+        except ValueError:
+            _mo_rel = MANUAL_OBSERVE_PATH
+        st.caption(f"持久化文件：`{_mo_rel}`")
 
 
 def page_watchlist() -> None:
@@ -9357,6 +9515,9 @@ def page_watchlist() -> None:
             """),
             unsafe_allow_html=True,
         )
+
+    # ── ✋ 手动只观察名单（朱哥 2026-06-05 加，替代 V1.6 plan 自动拦截）──
+    _render_manual_observe_panel(rows)
 
     st.markdown("<div class='watchlist-maintenance'><div class='watchlist-maintenance__kicker'>池子维护</div><div class='watchlist-maintenance__title'>维护自选池</div></div>", unsafe_allow_html=True)
     with st.expander("展开维护自选池", expanded=False):

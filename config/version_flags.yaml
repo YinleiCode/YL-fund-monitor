@@ -64,7 +64,7 @@ v16:
   plan_filter_enabled: true                  # 是否给候选股打 V1.6 标签
   plan_source: latest                        # latest | by_date
   fallback_to_v14_when_plan_missing: true    # 计划缺失/日期不匹配 → 完全回退 V1.4/V1.5
-  affect_check_buy: true                     # 已恢复（2026-05-28 盘后）：V1.6 前置门生效，v16_only_observe=True 的候选 9:36 不买入
+  affect_check_buy: false                    # 朱哥 2026-06-05 改：默认全部允许买，"只观察"改为手动开关 (见 manual_observe.py)
   # 灰度路径建议：
-  #   1) plan_filter_enabled=true + affect_check_buy=false  → 仅打标签，9:36 不拦截
+  #   1) plan_filter_enabled=true + affect_check_buy=false  → 仅打标签，9:36 不拦截（当前模式）
   #   2) plan_filter_enabled=true + affect_check_buy=true   → 标签生效，9:36 实拦截

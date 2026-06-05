@@ -1059,11 +1059,71 @@ def check_buy(cfg: dict) -> list:
             f"v16_only_observe=True 的候选将跳过 V1.4 五条 + V1.5 第六条"
         )
 
+    # ── 手动「只观察」前置门（朱哥 2026-06-05 加）──
+    # 用户在看板上主动勾选「只观察」的票 → check_buy 跳过买入判定。
+    # 比 V1.6 plan 自动判定更高优先级（始终生效，无需 affect_check_buy 开关）。
+    try:
+        from manual_observe import load_manual_observe_codes
+        _manual_observe_codes = load_manual_observe_codes()
+    except Exception as e:
+        logger.warning(f"[manual_observe] 加载失败，默认空名单: {type(e).__name__}: {e}")
+        _manual_observe_codes = set()
+    if _manual_observe_codes:
+        logger.info(
+            f"[manual_observe] 手动只观察前置门：{len(_manual_observe_codes)} 只 "
+            f"({','.join(sorted(_manual_observe_codes))}) 将跳过 9:36 买入判定"
+        )
+
     for idx in df.index[today_mask]:
         row  = df.loc[idx]
         code = str(row["stock_code"]).zfill(6)
         name = str(row["stock_name"])
         mode = str(row.get("mode", "full")).strip() or "full"
+
+        # ── 🆕 手动「只观察」前置门（朱哥 2026-06-05 加，最高优先级）──
+        # 用户在看板手动勾选后，该股进入 manual_observe.json 名单。
+        # 直接跳过 9:36 买入判定，notes 追加 "manual_observe"
+        if code in _manual_observe_codes:
+            logger.info(
+                f"[manual_observe][check_buy] {code} {name} 用户手动只观察 → 跳过 9:36 买入"
+            )
+            df.at[idx, "buy_signal_0935"]    = "false"
+            df.at[idx, "buy_price"]          = ""
+            df.at[idx, "adjusted_buy_price"] = ""
+            df.at[idx, "stop_price"]         = ""
+            notes_existing = str(row.get("notes", "")).strip()
+            mo_note = "manual_observe"
+            if mo_note not in notes_existing:
+                df.at[idx, "notes"] = (notes_existing + ";" + mo_note) if notes_existing else mo_note
+            updated += 1
+            results.append({
+                "code":              code,
+                "name":              name,
+                "rank":              str(row.get("rank", "?")),
+                "mode":              mode,
+                "theme_name":        str(row.get("theme_name", "")).strip(),
+                "theme_strength":    _gf(row.get("theme_strength")),
+                "market_sentiment":  _gf(row.get("market_sentiment")),
+                "ma5":               _gf(row.get("ma5")),
+                "open_price":        None,
+                "unable_to_buy":     False,
+                "open_chg":          None,
+                "price_0935":        None,
+                "buy_signal":        False,
+                "fail_reasons":      [mo_note],
+                "hard_fail_reasons": [mo_note],
+                "soft_fail_reasons": [],
+                "buy_reasons":       None,
+                "buy_price":         None,
+                "unable_reason":     "",
+                "effective_version": "manual_observe",
+                "v16_only_observe":  False,
+                "v16_plan_action":   "",
+                "v16_plan_reason":   "",
+                "pregate_failed":    False,
+                "manual_observe":    True,
+            })
+            continue
 
         # ── 🆕 V1.6 前置门：候选资格层（用户原话：不是修改买入条件公式）──
         # 仅在 affect_check_buy=true 时生效。v16_only_observe=True 的候选股：

@@ -18,3 +18,6 @@ backups/
 # 2026-06-02 引入：cache / runtime 数据
 data/minute_today/          # T 模块每日 1 分钟 K 缓存
 data/calendar/              # 交易日历 cache（30 天有效，本地生成即可）
+
+# 2026-06-05 引入：用户手动「只观察」名单（运行时状态，跟用户走，不入库）
+data/manual_observe.json
