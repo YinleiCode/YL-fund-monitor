@@ -7604,8 +7604,11 @@ def _tt_signal_cards_html(signals: pd.DataFrame) -> str:
     # 把限制从 head(30) 放宽到 head(200), 覆盖即使每股 5+ 信号的情况
     for code, group in source.head(200).groupby(source["stock_code"].astype(str), sort=False):
         first = group.iloc[0]
-        sig_parts = []
-        fail_parts = []
+        # 2026-06-05 修复: 分别统计'已通过'和'未通过', 避免有通过信号时还显示'无触发/未触发任何信号'矛盾文案
+        pass_sig_parts = []          # 已通过的 signal_type (如 '低吸 T')
+        all_sig_parts = []           # 所有 signal_type (含 '无触发')
+        fail_real = []               # 真正的失败原因 (排除 'no_signal_triggered' 占位)
+        fail_all = []                # 所有失败原因 (含 'no_signal_triggered')
         pass_count = 0
         latest_time = ""
         latest_price = ""
@@ -7614,20 +7617,36 @@ def _tt_signal_cards_html(signals: pd.DataFrame) -> str:
             pass_count += int(passed)
             sig_type = _tt_text(item.get("signal_type", ""), "")
             sig_label = _T_SIGNAL_CN.get(sig_type, sig_type or "无触发")
-            if sig_label not in sig_parts:
-                sig_parts.append(sig_label)
-            fail_raw = _tt_text(item.get("fail_reason", ""), "")
-            fail_text = _FAIL_REASON_CN.get(fail_raw, fail_raw or "")
-            if fail_text and fail_text != "—" and fail_text not in fail_parts:
-                fail_parts.append(fail_text)
+            if sig_label not in all_sig_parts:
+                all_sig_parts.append(sig_label)
+            if passed and sig_label not in pass_sig_parts and sig_label != "无触发":
+                pass_sig_parts.append(sig_label)
+            if not passed:
+                fail_raw = _tt_text(item.get("fail_reason", ""), "").strip()
+                fail_text = _FAIL_REASON_CN.get(fail_raw, fail_raw or "")
+                if fail_text and fail_text != "—":
+                    if fail_text not in fail_all:
+                        fail_all.append(fail_text)
+                    # 'no_signal_triggered' 是占位行(没扫到任何信号), 有通过信号时不该展示
+                    if fail_raw != "no_signal_triggered" and fail_text not in fail_real:
+                        fail_real.append(fail_text)
             if _tt_text(item.get("signal_time", ""), ""):
                 latest_time = _tt_text(item.get("signal_time", ""), "")
                 latest_price = item.get("signal_price", "")
+
+        if pass_count > 0:
+            # 已通过: 只显示通过信号 + 真正失败原因 (排除 'no_signal_triggered')
+            display_signals = pass_sig_parts or all_sig_parts
+            display_fails = fail_real  # 可能为空, 渲染层处理
+        else:
+            display_signals = all_sig_parts or ["无触发"]
+            display_fails = fail_all or ["未触发任何信号"]
+
         grouped_rows.append({
             "stock_code": code,
             "stock_name": first.get("stock_name", ""),
-            "signals": sig_parts or ["无触发"],
-            "fail_reasons": fail_parts or ["未触发任何信号"],
+            "signals": display_signals,
+            "fail_reasons": display_fails,
             "pass_count": pass_count,
             "raw_count": len(group),
             "latest_time": latest_time,
@@ -7646,6 +7665,9 @@ def _tt_signal_cards_html(signals: pd.DataFrame) -> str:
         )
         fail_text = "；".join(r["fail_reasons"])
         status_text = "有通过信号" if passed else "未通过"
+        # 已通过时如果 fail_text 为空 (没有真正失败原因), 显示一个正向提示
+        if passed and not fail_text:
+            fail_text = "已触发, 详见今日 T 交易记录"
         raw_count = int(r.get("raw_count", 1) or 1)
         merge_note = f"合并 {raw_count} 条记录" if raw_count > 1 else "单条记录"
         rows_html.append(_h(f"""
