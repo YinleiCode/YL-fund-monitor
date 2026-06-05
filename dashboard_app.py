@@ -280,8 +280,21 @@ def is_bought(row) -> bool:
     return _gb(row.get("buy_signal_0935")) is True
 
 
+def is_v16_only_observe(row) -> bool:
+    """V1.6 计划层标记仅观察 (跳过 V1.4/V1.5 判定, 没拉行情, 但 9:36 已检查过)."""
+    if _gb(row.get("v16_only_observe")) is True:
+        return True
+    # notes 含 v16_plan_only_observe 也算
+    notes = str(row.get("notes", "")).strip()
+    return "v16_plan_only_observe" in notes
+
+
 def is_not_checked(row) -> bool:
     """9:36 尚未跑。"""
+    # 2026-06-05 修复: V1.6 plan 拦下 (v16_only_observe=true) 时, price_0935 等字段是空
+    # 但 9:36 已经检查过 (只是没拉行情). 不能再显示"待 9:36 检查".
+    if is_v16_only_observe(row):
+        return False
     if str(row.get("realtime_data_status", "") or "").strip():
         return False
     if str(row.get("fail_reason", "") or "").strip():
@@ -1897,6 +1910,8 @@ def _v2_stock_card(r) -> str:
     # 状态分类（中文）
     if is_bought(r):
         status_label, accent = "9:36 已确认", COLOR_BOUGHT
+    elif is_v16_only_observe(r):
+        status_label, accent = "V1.6 只观察", COLOR_WAIT_T1
     elif is_not_checked(r):
         status_label, accent = "待 9:36 检查", COLOR_WARN_YELLOW
     elif is_worth_observing(r):
@@ -2231,6 +2246,8 @@ def _v2_signal_stream(df: pd.DataFrame) -> str:
         # 信号类型（中文化）
         if is_bought(r):
             sig_label, sig_color = "9:36 已确认", COLOR_BOUGHT
+        elif is_v16_only_observe(r):
+            sig_label, sig_color = "V1.6 只观察", COLOR_WAIT_T1
         elif is_not_checked(r):
             sig_label, sig_color = "待 9:36 检查", COLOR_WARN_YELLOW
         elif is_worth_observing(r):
