@@ -117,11 +117,25 @@ FIELDS = [
 
 # ─────────────────── 时间窗口 ────────────────────────────────────────
 
+# 2026-06-04 朱哥临时测试用：在 EXPANDED_WINDOW_UNTIL 日期之前（包含当天），
+# 把扫描窗口扩大到 09:30-15:00 全天（除午休）, 让朱哥能看到更多 T 触发机会。
+# 之后自动恢复 09:33-10:15 严格窗口。
+#
+# 朱哥要延长测试: 改这一行日期即可
+EXPANDED_WINDOW_UNTIL = "20260607"   # 含此日, 之后恢复严格窗口（06-08 周一起严格）
+
 WINDOW_START = "09:33"
 WINDOW_END   = "10:15"
 
 T_WINDOW_START = 9 * 60 + 33   # 09:33 in minutes
 T_WINDOW_END   = 10 * 60 + 15  # 10:15 in minutes
+
+# 临时扩展窗口（仅 EXPANDED_WINDOW_UNTIL 日期及之前生效）
+T_WINDOW_START_EXPANDED = 9 * 60 + 30   # 09:30
+T_WINDOW_END_EXPANDED   = 15 * 60       # 15:00
+# 午休跳过
+T_LUNCH_START_MIN = 11 * 60 + 30        # 11:30
+T_LUNCH_END_MIN   = 13 * 60             # 13:00
 
 # ─────────────────── 朱哥 T 规则常量 ────────────────────────────────
 # 2026-06-02 用户拍板：规则 3 加"当前位置比分时均线低于阈值"约束。
@@ -142,8 +156,20 @@ def _time_to_minutes(t_str: str) -> int:
 
 
 def _in_time_window(t_str: str) -> bool:
-    """Check if time falls within the T-trading window 09:33-10:15."""
+    """Check if time falls within the T-trading window.
+
+    2026-06-04 朱哥临时测试: 在 EXPANDED_WINDOW_UNTIL 日期之前(含)用 09:30-15:00 全天,
+    之后恢复 09:33-10:15 严格窗口. 午休 11:30-13:00 始终跳过.
+    """
+    from datetime import date as _date_cls
     mins = _time_to_minutes(t_str)
+    today = _date_cls.today().strftime("%Y%m%d")
+    if today <= EXPANDED_WINDOW_UNTIL:
+        # 临时扩展窗口
+        if T_LUNCH_START_MIN <= mins < T_LUNCH_END_MIN:
+            return False   # 午休跳过 (11:30-12:59 算午休)
+        return T_WINDOW_START_EXPANDED <= mins <= T_WINDOW_END_EXPANDED
+    # 之后恢复严格窗口
     return T_WINDOW_START <= mins <= T_WINDOW_END
 
 
@@ -185,6 +211,12 @@ def load_minute_csv(path: str) -> list[dict]:
                     "close":  float(row["close"]),
                     "volume": float(row["volume"]),
                 }
+                # 2026-06-04: amount 字段可选, 有就用真实成交额算 VWAP, 没有就回退到 close × volume
+                if "amount" in row and row["amount"]:
+                    try:
+                        vals["amount"] = float(row["amount"])
+                    except (TypeError, ValueError):
+                        pass
             except (KeyError, ValueError):
                 continue
             if not all(math.isfinite(v) for v in vals.values()):
@@ -228,9 +260,14 @@ def _same_color_bars(bars: list[dict], color: str) -> list[dict]:
 def _annotate_vwap_inplace(bars: list[dict]) -> None:
     """给每根 K 加 vwap 字段 = 从开盘到本根累计 VWAP（成交量加权均价）。
 
-    2026-06-02 引入：规则 3 第 2 段「比分时图均线低 3 个格子」需要分时均线。
+    2026-06-02 引入：规则 3 第 2 段「比分时图均线低 1.3%」需要分时均线。
     通达信/同花顺的分时均价线算法 = Σ(成交额) / Σ(成交量)。
-    分钟 K 没有 amount 字段，用 close × volume 近似（每根 K 内价格变化忽略不计）。
+
+    2026-06-04 修复（朱哥发现）：
+        旧版本用 close × volume 近似 amount, 与同花顺相比系统性低估 10 元 (0.8%)。
+        原因: 一分钟内价格在波动, 真实成交均价 ≠ close (close 只是最后一秒)。
+        现在优先用 bar["amount"] 真实成交额, 没有时回退到 close × volume。
+        data_fetcher.fetch_minute_today 已保留 amount 字段。
 
     必须用 minute_bars 全部（从 09:30 开盘累计），不能只用 window_bars。
     """
@@ -240,7 +277,12 @@ def _annotate_vwap_inplace(bars: list[dict]) -> None:
         v = b.get("volume", 0)
         c = b.get("close", 0)
         if v > 0 and math.isfinite(v) and math.isfinite(c):
-            total_amount += c * v
+            # 优先用真实成交额（精确）, 没有时用 close × volume（近似）
+            amt = b.get("amount")
+            if amt is not None and math.isfinite(amt) and amt > 0:
+                total_amount += amt
+            else:
+                total_amount += c * v
             total_volume += v
         b["vwap"] = (total_amount / total_volume) if total_volume > 0 else None
 

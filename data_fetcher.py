@@ -1080,6 +1080,9 @@ def fetch_minute_today(
     # 2026-06-02 修复：原版本如果 akshare 升级改了列名（英文 / 加前缀 / 重命名），
     # rename 全部不匹配，df 变空 DataFrame，T 模块全天 0 信号但不报错。
     # 加列检查 + 位置索引兜底（前 6 列假设依次是 时间/开盘/最高/最低/收盘/成交量）。
+    # 2026-06-04 修复：朱哥发现 VWAP 算的不对 (差同花顺 10 元)。
+    # 根因: 之前丢了 "成交额" 字段, T 模块用 close × volume 近似 VWAP, 系统性低估。
+    # 现在保留 amount 字段, observer 用真实 amount 算 VWAP, 跟同花顺一致。
     column_map = {
         "时间":   "datetime",
         "开盘":   "open",
@@ -1087,25 +1090,31 @@ def fetch_minute_today(
         "最低":   "low",
         "收盘":   "close",
         "成交量": "volume",
+        "成交额": "amount",   # 2026-06-04 新增: 真实成交额, 用于精确算 VWAP
     }
     df = df.rename(columns=column_map)
-    keep = ["datetime", "open", "high", "low", "close", "volume"]
+    keep = ["datetime", "open", "high", "low", "close", "volume", "amount"]
     missing = [c for c in keep if c not in df.columns]
     if missing:
-        logger.warning(
-            f"[minute] {code} akshare 返回缺少列 {missing}（可能 API 升级改名）；"
-            f"实际列: {list(df.columns)}；尝试按前 6 列位置兜底"
-        )
-        # 位置索引兜底：前 6 列重命名为期望名（如果列数足够）
-        if len(df.columns) >= 6:
-            df = df.iloc[:, :6].copy()
-            df.columns = keep
-        else:
+        # amount 缺失是允许的（兜底用 close × volume），但其他列缺失就 fallback
+        critical_missing = [c for c in missing if c != "amount"]
+        if critical_missing:
             logger.warning(
-                f"[minute] {code} 列数不足 6 ({len(df.columns)})，"
-                f"无法兜底；返回 None"
+                f"[minute] {code} akshare 返回缺少关键列 {critical_missing}"
+                f"（可能 API 升级改名）；实际列: {list(df.columns)}；按前 6 列位置兜底"
             )
-            return None
+            if len(df.columns) >= 6:
+                df = df.iloc[:, :6].copy()
+                df.columns = ["datetime", "open", "high", "low", "close", "volume"]
+            else:
+                logger.warning(
+                    f"[minute] {code} 列数不足 6 ({len(df.columns)})，无法兜底；返回 None"
+                )
+                return None
+        else:
+            # 只是 amount 缺失，6 个核心列都在
+            df = df[["datetime", "open", "high", "low", "close", "volume"]].copy()
+            logger.info(f"[minute] {code} akshare 未返回成交额字段, VWAP 将用 close×volume 近似")
     else:
         df = df[keep].copy()
 
