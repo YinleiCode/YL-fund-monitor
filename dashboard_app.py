@@ -7854,12 +7854,15 @@ def page_t_signal() -> None:
     n_high = int(signals.get("signal_type", "").astype(str).eq("high_throw").sum())
     n_pass = int(signals.get("rule_pass", pd.Series(dtype=str)).astype(str).str.lower().isin(("true", "1")).sum())
     n_fail = total - n_pass
+    # 2026-06-05: 朱哥反馈"低吸 T 2 + 21 未通过"语义矛盾, 加副标题让含义清楚
+    n_low_pass = int(((signals.get("signal_type", "").astype(str) == "low_absorb") &
+                      (signals.get("rule_pass", pd.Series(dtype=str)).astype(str).str.lower().isin(("true","1")))).sum())
 
     s1, s2, s3, s4 = st.columns(4)
-    s1.markdown(kpi_card("今日 T 信号", total, COLOR_TEXT), unsafe_allow_html=True)
-    s2.markdown(kpi_card("低吸 T", n_low, "#1F883D"), unsafe_allow_html=True)
-    s3.markdown(kpi_card("高抛 T", n_high, COLOR_SECOND), unsafe_allow_html=True)
-    s4.markdown(kpi_card("规则通过", n_pass, "#1F883D"), unsafe_allow_html=True)
+    s1.markdown(kpi_card("今日 T 信号", total, COLOR_TEXT, "扫描记录总数"), unsafe_allow_html=True)
+    s2.markdown(kpi_card("低吸 T 候选", n_low, "#1F883D", "扫到候选, 含未通过缩量"), unsafe_allow_html=True)
+    s3.markdown(kpi_card("低吸 T 触发", n_low_pass, COLOR_SECOND, "4 条规则全过才算"), unsafe_allow_html=True)
+    s4.markdown(kpi_card("未通过", n_fail, "#9A6700", "未满足全部规则"), unsafe_allow_html=True)
     if n_fail > 0:
         st.caption(f"当前还有 {n_fail} 条信号未通过规则确认。")
 
