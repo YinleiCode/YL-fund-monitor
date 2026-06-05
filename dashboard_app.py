@@ -9814,7 +9814,8 @@ def main() -> None:
       .top-nav-radio + div[data-testid="stRadio"] [role="radiogroup"],
       div[data-testid="stElementContainer"]:has(.top-nav-radio) + div[data-testid="stElementContainer"] div[data-testid="stRadio"] [role="radiogroup"] {{
           display: grid !important;
-          grid-template-columns: repeat(10, minmax(0, 1fr));
+          /* 2026-06-05: 我加了'持仓追踪'后 nav 变 11 个项, 从 10 列改成 11 列 */
+          grid-template-columns: repeat(11, minmax(0, 1fr));
           flex-wrap: nowrap;
           gap: 6px;
           overflow: visible;
