@@ -99,6 +99,17 @@ def write_buy_decision(results: list, report_date: str, cfg: dict) -> None:
             lines.append("---\n\n")
             continue
 
+        # 用户手动只观察 / V1.6 计划层预筛拦下 → 没拉行情, 不应走"必要条件检查"
+        if r.get("manual_observe") or r.get("pregate_failed"):
+            if r.get("manual_observe"):
+                lines.append("买入判断：✋ 用户手动标记只观察（跳过 9:36 买入判定）\n\n")
+            else:
+                hard = r.get("hard_fail_reasons") or r.get("fail_reasons") or []
+                reason_str = "；".join(hard) if hard else "复盘计划层预筛未通过"
+                lines.append(f"买入判断：🟡 复盘计划层预筛拦下（{reason_str}），未进入 9:36 行情检查\n\n")
+            lines.append("---\n\n")
+            continue
+
         buy_signal = r["buy_signal"]
         lines.append(f"买入判断：{'✅ 触发模拟买入' if buy_signal else '❌ 未触发'}\n\n")
         lines.append("必要条件检查：\n\n")

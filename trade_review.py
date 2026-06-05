@@ -136,6 +136,9 @@ SECOND_CHECK_INELIGIBLE_REASONS: set = {
     "open_change_too_low_hard",
     "open_change_too_high",
     "unable_to_buy_limit_up",
+    # 2026-06-05 朱哥加: 计划层 / 用户手动拦下的票, 不参与 10:00 二次确认 (本就没拉行情)
+    "v16_plan_only_observe",
+    "manual_observe",
 }
 
 
@@ -1116,11 +1119,16 @@ def check_buy(cfg: dict) -> list:
                 "buy_reasons":       None,
                 "buy_price":         None,
                 "unable_reason":     "",
-                "effective_version": "manual_observe",
-                "v16_only_observe":  False,
+                # 关键: 不污染 effective_version 搜索 (notifier 取首个非空作为整批版本号)
+                "effective_version": "",
+                # 关键: 全部 None/空字符串, 让 _format_v16_money_lines 不输出 V1.6 审计行
+                # (manual_observe 跟 V1.6 plan 无关, 不应印 V1.6 计划/资金审计明细)
+                "v16_only_observe":  None,
                 "v16_plan_action":   "",
                 "v16_plan_reason":   "",
-                "pregate_failed":    False,
+                # 关键: pregate_failed=True 让 notifier 走"未进入 9:36 买入确认"清爽分支
+                # (否则会印"开盘 —, 9:36价 —"很难看, 因为我们根本没拉行情)
+                "pregate_failed":    True,
                 "manual_observe":    True,
             })
             continue
