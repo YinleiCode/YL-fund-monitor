@@ -8147,17 +8147,20 @@ def page_holding_track(df_all: pd.DataFrame) -> None:
     df_holding   = df[status_col == "holding"]
     df_stopped   = df[status_col == "stopped"]
 
-    # 2026-06-04 朱哥反馈：今天 9:36 买入了 3 只 (buy_signal_0935=true)
-    # 但 holding_status 还是空, 因为这个字段是 19:00 update_review 才填.
-    # 加一个'今日新买入'分组, 让朱哥立刻能看到, 标'等今晚 19:00 数据'.
+    # 2026-06-04/05 朱哥需求：买入后到 update_review 填 holding_status 之前的空窗期
+    # 也要显示在持仓追踪页, 不能让朱哥以为没买入.
+    # 改成: 任何已买入但 holding_status 还空的票都显示在'待补全'分组,
+    # 不限制 report_date == 今天. 这样 06-04 9:36 买入但 06-05 19:00 才填
+    # holding_status 的票也能立刻看到.
     from datetime import date as _date
     today_yyyymmdd = _date.today().strftime("%Y%m%d")
     buy_signal_col = df.get("buy_signal_0935", pd.Series([""] * len(df))).astype(str).str.strip().str.lower()
     report_date_col = df.get("report_date", pd.Series([""] * len(df))).astype(str).str.strip().str.replace("-", "")
+    # 已买入但 holding_status 还空 (等 update_review 填)
     df_today_new = df[
         (status_col == "") &
         (buy_signal_col == "true") &
-        (report_date_col == today_yyyymmdd)
+        (report_date_col != "")
     ]
     df_post_done = df[status_col == "post_stop_done"]
     df_manual    = df[status_col == "manual_sell"]
@@ -8287,8 +8290,8 @@ def page_holding_track(df_all: pd.DataFrame) -> None:
             _h(f"""
             <div class="t1-section-head" style="margin-top:24px;">
               <div>
-                <div class="t1-section-kicker">JUST BOUGHT TODAY</div>
-                <div class="t1-section-title">今日 9:36 刚买入（{n_new} 只 · 等今晚 19:00 滚动数据）</div>
+                <div class="t1-section-kicker">PENDING UPDATE_REVIEW</div>
+                <div class="t1-section-title">已买入待补全（{n_new} 只 · 等 19:00 update_review 填字段）</div>
               </div>
               {chip_html("等 19:00 update_review", color=COLOR_WAIT_T1)}
             </div>
@@ -8306,6 +8309,12 @@ def page_holding_track(df_all: pd.DataFrame) -> None:
             p_0935 = _gf(row.get("price_0935"))
             mode = str(row.get("mode", "")).strip()
             theme = str(row.get("theme_name", "")).strip()
+            # 2026-06-05 修复: 买入日用真实 report_date, 不强制写"今日"
+            entry_date = str(row.get("report_date", "")).strip().replace("-", "")
+            entry_date_fmt = f"{entry_date[:4]}-{entry_date[4:6]}-{entry_date[6:8]}" if len(entry_date) == 8 else entry_date
+            is_today = entry_date == today_yyyymmdd
+            entry_date_display = f"今日 ({entry_date_fmt})" if is_today else entry_date_fmt
+            days_text = "0 (刚买入)" if is_today else "T+? (等 19:00)"
 
             inner = (
                 f'<div style="display:flex;justify-content:space-between;align-items:center;">'
@@ -8313,11 +8322,11 @@ def page_holding_track(df_all: pd.DataFrame) -> None:
                 f'<div style="font-family:{FONT_MONO};font-size:12px;color:{COLOR_MUTED};letter-spacing:0.1em;">{_h(code)}</div>'
                 f'<div style="font-size:16px;font-weight:600;color:{COLOR_TEXT};margin-top:2px;">{_h(name)}</div>'
                 f'</div>'
-                f'{chip_html("新买入", color=COLOR_BOUGHT)}'
+                f'{chip_html("新买入" if is_today else "待补全", color=COLOR_BOUGHT)}'
                 f'</div>'
                 f'<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px 24px;margin-top:14px;font-family:{FONT_MONO};font-size:12px;">'
-                f'<div><span style="color:{COLOR_MUTED};">买入日 </span><span style="color:{COLOR_TEXT};">今日 ({today_yyyymmdd})</span></div>'
-                f'<div><span style="color:{COLOR_MUTED};">持仓天数 </span><span style="color:{COLOR_TEXT};">0 (刚买入)</span></div>'
+                f'<div><span style="color:{COLOR_MUTED};">买入日 </span><span style="color:{COLOR_TEXT};">{_h(entry_date_display)}</span></div>'
+                f'<div><span style="color:{COLOR_MUTED};">持仓天数 </span><span style="color:{COLOR_TEXT};">{days_text}</span></div>'
                 f'<div><span style="color:{COLOR_MUTED};">买入价(含滑点) </span><span style="color:{COLOR_TEXT};">{(f"{adj_buy:.2f}" if adj_buy else "—")}</span></div>'
                 f'<div><span style="color:{COLOR_MUTED};">止损价(-3%) </span><span style="color:{COLOR_TEXT};">{(f"{stop_p:.2f}" if stop_p else "—")}</span></div>'
                 f'<div><span style="color:{COLOR_MUTED};">9:36 现价 </span><span style="color:{COLOR_TEXT};">{(f"{p_0935:.2f}" if p_0935 else "—")}</span></div>'
