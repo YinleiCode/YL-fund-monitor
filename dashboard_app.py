@@ -8185,7 +8185,8 @@ def page_holding_track(df_all: pd.DataFrame) -> None:
           {kpi_card("持仓中", n_holding, COLOR_BOUGHT, "实时滚动追踪 peak")}
           {kpi_card("已止损", n_stopped, COLOR_DROP, "继续追踪 30 个交易日")}
           {kpi_card("平均当前收益", (f"{avg_holding_ret*100:+.2f}%" if avg_holding_ret is not None else "—"),
-                    (COLOR_BOUGHT if (avg_holding_ret or 0) > 0 else COLOR_DROP if (avg_holding_ret or 0) < 0 else COLOR_TEXT),
+                    # A 股惯例: 盈利红, 亏损绿
+                    (COLOR_MAGENTA_NEON if (avg_holding_ret or 0) > 0 else COLOR_BOUGHT if (avg_holding_ret or 0) < 0 else COLOR_TEXT),
                     "持仓中的票相对买入价")}
           {kpi_card("已止损卖飞", flew_away_count, COLOR_MAGENTA_NEON, "止损后反弹 ≥ 3%")}
         </div>
@@ -8217,9 +8218,11 @@ def page_holding_track(df_all: pd.DataFrame) -> None:
         # 数值格式化
         def _fmt_money(v): return f"{v:.2f}" if v is not None else "—"
         def _fmt_pct(v):
+            """盈亏百分比按 A 股惯例: 盈利红字, 亏损绿字 (朱哥 2026-06-05 拍板)."""
             if v is None: return "—"
             sign = "+" if v >= 0 else ""
-            color = COLOR_BOUGHT if v > 0 else COLOR_MAGENTA_NEON if v < 0 else COLOR_TEXT
+            # A 股惯例: 涨/盈利 = 红 (COLOR_MAGENTA_NEON), 跌/亏损 = 绿 (COLOR_BOUGHT)
+            color = COLOR_MAGENTA_NEON if v > 0 else COLOR_BOUGHT if v < 0 else COLOR_TEXT
             return f"<span style='color:{color};'>{sign}{v*100:.2f}%</span>"
 
         # 拼接成单行 HTML 避免 Streamlit 把多空格缩进当代码块

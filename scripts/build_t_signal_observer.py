@@ -258,33 +258,36 @@ def _same_color_bars(bars: list[dict], color: str) -> list[dict]:
 
 
 def _annotate_vwap_inplace(bars: list[dict]) -> None:
-    """给每根 K 加 vwap 字段 = 从开盘到本根累计 VWAP（成交量加权均价）。
+    """给每根 K 加 vwap 字段 = 从开盘到本根累计 VWAP（成交量加权均价 元/股）。
 
     2026-06-02 引入：规则 3 第 2 段「比分时图均线低 1.3%」需要分时均线。
-    通达信/同花顺的分时均价线算法 = Σ(成交额) / Σ(成交量)。
+    通达信/同花顺的分时均价线 = Σ(成交额) / Σ(成交股数)。
 
-    2026-06-04 修复（朱哥发现）：
-        旧版本用 close × volume 近似 amount, 与同花顺相比系统性低估 10 元 (0.8%)。
-        原因: 一分钟内价格在波动, 真实成交均价 ≠ close (close 只是最后一秒)。
-        现在优先用 bar["amount"] 真实成交额, 没有时回退到 close × volume。
-        data_fetcher.fetch_minute_today 已保留 amount 字段。
-
-    必须用 minute_bars 全部（从 09:30 开盘累计），不能只用 window_bars。
+    2026-06-04 修复：之前用 close × volume 近似, 跟同花顺差 10 元。
+    2026-06-05 修复（朱哥山东玻纤暴露的单位 bug）：
+        akshare 返回的 volume 单位是"手" (1 手 = 100 股),
+        amount 单位是"元". 之前 amount / volume 得到的是"元/手"
+        即 VWAP × 100, 导致 VWAP 错乘 100, 离 VWAP 距离全部失真.
+        修复: 统一换算到"股", VWAP = total_amount / (total_volume × 100).
+        fallback 路径 close × volume(手) × 100(股/手) = 元 也对.
     """
-    total_amount = 0.0
-    total_volume = 0.0
+    SHARES_PER_HAND = 100   # 1 手 = 100 股 (A 股)
+    total_amount = 0.0      # 元
+    total_shares = 0.0      # 股
     for b in bars:
-        v = b.get("volume", 0)
-        c = b.get("close", 0)
-        if v > 0 and math.isfinite(v) and math.isfinite(c):
-            # 优先用真实成交额（精确）, 没有时用 close × volume（近似）
+        v_hand = b.get("volume", 0)   # 手
+        c = b.get("close", 0)         # 元/股
+        if v_hand > 0 and math.isfinite(v_hand) and math.isfinite(c):
+            v_share = v_hand * SHARES_PER_HAND   # 转换成股
             amt = b.get("amount")
             if amt is not None and math.isfinite(amt) and amt > 0:
+                # 真实成交额（精确）
                 total_amount += amt
             else:
-                total_amount += c * v
-            total_volume += v
-        b["vwap"] = (total_amount / total_volume) if total_volume > 0 else None
+                # fallback: close(元/股) × v_share(股) = 元
+                total_amount += c * v_share
+            total_shares += v_share
+        b["vwap"] = (total_amount / total_shares) if total_shares > 0 else None
 
 
 def evaluate_t_signals(
