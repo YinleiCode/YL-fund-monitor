@@ -274,6 +274,7 @@ def _annotate_vwap_inplace(bars: list[dict]) -> None:
     SHARES_PER_HAND = 100   # 1 手 = 100 股 (A 股)
     total_amount = 0.0      # 元
     total_shares = 0.0      # 股
+    last_close = None       # 跟踪最后一根 close 用于合理性校验
     for b in bars:
         v_hand = b.get("volume", 0)   # 手
         c = b.get("close", 0)         # 元/股
@@ -287,7 +288,26 @@ def _annotate_vwap_inplace(bars: list[dict]) -> None:
                 # fallback: close(元/股) × v_share(股) = 元
                 total_amount += c * v_share
             total_shares += v_share
+            last_close = c
         b["vwap"] = (total_amount / total_shares) if total_shares > 0 else None
+
+    # ───── 安全网：VWAP 数量级校验 ─────
+    # 2026-06-05 引入: 之前 VWAP 单位 bug 导致山东玻纤 VWAP=1843(真实 18.43),
+    # 没被任何 syntax/mock test 抓到, 只能靠朱哥肉眼对比同花顺才发现.
+    # 加这个校验: 如果 VWAP 跟最后一根 close 偏差 > 50%, 一定是单位/算法 bug.
+    if last_close is not None and bars:
+        last_vwap = bars[-1].get("vwap")
+        if last_vwap is not None and last_close > 0:
+            ratio = abs(last_vwap - last_close) / last_close
+            if ratio > 0.5:   # VWAP 跟 close 差 50% 以上, 必有 bug
+                # 不抛异常 (避免炸主流程), 但写明显 WARNING 日志
+                import sys as _sys
+                print(
+                    f"⚠️ [VWAP-SANITY] 数量级异常: last_close={last_close:.4f}, "
+                    f"last_vwap={last_vwap:.4f}, 偏差 {ratio*100:.1f}% > 50%. "
+                    f"可能是单位混淆 (手/股) 或算法 bug, 请人工核查!",
+                    file=_sys.stderr,
+                )
 
 
 def evaluate_t_signals(
