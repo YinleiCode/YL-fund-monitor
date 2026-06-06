@@ -5162,68 +5162,151 @@ def _render_money_flow_health_section() -> None:
         st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
 
-def page_manual_rerun() -> None:
-    render_page_header(
-        "安全补跑控制台",
-        "手动补跑",
-        "只提供白名单内的补救命令，用于电脑关机/睡眠错过自动任务后的人工修复。",
-        badges=["白名单命令", "需要确认", "不自动交易"],
-        aside_title="安全边界",
-        aside_body=(
-            "本页不会提供盘前选股、9:36 买入确认等高风险按钮。<br>"
-            "所有操作都需要勾选确认并带锁执行。"
-        ),
-    )
+def _render_v17_rerun_button() -> None:
+    """V1.7 LLM 情绪分析师补跑按钮 (朱哥 2026-06-06 加).
 
-    # —— 顶部说明（用户要求的强警示）——
+    跟现有 ALLOWED_COMMANDS 的 3 个按钮长得一样, 但调的脚本不同
+    (scripts/build_news_sentiment.py 而非 run.py).
+    """
+    key       = "v17_news_sentiment"
+    label     = "重跑 V1.7 LLM 情绪分析"
+    icon      = "✨"
+    desc      = "对自选池 + 当日推荐池全部调一次 Claude/DeepSeek, 生成 v17_* 审计字段."
+    when      = "建议晚上手动跑;每天 18:30 launchd 自动跑一次, 如果电脑当时关机可补."
+    script    = BASE_DIR / "scripts" / "build_news_sentiment.py"
+
+    locked, lock_ts = _is_locked(key)
+    last_result_key = f"manual_rerun_result_{key}"
+    confirm_key     = f"manual_rerun_confirm_{key}"
+    button_key      = f"manual_rerun_button_{key}"
+    reset_flag_key  = f"manual_rerun_reset_pending_{key}"
+
+    if st.session_state.pop(reset_flag_key, False):
+        st.session_state.pop(confirm_key, None)
+
     st.markdown(
-        f"""
-        <div style="
-            background:{COLOR_BANNER_WARN};
-            border-left:4px solid {COLOR_WAIT_T1};
-            border-radius:6px;
-            padding:14px 18px;
-            margin-bottom:14px;
-            font-size:13px;
-            color:{COLOR_TEXT};
-            line-height:1.8;">
-          <b>⚠️ 这是手动补跑工具，只用于电脑关机/睡眠导致自动任务错过后的补救。</b><br>
-          ・<b>不会自动交易，不会下单</b>，本工具自始至终是模拟验证系统。<br>
-          ・<b>请不要在盘中乱点</b>。T+1 复盘建议在收盘后或晚上执行。<br>
-          ・本页面<b>不提供</b>盘前选股 / 主题龙头 / 9:36 买入确认 / 10:00 二次观察 这 4 类按钮 ——
-              这些会改写当日推荐和模拟买入记录，必须由 launchd 在正确时点自动跑，不能由网页一键触发。
-        </div>
-        """,
+        f"<div style='background:{COLOR_CARD};border:1px solid {COLOR_BORDER};"
+        f"border-left:4px solid {COLOR_MAGENTA_NEON};border-radius:8px;"
+        f"padding:14px 18px;margin-bottom:6px;'>"
+        f"<div style='font-size:15px;font-weight:600;color:{COLOR_TEXT};'>{icon} {label}</div>"
+        f"<div style='font-size:12px;color:{COLOR_MUTED};margin-top:4px;'><b>作用:</b> {desc}</div>"
+        f"<div style='font-size:12px;color:{COLOR_MUTED};margin-top:4px;'><b>建议:</b> {when}</div>"
+        f"<div style='font-size:12px;color:{COLOR_WAIT_T1};margin-top:4px;'>"
+        f"mark_only · 永不影响 9:36 买入决策, 只写 v17_* 字段.</div>"
+        f"</div>",
         unsafe_allow_html=True,
     )
 
-    st.markdown("### 可用补跑命令")
-    st.caption("点按钮前先勾确认 checkbox。同一命令运行时会上锁，防止连点。")
+    if locked:
+        age = int(time.time() - lock_ts) if lock_ts else 0
+        status_banner(
+            f"⏳ 该命令正在执行中 ({age} 秒). 27 只大约 2-3 分钟, 请等.", "warning",
+        )
 
-    # 三个补跑按钮
+    col_chk, col_btn = st.columns([3, 1])
+    with col_chk:
+        confirmed = st.checkbox(
+            f"我确认现在要手动重跑「{label}」 (预计 2-3 分钟, 消耗约 \\$0.4 Claude 配额)",
+            key=confirm_key, value=False, disabled=locked,
+        )
+    with col_btn:
+        clicked = st.button(
+            f"{icon} 重跑", key=button_key,
+            disabled=(not confirmed) or locked, width="stretch",
+        )
+
+    if clicked and confirmed and not locked:
+        if not _acquire_lock(key):
+            status_banner("⚠️ 拿锁失败 (可能刚有人点了), 稍后重试.", "warning")
+        else:
+            try:
+                with st.spinner("正在跑 build_news_sentiment.py... (最长 300 秒)"):
+                    t0 = time.time()
+                    proc = subprocess.run(
+                        [str(PYTHON_BIN), str(script)],
+                        cwd=str(BASE_DIR),
+                        capture_output=True, text=True, timeout=300,
+                        env={**os.environ, "PYTHONUNBUFFERED": "1"},
+                    )
+                    st.session_state[last_result_key] = {
+                        "returncode":  proc.returncode,
+                        "stdout":      proc.stdout,
+                        "stderr":      proc.stderr,
+                        "duration_s":  time.time() - t0,
+                        "timed_out":   False,
+                        "cmd":         f"{PYTHON_BIN.name} scripts/build_news_sentiment.py",
+                    }
+            except subprocess.TimeoutExpired:
+                st.session_state[last_result_key] = {
+                    "returncode": -1, "stdout": "", "stderr": "执行超时 (>300 秒)",
+                    "duration_s": 300, "timed_out": True, "cmd": "",
+                }
+            finally:
+                _release_lock(key)
+            st.session_state[reset_flag_key] = True
+            st.rerun()
+
+    if last_result_key in st.session_state:
+        result = st.session_state[last_result_key]
+        rc = result["returncode"]
+        dur = result.get("duration_s", 0)
+        if rc == 0:
+            status_banner(f"✅ V1.7 情绪分析完成 (耗时 {dur:.0f} 秒). 看自选池/持仓页的情绪雷达卡.", "success")
+        else:
+            status_banner(f"❌ V1.7 失败 returncode={rc} (耗时 {dur:.0f} 秒). 看下面 stderr.", "error")
+        with st.expander("查看本次输出", expanded=False):
+            if result.get("stdout"):
+                st.markdown("**stdout (尾 80 行):**")
+                st.code("\n".join(result["stdout"].splitlines()[-80:]) or "(空)", language="text")
+            if result.get("stderr"):
+                st.markdown("**stderr:**")
+                st.code(result["stderr"][:4000] or "(空)", language="text")
+
+
+def page_manual_rerun() -> None:
+    """⚙ 补跑 — 朱哥 2026-06-06 精简版
+
+    保留: 4 个补跑按钮 (T+1 / 周复盘 / 月复盘 / V1.7 情绪) + 日志查看
+    删掉: 长警示框 (信息冗余) + V1.6 资金源自检 (跟补跑无关)
+    """
+    render_page_header(
+        "补跑控制台",
+        "补跑",
+        "电脑关机/睡眠错过 launchd 时手动补一下。永远不自动交易。",
+        badges=["只补跑", "不下单", "需要确认"],
+        aside_title="边界",
+        aside_body=(
+            "本页不提供盘前选股 / 9:36 买入确认 / 10:00 二次观察 — "
+            "这些会改写当日数据，必须由 launchd 在正确时点跑。"
+        ),
+    )
+
+    st.markdown("### 可用补跑命令")
+    st.caption("点按钮前勾确认 checkbox；同一命令运行时上锁，防连点。")
+
+    # 既有 3 个 (T+1 / 周复盘 / 月复盘)
     for key, spec in ALLOWED_COMMANDS.items():
-        st.markdown("")  # 间距
+        st.markdown("")
         _render_rerun_button(key, spec)
 
+    # 2026-06-06 新增: V1.7 LLM 情绪分析补跑
+    st.markdown("")
+    _render_v17_rerun_button()
+
     st.divider()
 
-    # —— V1.6 · 资金条件层 资金源健康自检（仅观察）——
-    _render_money_flow_health_section()
-
-    st.divider()
-
-    # —— 查看最近日志（只读）——
-    st.markdown("### 📜 查看最近日志（只读）")
-    st.caption(
-        f"读取 `{AUTO_LOG.relative_to(BASE_DIR)}` 最后 100 行。仅显示，不写文件。"
-    )
+    # 日志查看 (排错刚需)
+    st.markdown("### 📜 最近日志（只读）")
     col_a, col_b = st.columns([1, 5])
     with col_a:
-        if st.button("🔄 刷新日志", key="reload_log", width="stretch"):
+        if st.button("🔄 刷新", key="reload_log", width="stretch"):
             st.rerun()
     with col_b:
-        mod = last_modified(AUTO_LOG)
-        st.caption(f"文件修改时间：{mod}")
+        try:
+            rel = AUTO_LOG.relative_to(BASE_DIR.resolve())
+        except (ValueError, AttributeError):
+            rel = AUTO_LOG
+        st.caption(f"`{rel}` · 修改时间 {last_modified(AUTO_LOG)}")
 
     log_tail = _read_log_tail(AUTO_LOG, lines=100)
     st.code(log_tail, language="text", line_numbers=False)
@@ -10168,8 +10251,8 @@ def main() -> None:
       .top-nav-radio + div[data-testid="stRadio"] [role="radiogroup"],
       div[data-testid="stElementContainer"]:has(.top-nav-radio) + div[data-testid="stElementContainer"] div[data-testid="stRadio"] [role="radiogroup"] {{
           display: grid !important;
-          /* 2026-06-05: 我加了'持仓追踪'后 nav 变 11 个项, 从 10 列改成 11 列 */
-          grid-template-columns: repeat(11, minmax(0, 1fr));
+          /* 2026-06-06 朱哥精简: 11 → 7 列 (内嵌 tab 合并低频页) */
+          grid-template-columns: repeat(7, minmax(0, 1fr));
           flex-wrap: nowrap;
           gap: 6px;
           overflow: visible;
@@ -10662,11 +10745,16 @@ def main() -> None:
     </style>
     """, unsafe_allow_html=True)
     render_shell_topbar()
+    # 2026-06-06 朱哥精简: 11 → 6 + 1 折叠
+    # 合并: 今日总览+买入确认 / 持仓+未买入 / T+1+周月+候选 → 内嵌 tab 切换
     nav_pages = [
-        "今日总览", "买入确认", "T+1 复盘",
-        "持仓追踪", "未买入跟踪", "周月复盘",
-        "候选复盘", "明日计划",
-        "做T观察", "⭐ 我的自选", "手动补跑",
+        "📌 今日",       # = 今日总览 + 买入确认 (内嵌 segment)
+        "🔥 跟踪",       # = 持仓追踪 + 未买入跟踪 (内嵌 tab)
+        "📈 做T",         # = 做T观察
+        "📅 明日",       # = 明日计划
+        "⭐ 自选",       # = 我的自选 (含 V1.7 情绪雷达)
+        "📊 复盘",       # = T+1 + 周月 + 候选 (内嵌 tab)
+        "⚙ 补跑",         # = 精简过的手动补跑
     ]
     st.markdown("<div class='top-nav-radio'></div>", unsafe_allow_html=True)
     page = st.radio(
@@ -10692,8 +10780,9 @@ def main() -> None:
             height=1,
         )
 
-    is_today_page = "今日总览" in page
-    is_watchlist_page = "我的自选" in page
+    # 兼容旧关键字匹配 (CSS / 滚动逻辑还在用)
+    is_today_page = "今日" in page and "明日" not in page
+    is_watchlist_page = "自选" in page
     if is_today_page:
         st.markdown(
             """
@@ -10734,27 +10823,29 @@ def main() -> None:
             unsafe_allow_html=True,
         )
 
-    # —— 📈 做 T 观察 也不依赖 trade_review.csv（独立读 t_signal_latest.csv）——
-    if page == "做T观察":
+    # 2026-06-06 朱哥精简: 7 个主页 + 内嵌 tab 合并低频页 ----------------
+
+    # 📈 做T  (不依赖 trade_review)
+    if "做T" in page:
         page_t_signal()
         return
 
-    # —— ⭐ 我的自选 独立读写 custom_stock_pool.csv，不依赖 trade_review.csv —— 
-    if page == "⭐ 我的自选":
+    # ⭐ 自选  (不依赖 trade_review)
+    if "自选" in page:
         page_watchlist()
         return
 
-    # —— 🛠 手动补跑 不依赖 CSV，且即使 CSV 为空时也应该可用（用来手动跑 run.py 生成 CSV）——
-    if page == "手动补跑":
+    # ⚙ 补跑  (不依赖 trade_review)
+    if "补跑" in page:
         page_manual_rerun()
         return
 
-    # —— 📌 明日交易计划 也不依赖 trade_review.csv（独立读 tomorrow_plan_latest.csv）──
-    # 必须在 df_all.empty 检查之前 dispatch，否则空 CSV 时进不来
-    if page == "明日计划":
+    # 📅 明日  (独立读 tomorrow_plan_latest.csv)
+    if "明日" in page:
         page_tomorrow_plan()
         return
 
+    # —— 以下页面需要 trade_review.csv ——
     df_all = load_trade_review()
     if df_all.empty:
         st.title("📊 朱哥短线雷达 V1.6｜本地复盘看板")
@@ -10766,22 +10857,42 @@ def main() -> None:
 
     _render_simulated_pollution_warning(df_all, scope="trade_review.csv")
 
-    # ⚠️ 用 "in" 精确匹配关键词，避免两个 📌 页面冲突（📌 今日总览 vs 📌 明日交易计划）
-    # 📌 明日交易计划 / 🛠 手动补跑 已在上方提前 dispatch + return
-    if page == "今日总览":
-        page_today(df_all)
-    elif page == "买入确认":
-        page_buy_check(df_all)
-    elif page == "T+1 复盘":
-        page_t1_review(df_all)
-    elif page == "持仓追踪":
-        page_holding_track(df_all)
-    elif page == "未买入跟踪":
-        page_not_bought(df_all)
-    elif page == "周月复盘":
-        page_period_review(df_all)
-    elif page == "候选复盘":
-        page_candidate_lifecycle()
+    # 📌 今日 = 今日总览 + 买入确认 (segment 切换)
+    if "今日" in page:
+        seg = st.segmented_control(
+            "今日视图",
+            ["📊 总览（KPI + 信号流）", "🔍 买入确认（9:36 判定细节）"],
+            default="📊 总览（KPI + 信号流）",
+            label_visibility="collapsed",
+            key="today_segment",
+        )
+        if seg and "买入确认" in seg:
+            page_buy_check(df_all)
+        else:
+            page_today(df_all)
+        return
+
+    # 🔥 跟踪 = 持仓追踪 + 未买入跟踪 (tab 切换)
+    if "跟踪" in page:
+        tab_hold, tab_miss = st.tabs(["🔥 持仓中（已买入）", "📉 未买入跟踪"])
+        with tab_hold:
+            page_holding_track(df_all)
+        with tab_miss:
+            page_not_bought(df_all)
+        return
+
+    # 📊 复盘 = T+1 + 周月 + 候选生命周期 (tab 切换)
+    if "复盘" in page:
+        tab_t1, tab_pm, tab_cl = st.tabs([
+            "📊 T+1 复盘", "📅 周月复盘", "🔁 候选生命周期",
+        ])
+        with tab_t1:
+            page_t1_review(df_all)
+        with tab_pm:
+            page_period_review(df_all)
+        with tab_cl:
+            page_candidate_lifecycle()
+        return
 
 
 if __name__ == "__main__":
