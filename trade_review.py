@@ -119,6 +119,19 @@ COLUMNS = [
     "post_stop_max_drawdown_pct",      # 止损后最低回撤（继续跌了多少）
     "post_stop_days_tracked",          # 止损后已追踪的交易日数
     "post_stop_tracking_done_date",    # 30 天追踪完成日 YYYYMMDD
+    # ── V1.7 LLM 情绪+新闻分析师 (朱哥 2026-06-05 立项, mark_only) ──
+    # 永不影响 buy_signal_0935 / 收益计算. 每天 18:30 build_news_sentiment 写一次.
+    "v17_sentiment_score",             # 0-10 整数 (5=中性, 10=强利好, 0=重大利空)
+    "v17_sentiment_label",             # 利好 / 中性偏多 / 中性 / 中性偏空 / 利空
+    "v17_news_summary",                # ≤80 字中文摘要
+    "v17_risk_alert",                  # 空 = 无风险, 否则≤40 字描述
+    "v17_themes",                      # | 分隔的题材标签
+    "v17_key_dates",                   # | 分隔的关键事件日期
+    "v17_analyzed_at",                 # ISO 时间戳
+    "v17_llm_provider",                # claude / deepseek
+    "v17_llm_model",                   # 具体模型 ID
+    "v17_news_count",                  # 这次分析时拿到的新闻条数
+    "v17_error",                       # 失败原因 (成功为空)
 ]
 
 

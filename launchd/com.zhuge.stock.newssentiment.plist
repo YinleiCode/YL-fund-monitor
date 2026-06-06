@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.zhuge.stock.newssentiment</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/yinlei/Desktop/量化/stock_screener/scripts/run_news_sentiment.sh</string>
+    </array>
+
+    <!-- 工作日 18:30 (盘后, build_tomorrow_plan 之后) -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict>
+            <key>Weekday</key><integer>1</integer>
+            <key>Hour</key><integer>18</integer>
+            <key>Minute</key><integer>30</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key><integer>2</integer>
+            <key>Hour</key><integer>18</integer>
+            <key>Minute</key><integer>30</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key><integer>3</integer>
+            <key>Hour</key><integer>18</integer>
+            <key>Minute</key><integer>30</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key><integer>4</integer>
+            <key>Hour</key><integer>18</integer>
+            <key>Minute</key><integer>30</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key><integer>5</integer>
+            <key>Hour</key><integer>18</integer>
+            <key>Minute</key><integer>30</integer>
+        </dict>
+    </array>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/yinlei/Desktop/量化/stock_screener/logs/launchd_newssentiment.stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/yinlei/Desktop/量化/stock_screener/logs/launchd_newssentiment.stderr.log</string>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/yinlei/Desktop/量化/stock_screener</string>
+</dict>
+</plist>

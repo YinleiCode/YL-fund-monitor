@@ -68,3 +68,20 @@ v16:
   # 灰度路径建议：
   #   1) plan_filter_enabled=true + affect_check_buy=false  → 仅打标签，9:36 不拦截（当前模式）
   #   2) plan_filter_enabled=true + affect_check_buy=true   → 标签生效，9:36 实拦截
+
+
+# ════════════════════════════════════════════════════════════════════
+# V1.7 LLM 情绪 + 新闻分析师 (朱哥 2026-06-05 立项)
+# ════════════════════════════════════════════════════════════════════
+# 作用域: 仅写 v17_* 审计字段, 永不影响 buy_signal_0935 (mark_only)
+#   - 每天 18:30 对自选池 + 当日推荐池跑一遍
+#   - 调 LLM (Claude Opus 4.7 默认 / DeepSeek 备选)
+#   - 输出: 情绪分 0-10 / 摘要 / 风险提示 / 题材
+# 看板展示: 情绪卡 (自选池页 + 持仓追踪页 + 今日总览页 KPI)
+v17:
+  enabled: true
+  mode: mark_only                  # 仅 mark_only, 守卫拒绝 block_buy
+  llm_provider: claude             # claude | deepseek
+  timeout_sec: 90
+  news_days: 7
+  max_news_per_stock: 8

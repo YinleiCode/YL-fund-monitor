@@ -77,6 +77,10 @@ T_TRADE_DIR      = OUTPUT_DIR / "t_trade"
 T_TRADE_LATEST   = T_TRADE_DIR / "t_trade_latest.csv"
 WATCHLIST_PATH   = BASE_DIR / "data" / "watchlist" / "custom_stock_pool.csv"
 
+# —— V1.7 · LLM 情绪+新闻分析师 (mark_only, 朱哥 2026-06-05 立项) ——
+V17_SENTIMENT_DIR    = OUTPUT_DIR / "news_sentiment"
+V17_SENTIMENT_LATEST = V17_SENTIMENT_DIR / "news_sentiment_latest.csv"
+
 # ─── 颜色（RADAR_TERMINAL：深蓝黑·电光青·霓虹绿·玻璃态磨砂）──────────────
 # 参考 Material You dark palette — surface #0F141B, tertiary #00DAF3, secondary-fixed-dim #00E479
 
@@ -8545,6 +8549,9 @@ def page_holding_track(df_all: pd.DataFrame) -> None:
     # 持仓追踪页也提供入口, 让用户看持仓时随手就能切换观察池
     _render_manual_observe_panel(_wl_load())
 
+    # ── ✨ V1.7 LLM 情绪雷达 (朱哥 2026-06-05 立项) ──
+    _render_v17_sentiment_panel(_wl_load(), title="✨ 持仓 + 自选 LLM 情绪雷达")
+
     # 底部说明
     st.markdown(
         _h(f"""
@@ -8556,6 +8563,147 @@ def page_holding_track(df_all: pd.DataFrame) -> None:
         """),
         unsafe_allow_html=True,
     )
+
+
+def _v17_load_sentiment_df() -> pd.DataFrame:
+    """读 V1.7 LLM 情绪分析最新结果. 文件缺失返回空 DataFrame."""
+    if not V17_SENTIMENT_LATEST.exists():
+        return pd.DataFrame()
+    try:
+        return pd.read_csv(
+            V17_SENTIMENT_LATEST, dtype=str,
+            keep_default_na=False, encoding="utf-8-sig",
+        )
+    except Exception:
+        return pd.DataFrame()
+
+
+def _v17_score_color(score) -> str:
+    """情绪分着色 (A 股惯例: 红=利好, 绿=利空)."""
+    try:
+        s = int(score)
+    except (TypeError, ValueError):
+        return COLOR_MUTED
+    if s >= 8: return COLOR_MAGENTA_NEON   # 强利好 红
+    if s >= 6: return "#FF8FB1"            # 偏多 粉红
+    if s == 5: return COLOR_TEXT           # 中性
+    if s >= 3: return "#7FE3A8"            # 偏空 浅绿
+    return COLOR_BOUGHT                    # 利空 霓虹绿
+
+
+def _v17_score_label(score) -> str:
+    """情绪分对应的中文标签 (兜底, 当 v17_sentiment_label 为空时用)."""
+    try:
+        s = int(score)
+    except (TypeError, ValueError):
+        return "—"
+    if s >= 8: return "利好"
+    if s >= 6: return "偏多"
+    if s == 5: return "中性"
+    if s >= 3: return "偏空"
+    return "利空"
+
+
+def _render_v17_sentiment_panel(
+    watchlist_rows: Optional[list[dict]] = None,
+    title: str = "✨ LLM 情绪 + 新闻分析师",
+    show_top_n: int = 0,
+) -> None:
+    """V1.7 LLM 情绪面板. 在自选池页 / 持仓追踪页都能用.
+
+    show_top_n=0 表示展示全部, 否则只展示前 N 只 (按情绪分倒序).
+    """
+    df = _v17_load_sentiment_df()
+    if df.empty:
+        st.markdown(
+            f"<div style='margin:12px 0;padding:10px 14px;border-left:3px solid {COLOR_WARN_YELLOW};"
+            f"background:rgba(255,182,39,0.08);border-radius:6px;color:{COLOR_TEXT};'>"
+            f"V1.7 情绪分析尚无数据. 请运行 "
+            f"<code>python scripts/build_news_sentiment.py</code> 生成 "
+            f"(或等每天 18:30 自动跑)."
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+        return
+
+    # 排序: 分数从高到低
+    df = df.copy()
+    df["_score_num"] = pd.to_numeric(df["v17_sentiment_score"], errors="coerce")
+    df = df.sort_values("_score_num", ascending=False, na_position="last")
+    if show_top_n and show_top_n > 0:
+        df = df.head(show_top_n)
+
+    # 元信息
+    latest_at = ""
+    try:
+        latest_at = df["v17_analyzed_at"].dropna().astype(str).max() or ""
+        latest_at = latest_at[:16].replace("T", " ")
+    except Exception:
+        pass
+    n_total = len(df)
+    n_strong_bull = int((df["_score_num"] >= 8).sum())
+    n_strong_bear = int((df["_score_num"] <= 3).sum())
+    n_risk = int((df["v17_risk_alert"].astype(str).str.strip() != "").sum())
+
+    st.markdown(
+        f"<div style='margin-top:14px;'>"
+        f"<div style='font-size:11px;letter-spacing:0.18em;color:{COLOR_MAGENTA_NEON};font-weight:700;'>V17_SENTIMENT_RADAR</div>"
+        f"<div style='font-size:18px;color:{COLOR_TEXT};font-weight:700;margin-top:4px;'>{title}</div>"
+        f"<div style='font-size:11px;color:{COLOR_MUTED};margin-top:4px;'>"
+        f"共 {n_total} 只  ·  强利好 {n_strong_bull}  ·  利空 {n_strong_bear}  ·  有风险提示 {n_risk}"
+        f"  ·  最近分析 {_eh(latest_at) or '—'}</div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+    with st.expander(f"展开 V1.7 情绪雷达 ({n_total} 只)", expanded=False):
+        # 卡片网格 (3 列)
+        cards = []
+        for _, r in df.iterrows():
+            code = _eh(str(r.get("stock_code", "")).strip())
+            name = _eh(str(r.get("stock_name", "")).strip())
+            score = str(r.get("v17_sentiment_score", "")).strip()
+            label = _eh(str(r.get("v17_sentiment_label", "")).strip() or _v17_score_label(score))
+            summary = _eh(str(r.get("v17_news_summary", "")).strip())
+            risk = _eh(str(r.get("v17_risk_alert", "")).strip())
+            themes = _eh(str(r.get("v17_themes", "")).strip())
+            theme_chips = "".join(
+                f"<span style='display:inline-block;font-size:10px;padding:2px 6px;margin-right:4px;"
+                f"border-radius:4px;background:rgba(0,218,243,0.12);color:{COLOR_WAIT_T1};'>{_eh(t)}</span>"
+                for t in themes.split("|") if t
+            )
+            color = _v17_score_color(score)
+            score_html = f"<span style='font-size:22px;font-weight:800;color:{color};'>{score or '—'}</span><span style='font-size:11px;color:{COLOR_MUTED};margin-left:2px;'>/10</span>"
+            risk_html = (
+                f"<div style='font-size:10px;color:{COLOR_WARN_YELLOW};margin-top:4px;border-left:2px solid {COLOR_WARN_YELLOW};padding-left:6px;'>"
+                f"⚠️ {risk}</div>"
+                if risk else ""
+            )
+            card_html = (
+                f"<div style='background:{COLOR_GLASS_BG};border:1px solid {COLOR_GLASS_EDGE};"
+                f"border-radius:10px;padding:10px 12px;margin-bottom:8px;'>"
+                f"<div style='display:flex;justify-content:space-between;align-items:baseline;'>"
+                f"<div><span style='font-family:JetBrains Mono,monospace;color:{COLOR_MUTED};font-size:11px;'>{code}</span> "
+                f"<span style='color:{COLOR_TEXT};font-weight:600;margin-left:6px;'>{name}</span></div>"
+                f"<div>{score_html} <span style='color:{color};font-size:10px;margin-left:4px;'>{label}</span></div>"
+                f"</div>"
+                f"<div style='font-size:11px;color:{COLOR_TEXT};margin-top:6px;line-height:1.5;'>{summary or '—'}</div>"
+                f"{risk_html}"
+                f"<div style='margin-top:6px;'>{theme_chips}</div>"
+                f"</div>"
+            )
+            cards.append(card_html)
+        # 渲染为 3 列 grid
+        st.markdown(
+            "<div style='display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:8px;'>"
+            + "".join(cards)
+            + "</div>",
+            unsafe_allow_html=True,
+        )
+        st.caption(
+            f"由 {df.iloc[0].get('v17_llm_model', '?') if not df.empty else '?'} 生成 · "
+            f"数据源: 东方财富个股新闻 · 模式: mark_only (永不影响 9:36 买入)"
+        )
 
 
 def _render_manual_observe_panel(watchlist_rows: list[dict]) -> None:
@@ -9531,6 +9679,9 @@ def page_watchlist() -> None:
 
     # ── ✋ 手动只观察名单（朱哥 2026-06-05 加，替代 V1.6 plan 自动拦截）──
     _render_manual_observe_panel(rows)
+
+    # ── ✨ V1.7 LLM 情绪雷达 (朱哥 2026-06-05 立项) ──
+    _render_v17_sentiment_panel(rows, title="✨ 自选池 LLM 情绪雷达")
 
     st.markdown("<div class='watchlist-maintenance'><div class='watchlist-maintenance__kicker'>池子维护</div><div class='watchlist-maintenance__title'>维护自选池</div></div>", unsafe_allow_html=True)
     with st.expander("展开维护自选池", expanded=False):
