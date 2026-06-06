@@ -10781,6 +10781,8 @@ def main() -> None:
         )
 
     # 兼容旧关键字匹配 (CSS / 滚动逻辑还在用)
+    # 2026-06-06 决定: '📌 今日' 不再内嵌 segment, 改保留 KPI hero 单屏纯净布局,
+    # '买入确认' 挪到 '📊 复盘' tab. 这样 today 页 viewport 锁不会冲突.
     is_today_page = "今日" in page and "明日" not in page
     is_watchlist_page = "自选" in page
     if is_today_page:
@@ -10857,19 +10859,10 @@ def main() -> None:
 
     _render_simulated_pollution_warning(df_all, scope="trade_review.csv")
 
-    # 📌 今日 = 今日总览 + 买入确认 (segment 切换)
+    # 📌 今日 = 今日总览 (纯净 KPI hero 单屏, 不再 segment, 避免与 KPI 卡冲突)
+    # '买入确认' 已挪到 📊 复盘 tab.
     if "今日" in page:
-        seg = st.segmented_control(
-            "今日视图",
-            ["📊 总览（KPI + 信号流）", "🔍 买入确认（9:36 判定细节）"],
-            default="📊 总览（KPI + 信号流）",
-            label_visibility="collapsed",
-            key="today_segment",
-        )
-        if seg and "买入确认" in seg:
-            page_buy_check(df_all)
-        else:
-            page_today(df_all)
+        page_today(df_all)
         return
 
     # 🔥 跟踪 = 持仓追踪 + 未买入跟踪 (tab 切换)
@@ -10881,11 +10874,13 @@ def main() -> None:
             page_not_bought(df_all)
         return
 
-    # 📊 复盘 = T+1 + 周月 + 候选生命周期 (tab 切换)
+    # 📊 复盘 = 9:36 判定细节 + T+1 + 周月 + 候选生命周期 (tab 切换)
     if "复盘" in page:
-        tab_t1, tab_pm, tab_cl = st.tabs([
-            "📊 T+1 复盘", "📅 周月复盘", "🔁 候选生命周期",
+        tab_buy, tab_t1, tab_pm, tab_cl = st.tabs([
+            "🔍 9:36 判定细节", "📊 T+1 复盘", "📅 周月复盘", "🔁 候选生命周期",
         ])
+        with tab_buy:
+            page_buy_check(df_all)
         with tab_t1:
             page_t1_review(df_all)
         with tab_pm:
