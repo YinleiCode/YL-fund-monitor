@@ -2,6 +2,208 @@
 
 本文件记录 Claude、Codex、DeepSeek 等模型对项目的操作历史。每次任务结束必须追加记录。
 
+---
+
+## 2026-06-06 Claude（看板导航 11 → 6+1 精简 + UI bug 修）
+
+### 操作模型
+
+Claude (Anthropic) — claude-opus-4-7
+
+### 本次任务
+
+朱哥反馈顶部导航 11 个 tab 太挤、有些用不上, 要合并。同时检查刚上线的 V1.7 是否有逻辑/UI 隐患。
+
+### 做了什么
+
+**1. 导航 11 → 6 主 + 1 折叠**
+
+```
+合并前 (11):                       合并后 (7):
+今日总览  ┐                          📌 今日   = 今日总览 (纯净 KPI hero)
+买入确认  │ → 复盘 tab                🔥 跟踪   = 持仓 + 未买入 (st.tabs)
+T+1 复盘 ┐                          📈 做T    = T 信号 (独立)
+周月复盘  │ → 📊 复盘 4 tab          📅 明日   = 明日计划 (独立)
+候选复盘  ┘                          ⭐ 自选   = 自选池+V17 (独立)
+持仓追踪  ┐                          📊 复盘   = 9:36 判定细节+T+1+周月+候选
+未买入跟踪┘                          ⚙ 补跑    = 精简版补跑控制台
+明日计划                             
+做T观察
+⭐ 我的自选
+手动补跑
+```
+
+**2. 补跑页瘦身**
+
+- 删: 18 行长警示框 (信息冗余) + V1.6 资金源自检 (跟补跑无关)
+- 留: 3 个 run.py 白名单按钮 (T+1/周/月) + 日志查看
+- 新增: ✨ V1.7 LLM 情绪分析重跑按钮 (_render_v17_rerun_button)
+
+**3. UI bug 修复 (浏览器实测发现)**
+
+启动 Streamlit + Playwright 截 11 张图后发现:
+- 📌 今日页内嵌的 segment 控件**重叠在 KPI 卡上** (today 单屏 viewport 锁与 absolute KPI 卡冲突)
+- 修法: 移除 today segment, 把'买入确认'独立挪到 📊 复盘 第一个 tab
+- 副作用清理: viewport 锁与 segment 联动判断不再需要, 一起删
+
+**4. 代码逻辑审查 (写脚本扫的)**
+
+- 路由子串匹配: 7 页面命中分支与期望一致, 无影子命中 (如"今日"误命中"明日")
+- widget key 冲突: 三组合并 tab 子页 key 无冲突 (显式+隐式 label-based 都扫了)
+- 性能: 主路径只读一次 trade_review.csv, 传 df_all 给所有子页
+
+### 修改文件
+
+- `dashboard_app.py` — 导航 nav_pages / CSS grid / dispatch 重构, `page_manual_rerun` 瘦身, 新增 `_render_v17_rerun_button`
+
+### 是否运行 python run.py
+
+- 否 (只改 UI 层)
+
+### 验收
+
+- ✓ 编译通过
+- ✓ 7 页面 AppTest 全过
+- ✓ Playwright 11 张全页截图 (含 4 个 tab/segment 子状态)
+- ✓ 今日页 KPI hero 5 卡完整可见, 无重叠
+- ✓ 复盘多出 9:36 判定细节 tab, 渲染正确
+
+### Git
+
+- `92725fe feat(dashboard): 导航 11 → 6+1 精简 + 补跑页瘦身 (朱哥 2026-06-06)`
+- `b5081cb fix(dashboard): 今日页 segment 与 KPI 卡冲突 → 改放复盘 tab (朱哥 2026-06-06)`
+
+### 教训
+
+误用 `pkill -f "streamlit run dashboard_app.py"` 杀掉了朱哥本来开着的看板. 正确做法是用 lsof -i :8501 找 PID 精准 kill, 测试用 streamlit 启在不同端口 (本次用了 8765).
+
+---
+
+## 2026-06-05 Claude（V1.7 LLM 情绪师 + 手动只观察 + V1.6 自动拦截关掉）
+
+### 操作模型
+
+Claude (Anthropic) — claude-opus-4-7
+
+### 本次任务
+
+朱哥 06-05 下午看到 9:36 没买任何票, 协鑫能科/胜宏科技/绿的谐波 3 只显示"待 9:36 检查". 实际是昨晚 V1.6 plan 判定 market_state=退潮 → trade_permission=只观察, 自动把所有候选股拦下了. 朱哥不接受 plan 自动决定, 拍板:
+
+  > "默认就是 i 买, 只观察是我点了观察才观察 这样的逻辑"
+
+并立项 V1.7 LLM 情绪分析师 (灵感来自 TauricResearch/TradingAgents 83k★ 框架, 取其精华不落其窠臼).
+
+### 做了什么 (3 大块, 14 个 commit)
+
+#### A. 手动「只观察」开关 (替代 V1.6 自动拦截)
+
+**关 V1.6 自动拦截总闸**
+- `config/version_flags.yaml`: `v16.affect_check_buy: true → false`
+- V1.6 plan 标签仍写 CSV (10 列审计字段保留), 但**不再阻塞 9:36 买入**
+
+**新模块 `manual_observe.py`**
+- 持久化: `data/manual_observe.json` (gitignored, 跟用户机器走)
+- API: set/clear/toggle/is/load_codes/get_meta + 原子写 (tempfile + os.replace)
+- 守卫: 拒绝非 6 位数字代码
+- 8 项单元测试
+
+**trade_review.check_buy 加最高优先级前置门**
+- 命中 manual_observe.json → buy_signal_0935=false + notes 追加 manual_observe
+- 跳过 V1.4 五条 + V1.5 第六条判定
+- effective_version='manual_observe'
+
+**dashboard 完整管理 UI**
+- `_render_manual_observe_panel()`: 当前名单 + 手动新增 + 自选池一键勾选
+- 入口: 自选池页 + 持仓追踪页
+- 状态徽章: ✋ 手动只观察 (黄色), 优先级最高
+
+#### B. V1.7 LLM 情绪+新闻分析师 (mark_only)
+
+**模式守卫**: 永不影响 buy_signal_0935 / 收益 / 持仓追踪. 仅写 v17_* 审计字段.
+
+**`news_fetcher.py`** — 个股新闻抓取
+- 绕开 `akshare.stock_news_em` 的 ArrowInvalid bug, 直连东方财富搜索 API
+- 30 分钟本地缓存 (`data/news_cache/YYYYMMDD/{code}.json`)
+
+**`llm_analyst.py`** — 双 provider
+- Claude Opus 4.7 (默认) — adaptive thinking + streaming + .get_final_message() (按 claude-api skill)
+- DeepSeek-Chat (备选) — response_format={"type":"json_object"}
+- 结构化 JSON: 情绪分 0-10 + 标签 + 摘要 + 风险提示 + 题材 + 关键日期
+- 健壮化: JSON 解析容错 + 字段 clip + 失败 graceful degrade
+
+**`scripts/build_news_sentiment.py`** — 批量编排器
+- 汇总自选池 (27 只) + 当日推荐池, 去重合并
+- 写 `output/news_sentiment/{latest.csv + YYYYMMDD.csv}`
+- 回写 v17_* 字段到 `trade_review.csv` 当日行
+- 守卫: 绝不修改 buy_signal_0935 / buy_price / 持仓追踪字段
+
+**launchd**: `com.zhuge.stock.newssentiment.plist` 工作日 18:30 自动跑
+
+**trade_review.py COLUMNS**: 加 11 个 `v17_*` 字段
+
+**dashboard**: `_render_v17_sentiment_panel()` 3 列卡片网格, 按分倒序, 含风险徽章
+- 入口: 自选池页 + 持仓追踪页
+
+**端到端实测 (27 只自选池)**:
+- 总耗时 148 秒 (5.5s/只), 成功 27/27
+- Claude 成本 $0.39/天 (~¥2.8), 月 ~$9 (~¥65)
+- DeepSeek 成本 $0.014/天 (~¥0.1), 月 ~$0.31 (~¥2.3) — 28 倍便宜
+- 平均情绪分 5.4, 最高沪电股份/新易盛/世运电路 8/10, 最低云南锗业/山东玻纤 3/10
+- 27/27 都识别到风险点 (高位炒作/主力流出/网红喊单等)
+
+#### C. 多模块翻译同步 + 下游一致性补丁
+
+- `notifier.py`: 推送消息加 manual_observe 翻译 (两处) + pregate_failed 走清爽分支
+- `decision_log.py`: 加 manual_observe / pregate_failed 早返回 (不再打"数据缺失"日志噪音)
+- `cn_display.py`: 加 manual_observe 翻译
+- `trade_review.py`: SECOND_CHECK_INELIGIBLE_REASONS 加 manual_observe + v16_plan_only_observe
+- `dashboard_app.py`: LIFECYCLE_REASON_LABEL 加翻译, is_v16_only_observe 严格化 (避免周一 plan 标签误显示), is_manual_observe_row 改为 live-state 只看文件
+- 旧 v16_only_observe 文案"只观察, 不进入 9:36 模拟买入" → 降级为"计划建议只观察 (默认不拦截, 仅供参考)"
+
+### 新增文件
+
+- `manual_observe.py` (160 行)
+- `news_fetcher.py` (181 行)
+- `llm_analyst.py` (270 行)
+- `scripts/build_news_sentiment.py` (314 行)
+- `scripts/run_news_sentiment.sh` (30 行)
+- `launchd/com.zhuge.stock.newssentiment.plist`
+
+### 修改文件
+
+- `config/version_flags.yaml` — v16.affect_check_buy=false; 新增 v17 段
+- `trade_review.py` — COLUMNS 加 11 个 v17_* + 1 个 manual_observe 前置门 + SECOND_CHECK 黑名单
+- `dashboard_app.py` — 新增 4 个面板/函数 (is_manual_observe_row / _render_manual_observe_panel / _v17_load_sentiment_df / _render_v17_sentiment_panel) + 状态优先级新增 ✋ 标签
+- `notifier.py` `decision_log.py` `cn_display.py` — 翻译 + 下游兼容
+- `.gitignore` — 加 `data/manual_observe.json` + `data/news_cache/` + `output/news_sentiment/`
+
+### 禁改文件检查
+
+- `run.py`: 未改
+- `simulated_trade_return` 公式: 未改
+- `stop_price` 计算: 未改
+- 收益 / 止损 / T+1 规则: 未改
+
+### Git
+
+```
+967bc06 feat(manual_observe): 默认全部允许买, 只观察改为手动开关
+8195b14 fix(manual_observe): 周一前的雷区清理 (语义严谨化 + 多模块翻译同步)
+5694e2e fix(manual_observe): 下游一致性补丁 (推送/日志/二次确认)
+6fd1783 feat(v1.7): LLM 情绪+新闻分析师上线 (mark_only)
+c1639f1 fix(dashboard): V1.6 plan 拦下的票不再误判'待 9:36 检查' (朱哥下午看还显示待检查)  ← 同日早些
+```
+
+### 设计原则 (供后续 AI 参考)
+
+1. **mark_only**: V1.5 / V1.7 都是 mark_only, 永远不影响 buy_signal_0935. 守卫多重 (config + 代码 + 写回字段).
+2. **手动优先**: 系统默认全允许买 (V1.4/V1.5/V1.6 硬规则照常跑). 用户手动标 ✋ 才进观察池.
+3. **失败 graceful**: LLM 故障 / JSON 解析失败 / 新闻为空 → 写空字段+error, 不挂主链.
+4. **缓存友好**: 新闻 30 分钟缓存, 反复跑不打 API.
+5. **多 provider 容错**: env `V17_LLM_PROVIDER` 可切换 claude/deepseek.
+
+---
+
 ## 2026-06-01 初始化
 
 ### 操作模型

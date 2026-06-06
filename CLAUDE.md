@@ -29,9 +29,14 @@ python3 /Users/yinlei/Desktop/量化/stock_screener/auto_supervisor.py
 | 21:00 | 晚间复盘 | 深度复盘，主题/资金/技术三维分析，给出明日预案 |
 | 周五15:40 | 周报 | `run.py --weekly-review` 生成周报 |
 
-## 版本现状
-- **当前版本**: V1.4（择股公式、评分、买入规则） + V1.5-beta（资金条件，灰度中，observe_only模式） + V1.6（复盘驱动选股，plan_filter_enabled+affect_check_buy已生效）
-- 所有版本共存运行，V1.4 是正式版输出和收益计算基础
+## 版本现状（2026-06-06 更新）
+- **当前活跃版本**:
+  - **V1.4** — 择股公式、评分、买入规则（正式版输出 + 收益计算基础）
+  - **V1.5-beta** — 资金条件，灰度中，observe_only 模式（mark_only 不影响买入）
+  - **V1.6** — 复盘驱动选股，plan_filter_enabled=true 但 `affect_check_buy=false`（2026-06-05 朱哥拍板关掉自动拦截，只打审计标签）
+  - **V1.7 ✨** — LLM 情绪+新闻分析师（2026-06-05 上线，mark_only 旁路，每天 18:30 跑）
+  - **手动只观察** — 替代 V1.6 自动拦截，用户手动勾选才进观察池
+- 所有版本共存运行，V1.4 是正式版输出和收益计算基础。V1.5/V1.7 永不影响 buy_signal_0935（mark_only 守卫）。
 
 ## 核心规则与判读逻辑
 
@@ -54,11 +59,25 @@ python3 /Users/yinlei/Desktop/量化/stock_screener/auto_supervisor.py
 
 买入信号 buy_signal_0935 由 trade_review.check_buy() 基于以上五条综合判断。
 
-#### V1.6 前置门
-affect_check_buy=true 状态下，v16_only_observe=True 的候选股在 9:36 不买入。
+#### V1.6 前置门 (2026-06-05 起已关)
+当前 `affect_check_buy=false` — V1.6 plan 只打标签（v16_* 审计字段写 CSV），**不再阻塞 9:36 买入**。如果要恢复自动拦截，改 `config/version_flags.yaml` 即可。
 
 #### V1.5 资金条件（observe_only）
 当前只记录 v15_* 字段，不影响买入信号和收益计算。allow_block_buy=false 锁定。
+
+#### V1.7 LLM 情绪+新闻分析师 (2026-06-05 上线, mark_only)
+每天 18:30 跑 `scripts/build_news_sentiment.py`：
+- 对 27 只自选池 + 当日推荐池调 Claude Opus 4.7（默认）或 DeepSeek-Chat
+- 输出 11 个 `v17_*` 字段（情绪分 0-10 + 标签 + 摘要 + 风险提示 + 题材）
+- **永远不影响 9:36 买入**（mark_only 三层守卫）
+- 看板入口：⭐ 自选页 + 🔥 跟踪页 底部「✨ LLM 情绪雷达」expander
+- 成本：Claude ~$9/月，DeepSeek ~$0.31/月
+
+#### 手动「只观察」开关 (2026-06-05 起, 替代 V1.6 自动拦截)
+- 默认所有自选股走 9:36 V1.4/V1.5 判定（=允许买入）
+- 用户在看板「⭐ 自选」或「🔥 跟踪」底部勾选「只观察」→ 写 `data/manual_observe.json`
+- 下次 `check_buy` 加载名单，命中的票跳过 9:36 买入（最高优先级前置门）
+- 看板显示「✋ 手动只观察」黄色徽章
 
 ### 4. 风控
 - 买入滑点 0.1%（千一），卖出暂不扣
@@ -98,3 +117,26 @@ run.py 生成的推荐池按总分排序，取前3输出。配合 trade_review.p
 ## 自动调度
 1. **Claude Code 持久化 cron 作业**（`/Users/yinlei/Desktop/量化/.claude/scheduled_tasks.json`）：交易日全天多时段自动触发分析和观察（9:25、9:30、9:36、10:00、11:00、13:00、14:00、15:15、21:00、周五15:40），每个作业有7天自动过期。cron 作业的 prompt 中包含了该时段的具体指令。
 2. **launchd**（`launchd/com.zhuge.stock.*.plist`）：auto_supervisor.py 每5分钟轮询状态、补跑遗漏任务
+3. **launchd V1.7 LLM 情绪师**（`launchd/com.zhuge.stock.newssentiment.plist`）：工作日 18:30 自动跑 `scripts/build_news_sentiment.py`（2026-06-05 新增）
+
+## 启动看板（朱哥本地长期开着）
+
+```bash
+streamlit run dashboard_app.py    # 默认端口 8501
+```
+
+**AI 测试看板时千万别 `pkill -f "streamlit run dashboard_app.py"`** —— 会杀掉朱哥的主进程。改用：
+```bash
+nohup .venv/bin/streamlit run dashboard_app.py --server.port 8765 \
+    --server.headless true --browser.gatherUsageStats false \
+    > /tmp/test_streamlit.log 2>&1 &
+# 测试完精准 kill
+lsof -i :8765 -t | xargs kill
+```
+
+## 关键 API 配置（`.env`）
+```
+SERVERCHAN_SENDKEY=...     # 微信推送
+ANTHROPIC_API_KEY=...      # V1.7 Claude Opus 4.7
+DEEPSEEK_API_KEY=...       # V1.7 备选 provider (便宜 28 倍)
+```

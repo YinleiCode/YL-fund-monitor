@@ -6,28 +6,93 @@
 - `AI_HANDOFF.md`
 - `AI_CHANGELOG.md`
 
-## 当前项目状态
+## 当前项目状态（最近一次更新：2026-06-06 Claude）
 
-- 项目名称：朱哥短线雷达 V1.6
+- 项目名称：朱哥短线雷达 V1.6（含 V1.7 LLM 情绪分析师，mark_only 旁路）
 - 项目路径：`/Users/yinlei/Desktop/量化/stock_screener`
 - 当前分支：`restore/radar-terminal-keep-t`
 - 当前系统性质：本地量化观察系统，不自动下单，不接券商。
-- 当前自选池数量：13 只。
+- **当前自选池数量：27 只**（不再是 13；2026-06-03 朱哥调过一次，2026-06-05 仍是 27 只）
 - 当前自选池定位：优先进入观察/评估，不是只从自选池选，也不是强行推荐或强行买入。
+- **V1.6 自动拦截已关**（2026-06-05 朱哥拍板）：`config/version_flags.yaml` 里 `v16.affect_check_buy=false`。V1.6 计划层只打审计标签，**不再阻塞 9:36 买入**。"只观察"改为**用户手动开关**（见下文 V1.7-A）。
+- **V1.7 LLM 情绪分析师已上线**（2026-06-05，mark_only 旁路）：每天 18:30 自动跑，对 27 只自选池调 Claude/DeepSeek 生成情绪分 + 风险提示。**永远不影响 9:36 买入**。详见 `AI_CHANGELOG.md` 2026-06-05 条目。
+- **看板导航已精简**（2026-06-06）：11 个 tab → 7 个（详见下文「看板导航」）
 
 ## 最新 10 个 Commit
 
 ```text
-d243b8c polish radar terminal dashboard UI (A package)   ← A 包 2026-06-01
-d0d8462 handoff: add active session state for restart continuity
-0cc5779 update custom stock watchlist to 13 names        ← C 包
-6ce3187 prioritize watchlist candidates and harden ...   ← B 包
-4fe0272 fix(check_buy): write back realtime data ...     ← P1
-8ed7261 document handoff plan for pending work
-6cd4939 add AI handoff and project rules docs
-71a807a show simulated T trade records in dashboard
-d8395b4 add simulated T trade tracker core
-315156c fix _score_dist_60d penalizing breakout stocks
+b5081cb fix(dashboard): 今日页 segment 与 KPI 卡冲突 → 改放复盘 tab (朱哥 2026-06-06)
+92725fe feat(dashboard): 导航 11 → 6+1 精简 + 补跑页瘦身 (朱哥 2026-06-06)
+6fd1783 feat(v1.7): LLM 情绪+新闻分析师上线 (mark_only, 朱哥 2026-06-05 立项)
+5694e2e fix(manual_observe): 下游一致性补丁 (推送/日志/二次确认)
+8195b14 fix(manual_observe): 周一前的雷区清理 (语义严谨化 + 多模块翻译同步)
+967bc06 feat(manual_observe): 默认全部允许买, 只观察改为手动开关 (朱哥 2026-06-05)
+c1639f1 fix(dashboard): V1.6 plan 拦下的票不再误判'待 9:36 检查'
+b328c2e fix(dashboard): 持仓追踪页显示昨日真买入但 holding_status 还空的票
+ae4a261 fix(dashboard): T 信号页 KPI 标签语义明确 + 删除高抛 T 卡片
+e1dcbfc fix(dashboard): nav 顶部导航 10→11 列 (后被 92725fe 又改成 7 列)
+```
+
+## 看板导航 (2026-06-06 精简后)
+
+```
+📌 今日       🔥 跟踪       📈 做T       📅 明日       ⭐ 自选       📊 复盘       ⚙ 补跑
+```
+
+| Tab | 内容 | 频率 |
+|-----|------|------|
+| 📌 今日 | 今日总览 (KPI hero 单屏) | 每天 ★★★★★ |
+| 🔥 跟踪 | st.tabs: 持仓中 / 未买入跟踪 | 每天 ★★★★ |
+| 📈 做T | T 信号观察 (独立读 t_signal_latest.csv) | 几乎每天 ★★★★ |
+| 📅 明日 | V1.6 明日计划 + 4 个一键操作 | 晚上 ★★★★ |
+| ⭐ 自选 | 自选池 27 只 + ✋ 手动只观察名单 + ✨ V1.7 情绪雷达 | 每天 ★★★★★ |
+| 📊 复盘 | st.tabs: 9:36 判定细节 / T+1 / 周月 / 候选生命周期 | 偶尔 ★★ |
+| ⚙ 补跑 | 4 个补跑按钮 (T+1/周/月/V1.7) + 日志 | 出错才用 ✦ |
+
+## 新增模块速查 (2026-06-05～06)
+
+| 文件 | 行 | 作用 |
+|------|----|------|
+| `manual_observe.py` | 160 | 手动「只观察」开关 (替代 V1.6 自动拦截) |
+| `news_fetcher.py` | 181 | 个股新闻抓取 (绕开 akshare bug, 直连东方财富) |
+| `llm_analyst.py` | 270 | Claude Opus 4.7 + DeepSeek 双 provider |
+| `scripts/build_news_sentiment.py` | 314 | V1.7 批量编排 (每天 18:30 launchd) |
+| `scripts/run_news_sentiment.sh` | 30 | launchd 启动脚本 |
+| `launchd/com.zhuge.stock.newssentiment.plist` | — | 工作日 18:30 自动跑 |
+
+## V1.7 LLM 情绪师·快速接手
+
+- **配置**: `config/version_flags.yaml` 的 `v17` 段 (enabled=true, mode=mark_only, llm_provider=claude)
+- **API key 来源**: `.env` 文件 (`ANTHROPIC_API_KEY` + `DEEPSEEK_API_KEY` 都已配)
+- **手动触发**: `python scripts/build_news_sentiment.py` (整池) 或 `--codes 002015 300476` (指定)
+- **切 provider**: `python scripts/build_news_sentiment.py --provider deepseek` (28 倍便宜)
+- **看板入口**: 自选池页 / 持仓追踪页 底部的「✨ LLM 情绪 + 新闻分析师」expander
+- **数据落地**: `output/news_sentiment/news_sentiment_latest.csv` + `trade_review.csv` 当日行 v17_* 字段
+- **守卫**: 永不修改 buy_signal_0935 / buy_price / 持仓追踪字段 (mark_only 三层防护)
+
+## 手动只观察·快速接手
+
+- **持久化**: `data/manual_observe.json` (gitignored, 不入库)
+- **看板入口**: 自选池页 / 持仓追踪页 底部的「✋ 手动只观察名单」expander
+- **UI 形式**: 当前名单移除按钮 + 手动新增表单 + 自选池一键勾选 (4 列 checkbox 网格)
+- **生效路径**: 用户勾选 → 写 `manual_observe.json` → `trade_review.check_buy` 加载名单 → 命中则跳过 9:36 买入判定 → notes 写 `manual_observe`
+- **状态显示**: 命中的票看板上显示「✋ 手动只观察」黄色徽章 (优先级高于 V1.6 只观察)
+
+## 测试用 streamlit 注意事项 (重要 ⚠️)
+
+朱哥本机长期开着 `streamlit run dashboard_app.py` 在 **8501** 默认端口. AI 测试看板时:
+
+```bash
+# ❌ 千万别用 (会杀掉朱哥的主看板!)
+pkill -f "streamlit run dashboard_app.py"
+
+# ✅ 测试启在不同端口
+nohup .venv/bin/streamlit run dashboard_app.py \
+    --server.port 8765 --server.headless true \
+    --browser.gatherUsageStats false > /tmp/test_streamlit.log 2>&1 &
+
+# ✅ 测试完精准 kill 自己启的进程
+lsof -i :8765 -t | xargs kill
 ```
 
 ## 当前工作区
