@@ -9727,26 +9727,31 @@ def page_watchlist() -> None:
     if show_df.empty:
         status_banner("当前筛选条件下没有匹配股票。", "info")
     else:
-        watchlist_cards = []
-        for _, row in show_df.iterrows():
-            _, status_color, status_text = _wl_status_badge(str(row.get("status", "")))
-            theme = _wl_card_value(row.get("theme", ""), "未填写")
-            theme_class = "watchlist-card-theme is-empty" if theme == "未填写" else "watchlist-card-theme"
-            reason = _wl_card_value(row.get("reason", ""), "待补充")
-            max_pos = _wl_card_value(row.get("max_position_pct", ""), "未设置")
-            note = _wl_card_value(row.get("note", ""), "无")
-            research_date = _wl_card_value(row.get("research_date", ""), "未填写")
-            code_text = str(row.get("stock_code", ""))
-            filled_score = int(theme != "未填写") + int(reason != "待补充") + int(research_date != "未填写") + int(max_pos != "未设置")
-            completion_pct = int(filled_score / 4 * 100)
-            watchlist_cards.append(
-                f"""
+        _GRID_N = 3
+        visible = list(show_df.iterrows())
+        for _row_start in range(0, len(visible), _GRID_N):
+            _chunk = visible[_row_start : _row_start + _GRID_N]
+            _cols = st.columns(_GRID_N, gap="medium")
+            for _col_idx, (_, row) in enumerate(_chunk):
+                _, status_color, status_text = _wl_status_badge(str(row.get("status", "")))
+                theme = _wl_card_value(row.get("theme", ""), "未填写")
+                theme_class = "watchlist-card-theme is-empty" if theme == "未填写" else "watchlist-card-theme"
+                reason = _wl_card_value(row.get("reason", ""), "待补充")
+                max_pos = _wl_card_value(row.get("max_position_pct", ""), "未设置")
+                note = _wl_card_value(row.get("note", ""), "无")
+                research_date = _wl_card_value(row.get("research_date", ""), "未填写")
+                code_text = str(row.get("stock_code", ""))
+                code_z = code_text.strip().zfill(6)
+                name_text = str(row.get("stock_name", "")).strip() or "未命名"
+                filled_score = int(theme != "未填写") + int(reason != "待补充") + int(research_date != "未填写") + int(max_pos != "未设置")
+                completion_pct = int(filled_score / 4 * 100)
+                _card_html = f"""
                 <div class="watchlist-card-shell">
                   <div class="watchlist-feed-card">
                     <div class="watchlist-feed-card__main">
                       <div class="watchlist-feed-card__top">
                         <div class="watchlist-feed-card__identity">
-                          <div class="watchlist-feed-card__name">{_eh(_wl_card_value(row.get('stock_name', ''), '未命名'))}</div>
+                          <div class="watchlist-feed-card__name">{_eh(name_text)}</div>
                           <div class="watchlist-feed-card__code">{_eh(code_text)}</div>
                           <div class="watchlist-feed-card__badges">
                             <span class="watchlist-badge-soft">P{_eh(row.get('priority', '3'))}</span>
@@ -9789,17 +9794,22 @@ def page_watchlist() -> None:
                   </div>
                 </div>
                 """
-            )
-        st.markdown(
-            _h(f"""
-            <div class="watchlist-board">
-              <div class="watchlist-card-grid">
-                {''.join(watchlist_cards)}
-              </div>
-            </div>
-            """),
-            unsafe_allow_html=True,
-        )
+                with _cols[_col_idx]:
+                    st.markdown(_card_html, unsafe_allow_html=True)
+                    if st.button(
+                        "🗑️ 移出自选池",
+                        key=f"wl_rm_{code_z}",
+                        use_container_width=True,
+                        help=f"将 {name_text}（{code_z}）从自选池移除",
+                    ):
+                        _tbl = _wl_clean_rows(_wl_load())
+                        _tbl = [r for r in _tbl if str(r.get("stock_code", "")).strip().zfill(6) != code_z]
+                        if _wl_save(_wl_clean_rows(_tbl)):
+                            status_banner(f"已移出自选池：{code_z} {name_text}", "success")
+                            time.sleep(0.3)
+                            st.rerun()
+                        else:
+                            status_banner("移出失败，请检查文件权限。", "error")
 
     # ── ✋ 手动只观察名单（朱哥 2026-06-05 加，替代 V1.6 plan 自动拦截）──
     _render_manual_observe_panel(rows)
