@@ -4,6 +4,71 @@
 
 ---
 
+## 2026-06-07 Claude（V1.8 多 agent 上线 + 自选删除按钮）
+
+### 操作模型
+
+Claude (Anthropic) — claude-sonnet-4-6
+
+### 本次任务
+
+接手上一 session 的两件未完成事：
+1. V1.8 多 agent 代码（agents/ 目录 + 关联文件）已写完但未 commit → 核查验证后落库。
+2. 自选池删除按钮昨日因 tokens 断掉未完成 → 补做。
+
+### 做了什么
+
+#### A. V1.8 4 sub-agent 多维情绪架构（commit `92eecd1`）
+
+原 V1.7 单 agent 综合分析 → 拆成 4 个专属 agent 并联，synthesizer 加权合成综合分（不调 LLM，省钱）。
+
+**新增 `agents/` 目录（637 行）**：
+- `_base.py` — SubAgentResult 基类 + JSON 解析工具
+- `hot_money_analyst.py` — 游资追踪 agent（0-10 分，越高=接力越强）
+- `chip_bigdeal_analyst.py` — 筹码+大单 agent（0-10 分，越高=主力越强）
+- `theme_momentum_analyst.py` — 题材发酵 agent（0-10 分，越高=板块越强）
+- `risk_alert_analyst.py` — 风险预警 agent（0-10 分，越高=风险越大，反向）
+- `synthesizer.py` — 加权合成：游资 0.40 + 筹码 0.30 + 题材 0.30 − 风险扣分(上限3)
+
+**改动文件**：
+- `llm_analyst.py` — 重构出公共 `call_llm()` / `extract_json()` 接口，sub-agent 复用
+- `scripts/build_news_sentiment.py` — 默认 `v18_multi`（4 agent 串联）；`--mode v17_single` 可回退老逻辑
+- `trade_review.py` — COLUMNS 加 16 个 `v17_hot_money_*/chip_*/theme_*/risk_*` 字段
+- `dashboard_app.py` — 情绪雷达卡片加 4 条迷你 bar（游资/筹码/题材/风险分向展示）
+
+#### B. 自选卡片删除按钮（commit `c8b6154`）
+
+原自选卡片是一次性渲染大 HTML 块（`st.markdown` 一次输出所有卡片），无法嵌 Streamlit 交互控件。
+
+修法：改为 `st.columns(3)` 按行循环，每张卡单独 `st.markdown` + 立即跟一个 Streamlit 按钮：
+- 按钮：`🗑️ 移出自选池`，`use_container_width=True`，hover tooltip 显示股票名+代码
+- 点击逻辑：`_wl_load()` → 过滤掉对应 code → `_wl_save()` → `st.rerun()`
+- 卡片 HTML 内容、CSS 样式、字段完全不变
+
+### 禁改文件检查
+
+- `run.py`：未改
+- `simulated_trade_return` 公式：未改
+- `stop_price` 计算：未改
+- `config/version_flags.yaml`：未改
+- `launchd/*.plist`：未改
+
+### 是否运行 python run.py
+
+否。
+
+### 验收
+
+- `python -m py_compile dashboard_app.py trade_review.py llm_analyst.py scripts/build_news_sentiment.py agents/*.py` 全部 OK
+- agents/ 目录 5 个 py 文件 637 行全部编译通过
+
+### Git
+
+- `92eecd1 feat(v1.8): 4 sub-agent 多维情绪架构上线 (游资/筹码/题材/风险)`
+- `c8b6154 feat(watchlist): 自选卡片加「移出自选池」删除按钮`
+
+---
+
 ## 2026-06-06 Claude（看板导航 11 → 6+1 精简 + UI bug 修）
 
 ### 操作模型
