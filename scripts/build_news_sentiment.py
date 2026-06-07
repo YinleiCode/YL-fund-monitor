@@ -34,6 +34,15 @@ from llm_analyst import (
 )
 from news_fetcher import fetch_stock_news_with_cache
 
+# V1.8 sub-agent (朱哥 2026-06-06 X-Plus 拍板)
+from agents import (
+    hot_money_analyst,
+    chip_bigdeal_analyst,
+    theme_momentum_analyst,
+    risk_alert_analyst,
+    synthesizer,
+)
+
 
 logger = logging.getLogger("build_news_sentiment")
 
@@ -44,14 +53,20 @@ TRADE_REVIEW   = OUTPUT_DIR / "trade_review.csv"
 WATCHLIST_FP   = BASE_DIR / "data" / "watchlist" / "custom_stock_pool.csv"
 LOG_FP         = BASE_DIR / "logs" / "build_news_sentiment.log"
 
-# CSV 输出列 (latest.csv)
+# CSV 输出列 (latest.csv) - V1.8 加 12 个 sub-agent 字段
 SENTIMENT_CSV_COLS = [
     "report_date", "stock_code", "stock_name", "theme",
+    # 综合 (11 个)
     "v17_sentiment_score", "v17_sentiment_label",
     "v17_news_summary", "v17_risk_alert",
     "v17_themes", "v17_key_dates",
     "v17_analyzed_at", "v17_llm_provider", "v17_llm_model",
     "v17_news_count", "v17_error",
+    # V1.8 sub-agent (4 × 3 = 12 个)
+    "v17_hot_money_score", "v17_hot_money_label", "v17_hot_money_summary",
+    "v17_chip_score",      "v17_chip_label",      "v17_chip_summary",
+    "v17_theme_score",     "v17_theme_label",     "v17_theme_summary",
+    "v17_risk_score",      "v17_risk_label",      "v17_risk_summary",
     "source",   # custom_pool / today_candidate / both
 ]
 
@@ -134,7 +149,13 @@ def _load_targets() -> list[dict]:
 def _process_one(
     tgt: dict, flags: dict, report_date: str,
 ) -> dict:
-    """对一只股: 抓新闻 → 调 LLM → 返回 CSV 行 dict."""
+    """对一只股: 抓新闻 → 调 4 个 sub-agent → synthesizer 综合 → 返回 CSV 行 dict.
+
+    朱哥 2026-06-06 X-Plus 升级: 从单 agent 综合分析 改成 4 sub-agent 并联.
+    可通过 flags['agent_mode'] 控制:
+        'v18_multi'   (默认) - 4 sub-agent (游资/筹码/题材/风险) + synthesizer
+        'v17_single'   (兼容) - 老的单 agent (analyze_stock_sentiment)
+    """
     code  = tgt["code"]
     name  = tgt["name"]
     theme = tgt.get("theme", "")
@@ -151,17 +172,35 @@ def _process_one(
         logger.warning(f"[v17][{code}] 新闻抓取异常: {type(e).__name__}: {e}")
         news = []
 
-    # 2. 调 LLM
-    result: SentimentResult = analyze_stock_sentiment(
-        code=code,
-        name=name,
-        theme=theme,
-        news_items=news,
-        provider=str(flags.get("llm_provider", "claude")).strip().lower(),
-        timeout_sec=int(flags.get("timeout_sec", 90)),
-    )
+    provider = str(flags.get("llm_provider", "claude")).strip().lower()
+    timeout  = int(flags.get("timeout_sec", 90))
+    mode     = str(flags.get("agent_mode", "v18_multi")).strip().lower()
 
-    csv_row = result.to_csv_dict()
+    if mode == "v17_single":
+        # 兼容老逻辑
+        result: SentimentResult = analyze_stock_sentiment(
+            code=code, name=name, theme=theme, news_items=news,
+            provider=provider, timeout_sec=timeout,
+        )
+        csv_row = result.to_csv_dict()
+        # 补 sub-agent 字段为空 (老逻辑不生成)
+        for k in ("v17_hot_money_score", "v17_hot_money_label", "v17_hot_money_summary",
+                  "v17_chip_score", "v17_chip_label", "v17_chip_summary",
+                  "v17_theme_score", "v17_theme_label", "v17_theme_summary",
+                  "v17_risk_score", "v17_risk_label", "v17_risk_summary"):
+            csv_row[k] = ""
+    else:
+        # V1.8 多 agent: 串行调 4 个 (并行未来再优化, 当前简单稳)
+        common_kwargs = dict(code=code, name=name, theme=theme,
+                             news_items=news, provider=provider, timeout_sec=timeout)
+        hm   = hot_money_analyst.analyze(**common_kwargs)
+        chip = chip_bigdeal_analyst.analyze(**common_kwargs)
+        thm  = theme_momentum_analyst.analyze(**common_kwargs)
+        risk = risk_alert_analyst.analyze(**common_kwargs)
+        # 合成
+        csv_row = synthesizer.synthesize(hm, chip, thm, risk)
+        csv_row["v17_news_count"] = str(len(news))
+
     csv_row.update({
         "report_date": report_date,
         "stock_code":  code,
@@ -236,6 +275,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="V1.7 LLM 情绪分析师批量跑")
     parser.add_argument("--codes", nargs="*", help="只跑指定股票代码 (debug 用)")
     parser.add_argument("--provider", choices=["claude", "deepseek"], help="覆盖 config 的 llm_provider")
+    parser.add_argument("--mode", choices=["v18_multi", "v17_single"],
+                        help="agent 模式 (默认 v18_multi=4 sub-agent; v17_single=老的单 agent)")
     parser.add_argument("--dry-run", action="store_true", help="只打印 targets, 不调 LLM")
     args = parser.parse_args()
 
@@ -253,8 +294,11 @@ def main() -> int:
         return 2
     if args.provider:
         flags["llm_provider"] = args.provider
-    logger.info(f"[v17] config: provider={flags['llm_provider']} timeout={flags['timeout_sec']} "
-                f"news_days={flags['news_days']} max_news={flags['max_news_per_stock']}")
+    if args.mode:
+        flags["agent_mode"] = args.mode
+    flags.setdefault("agent_mode", "v18_multi")    # 默认 V1.8 多 agent
+    logger.info(f"[v17] config: mode={flags['agent_mode']} provider={flags['llm_provider']} "
+                f"timeout={flags['timeout_sec']} news_days={flags['news_days']} max_news={flags['max_news_per_stock']}")
 
     # 目标股
     targets = _load_targets()

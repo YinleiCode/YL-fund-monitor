@@ -132,6 +132,21 @@ COLUMNS = [
     "v17_llm_model",                   # 具体模型 ID
     "v17_news_count",                  # 这次分析时拿到的新闻条数
     "v17_error",                       # 失败原因 (成功为空)
+    # ── V1.8 4 sub-agent 分维度字段 (朱哥 2026-06-06 X-Plus 拍板) ──
+    # 4 个 A 股短线专属 agent: 游资追踪 / 筹码大单 / 题材发酵 / 风险预警
+    # 综合分 (v17_sentiment_score) 由 synthesizer 加权计算, 不调 LLM
+    "v17_hot_money_score",             # 游资追踪 0-10 (越高 = 游资接力越强)
+    "v17_hot_money_label",             # 强游资接力 / 游资介入 / 无明显信号 / 游资减仓 / 游资撤离
+    "v17_hot_money_summary",           # ≤80 字摘要
+    "v17_chip_score",                  # 筹码+大单 0-10 (越高 = 主力越强势)
+    "v17_chip_label",                  # 主力加仓 / 主力锁仓 / 震荡整理 / 主力减仓 / 主力出货
+    "v17_chip_summary",
+    "v17_theme_score",                 # 题材发酵 0-10 (越高 = 板块越强)
+    "v17_theme_label",                 # 萌芽期 / 加速期 / 高潮期 / 退潮期 / 题材冷淡
+    "v17_theme_summary",
+    "v17_risk_score",                  # 风险预警 0-10 (越高 = 风险越大, 反向)
+    "v17_risk_label",                  # 极低风险 / 低风险 / 中等风险 / 高风险 / 极高风险
+    "v17_risk_summary",
 ]
 
 

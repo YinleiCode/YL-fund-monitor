@@ -8739,8 +8739,8 @@ def _render_v17_sentiment_panel(
         unsafe_allow_html=True,
     )
 
-    with st.expander(f"展开 V1.7 情绪雷达 ({n_total} 只)", expanded=False):
-        # 卡片网格 (3 列)
+    with st.expander(f"展开 V1.7/V1.8 情绪雷达 ({n_total} 只)", expanded=False):
+        # 卡片网格 (3 列) — V1.8 增强: 4 sub-agent 迷你条
         cards = []
         for _, r in df.iterrows():
             code = _eh(str(r.get("stock_code", "")).strip())
@@ -8762,6 +8762,46 @@ def _render_v17_sentiment_panel(
                 f"⚠️ {risk}</div>"
                 if risk else ""
             )
+
+            # V1.8 sub-agent 迷你 4 行 (如果有数据)
+            sub_html = ""
+            sub_specs = [
+                ("🔥 游资", r.get("v17_hot_money_score"), r.get("v17_hot_money_label"), False),
+                ("📊 筹码", r.get("v17_chip_score"),      r.get("v17_chip_label"),      False),
+                ("🌊 题材", r.get("v17_theme_score"),     r.get("v17_theme_label"),     False),
+                ("⚠️ 风险", r.get("v17_risk_score"),      r.get("v17_risk_label"),      True),  # 反向
+            ]
+            sub_lines = []
+            for icon, s, lab, reverse in sub_specs:
+                s_str = str(s or "").strip()
+                if not s_str: continue
+                try:
+                    s_int = int(s_str)
+                except ValueError:
+                    continue
+                # 风险反向: 高分=红色 (危险); 其他正向: 高分=红色 (利好)
+                if reverse:
+                    bar_color = "#FF3D8A" if s_int >= 7 else ("#FFB627" if s_int >= 5 else "#00E479")
+                else:
+                    bar_color = "#FF3D8A" if s_int >= 7 else ("#DEE2EC" if s_int >= 4 else "#00E479")
+                bar_w = max(5, s_int * 10)
+                lab_eh = _eh(str(lab or "").strip())
+                sub_lines.append(
+                    f"<div style='display:flex;align-items:center;font-size:10px;color:{COLOR_MUTED};margin-top:2px;'>"
+                    f"<span style='min-width:48px;'>{icon}</span>"
+                    f"<span style='display:inline-block;flex:1;height:4px;background:rgba(255,255,255,0.06);border-radius:2px;margin-right:6px;position:relative;'>"
+                    f"<span style='display:inline-block;height:4px;width:{bar_w}%;background:{bar_color};border-radius:2px;'></span></span>"
+                    f"<span style='color:{bar_color};font-weight:700;min-width:24px;text-align:right;'>{s_int}</span>"
+                    f"<span style='color:{COLOR_MUTED};margin-left:6px;font-size:9px;'>{lab_eh}</span>"
+                    f"</div>"
+                )
+            if sub_lines:
+                sub_html = (
+                    f"<div style='margin-top:8px;padding-top:6px;border-top:1px dashed {COLOR_GLASS_EDGE};'>"
+                    + "".join(sub_lines)
+                    + "</div>"
+                )
+
             card_html = (
                 f"<div style='background:{COLOR_GLASS_BG};border:1px solid {COLOR_GLASS_EDGE};"
                 f"border-radius:10px;padding:10px 12px;margin-bottom:8px;'>"
@@ -8773,6 +8813,7 @@ def _render_v17_sentiment_panel(
                 f"<div style='font-size:11px;color:{COLOR_TEXT};margin-top:6px;line-height:1.5;'>{summary or '—'}</div>"
                 f"{risk_html}"
                 f"<div style='margin-top:6px;'>{theme_chips}</div>"
+                f"{sub_html}"
                 f"</div>"
             )
             cards.append(card_html)

@@ -161,27 +161,39 @@ def _normalize_result(d: dict) -> dict:
     return out
 
 
-def _call_claude(user_prompt: str, timeout_sec: int = 60) -> str:
-    """调 Claude Opus 4.7. 用 streaming + adaptive thinking (按 claude-api skill)."""
+def _call_claude(
+    user_prompt: str,
+    system_prompt: str = SYSTEM_PROMPT,
+    timeout_sec: int = 60,
+    max_tokens: int = 1024,
+) -> str:
+    """调 Claude Opus 4.7. 用 streaming + adaptive thinking (按 claude-api skill).
+
+    朱哥 2026-06-06 重构: system_prompt 参数化, 让 4 个 sub-agent 复用同一个调用层.
+    """
     import anthropic
     client = anthropic.Anthropic()
     with client.messages.stream(
         model=CLAUDE_MODEL,
-        max_tokens=1024,
-        system=SYSTEM_PROMPT,
+        max_tokens=max_tokens,
+        system=system_prompt,
         messages=[{"role": "user", "content": user_prompt}],
         thinking={"type": "adaptive"},
         timeout=timeout_sec,
     ) as stream:
         msg = stream.get_final_message()
-    # 抽 text block (跳过 thinking blocks)
     for block in msg.content:
         if getattr(block, "type", "") == "text":
             return block.text
     return ""
 
 
-def _call_deepseek(user_prompt: str, timeout_sec: int = 60) -> str:
+def _call_deepseek(
+    user_prompt: str,
+    system_prompt: str = SYSTEM_PROMPT,
+    timeout_sec: int = 60,
+    max_tokens: int = 1024,
+) -> str:
     """调 DeepSeek (OpenAI-compatible)."""
     from openai import OpenAI
     api_key = os.environ.get("DEEPSEEK_API_KEY", "")
@@ -190,14 +202,36 @@ def _call_deepseek(user_prompt: str, timeout_sec: int = 60) -> str:
     client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com", timeout=timeout_sec)
     resp = client.chat.completions.create(
         model=DEEPSEEK_MODEL,
-        max_tokens=1024,
+        max_tokens=max_tokens,
         messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user",   "content": user_prompt},
         ],
-        response_format={"type": "json_object"},   # DeepSeek 支持
+        response_format={"type": "json_object"},
     )
     return resp.choices[0].message.content or ""
+
+
+def call_llm(
+    user_prompt: str,
+    system_prompt: str,
+    provider: str = "claude",
+    timeout_sec: int = 60,
+    max_tokens: int = 1024,
+) -> str:
+    """统一 LLM 调用入口. V1.8 sub-agent 用这个.
+
+    返回原始 text (LLM 输出), 调用方负责 JSON 解析.
+    """
+    provider = (provider or "claude").strip().lower()
+    if provider == "deepseek":
+        return _call_deepseek(user_prompt, system_prompt, timeout_sec, max_tokens)
+    return _call_claude(user_prompt, system_prompt, timeout_sec, max_tokens)
+
+
+def extract_json(text: str) -> Optional[dict]:
+    """模块对外暴露 JSON 抽取函数 (sub-agent 用)."""
+    return _extract_json(text)
 
 
 def analyze_stock_sentiment(
