@@ -1921,7 +1921,7 @@ def _v2_mock_sparkline_from_pct(pct: Optional[float]) -> list[float]:
     base = [50 + rng.uniform(-6, 6) for _ in range(7)]
     # 让最后点和涨跌方向一致
     if pct is not None and pct != 0:
-        base[-1] = base[0] + (pct * 100) * 8  # 放大涨跌振幅
+        base[-1] = base[0] + pct * 8  # pct 已是百分数（如 -4.0 表示 -4%）
     return base
 
 
@@ -1938,11 +1938,11 @@ def _v2_stock_card(r) -> str:
     if pct is None:
         pct_str, pct_color, trend_arrow = "—", COLOR_MUTED, ""
     elif pct >= 0:
-        pct_str = f"+{pct * 100:.2f}%"
+        pct_str = f"+{pct:.2f}%"
         pct_color = COLOR_BOUGHT
         trend_arrow = "▲"
     else:
-        pct_str = f"{pct * 100:.2f}%"
+        pct_str = f"{pct:.2f}%"
         pct_color = COLOR_MAGENTA_NEON
         trend_arrow = "▼"
 
@@ -2237,7 +2237,7 @@ def _v2_sidebar_top3(df: pd.DataFrame) -> str:
                             margin-top:2px;">{_eh(r.get("stock_code", "—"))}</div>
               </div>
               <div style="font-family:{FONT_MONO};font-size:13px;font-weight:700;
-                          color:{pct_color};white-space:nowrap;">{sign}{pct * 100:.2f}%</div>
+                          color:{pct_color};white-space:nowrap;">{sign}{pct:.2f}%</div>
             </div>"""))
         inner_rows_html = "".join(rows)
     if not inner_rows_html:
@@ -2303,7 +2303,7 @@ def _v2_signal_stream(df: pd.DataFrame) -> str:
         price = _gf(r.get("price_0935") or r.get("buy_price") or r.get("open_price"))
         price_str = f"¥{price:.2f}" if price else "—"
         pct = _gf(r.get("open_change_pct"))
-        pct_str = f"{pct * 100:+.2f}%" if pct is not None else "—"
+        pct_str = f"{pct:+.2f}%" if pct is not None else "—"
         pct_color = COLOR_BOUGHT if pct and pct > 0 else (COLOR_MAGENTA_NEON if pct and pct < 0 else COLOR_TEXT)
 
         rows.append(f"""
