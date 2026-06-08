@@ -6,7 +6,7 @@
 - `AI_HANDOFF.md`
 - `AI_CHANGELOG.md`
 
-## 当前项目状态（最近一次更新：2026-06-06 Claude）
+## 当前项目状态（最近一次更新：2026-06-08 Claude）
 
 - 项目名称：朱哥短线雷达 V1.6（含 V1.7 LLM 情绪分析师，mark_only 旁路）
 - 项目路径：`/Users/yinlei/Desktop/量化/stock_screener`
@@ -21,16 +21,16 @@
 ## 最新 10 个 Commit
 
 ```text
+bce9e2f fix(dashboard): 涨跌幅 *100 bug — open_change_pct 已是百分数不需再乘以100
+e7a6cf0 docs(changelog): 补记 2026-06-07 V1.8 + 自选删除按钮
+c8b6154 feat(watchlist): 自选卡片加「移出自选池」删除按钮
+92eecd1 feat(v1.8): 4 sub-agent 多维情绪架构上线 (游资/筹码/题材/风险)
+7041a46 docs(handoff): 更新 06-05~06-06 AI 接手文档 (V1.7+manual_observe+导航精简)
 b5081cb fix(dashboard): 今日页 segment 与 KPI 卡冲突 → 改放复盘 tab (朱哥 2026-06-06)
 92725fe feat(dashboard): 导航 11 → 6+1 精简 + 补跑页瘦身 (朱哥 2026-06-06)
 6fd1783 feat(v1.7): LLM 情绪+新闻分析师上线 (mark_only, 朱哥 2026-06-05 立项)
 5694e2e fix(manual_observe): 下游一致性补丁 (推送/日志/二次确认)
 8195b14 fix(manual_observe): 周一前的雷区清理 (语义严谨化 + 多模块翻译同步)
-967bc06 feat(manual_observe): 默认全部允许买, 只观察改为手动开关 (朱哥 2026-06-05)
-c1639f1 fix(dashboard): V1.6 plan 拦下的票不再误判'待 9:36 检查'
-b328c2e fix(dashboard): 持仓追踪页显示昨日真买入但 holding_status 还空的票
-ae4a261 fix(dashboard): T 信号页 KPI 标签语义明确 + 删除高抛 T 卡片
-e1dcbfc fix(dashboard): nav 顶部导航 10→11 列 (后被 92725fe 又改成 7 列)
 ```
 
 ## 看板导航 (2026-06-06 精简后)

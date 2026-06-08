@@ -1907,7 +1907,7 @@ def update_review(cfg: dict) -> dict:
 
         # 查找 T+1 对应行（date 列是 datetime 类型）
         t1_date_fmt = f"{t1_date[:4]}-{t1_date[4:6]}-{t1_date[6:8]}"
-        t1_rows = hist[hist["date"].dt.strftime("%Y-%m-%d") == t1_date_fmt]
+        t1_rows = hist[hist["date"].astype(str) == t1_date_fmt]
         if t1_rows.empty:
             logger.warning(f"[update_review] {code} 历史K线中未找到 {t1_date_fmt}（可能是节假日），跳过")
             skipped += 1
@@ -1976,7 +1976,7 @@ def update_review(cfg: dict) -> dict:
             continue
 
         t1_date_fmt = f"{t1_date[:4]}-{t1_date[4:6]}-{t1_date[6:8]}"
-        t1_rows = hist[hist["date"].dt.strftime("%Y-%m-%d") == t1_date_fmt]
+        t1_rows = hist[hist["date"].astype(str) == t1_date_fmt]
         if t1_rows.empty:
             continue
 

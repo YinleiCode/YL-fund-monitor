@@ -4,6 +4,70 @@
 
 ---
 
+## 2026-06-08 Claude（update_review 复盘崩溃修复 + 涨跌幅显示 bug）
+
+### 操作模型
+
+Claude (Anthropic) — claude-sonnet-4-6
+
+### 本次任务
+
+接手上一 session 未完成的事项：
+1. 诊断今天复盘（update_review）为何从 19:01 起每5分钟失败一次
+2. 确认 T 模块今天无信号的原因
+3. 修复看板涨跌幅显示异常（-400%/-444%/-617%）
+
+### 做了什么
+
+#### A. 涨跌幅 ×100 显示 bug 修复（commit `bce9e2f`）
+
+`open_change_pct` 字段本身已是百分数（如 -4.0 = -4%），但看板 4 处代码错误地再乘以 100，导致显示 -400%。
+
+修复位置（`dashboard_app.py`）：
+- 本地信号记录表：`pct * 100` → `pct`
+- sparkline 折线末尾偏移：`pct * 100 * 8` → `pct * 8`
+- `_v2_stock_card` 涨跌幅标签（两处）：`pct * 100` → `pct`
+- 核心推荐侧栏：`pct * 100` → `pct`
+
+#### B. update_review 崩溃修复（本 session，`trade_review.py`）
+
+**根本原因**：`fetch_stock_history()` 返回的 DataFrame `date` 列是**字符串**（akshare 原生格式 `"2026-06-08"`），而代码用了 `.dt.strftime()` — 只能用于 datetime 类型，导致：
+
+```
+AttributeError: Can only use .dt accessor with datetimelike values
+```
+
+**影响**：`update_review` 每次都在第一只票就崩，今天 19:01 起每5分钟重试，全部失败，T+1 复盘数据未填入。
+
+**修复**（两处，均在 `trade_review.py`）：
+- 第 1910 行（已买入股 T+1 复盘）：`.dt.strftime("%Y-%m-%d")` → `.astype(str)`
+- 第 1979 行（未买入股 T+1 观察）：同上
+
+影响范围：仅 T+1 数据回填，不影响 `check_buy`、买入信号、任何交易执行逻辑。
+
+#### C. T 模块今日无信号
+
+确认属正常现象：`t_trade_20260608.csv` 和 `t_bs_log_20260608.csv` 文件存在但只有表头，无数据行——今日行情未触发 T 信号条件，非 bug。
+
+### 禁改文件检查
+
+- `run.py`：未改
+- `config/version_flags.yaml`：未改
+- `launchd/*.plist`：未改
+- `output/trade_review.csv`：未改
+- `trade_review.py`：本 session 修改了（已获朱哥明确确认），仅改两行字符串比较方式，不影响买入/交易逻辑
+
+### 是否运行 python run.py
+
+否。
+
+### 验收
+
+- `python -c "import trade_review; print('OK')"` → OK
+- 修复后等 supervisor 自动轮询跑 `--update-review`
+
+---
+
 ## 2026-06-07 Claude（V1.8 多 agent 上线 + 自选删除按钮）
 
 ### 操作模型
