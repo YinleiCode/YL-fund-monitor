@@ -140,10 +140,12 @@ T_LUNCH_END_MIN   = 13 * 60             # 13:00
 # ─────────────────── 朱哥 T 规则常量 ────────────────────────────────
 # 2026-06-02 用户拍板：规则 3 加"当前位置比分时均线低于阈值"约束。
 # 最新阈值 1.3%（朱哥拍板），先前用过 1.5%。阈值放成常量方便后续调参。
-BELOW_VWAP_PCT = 0.013   # 规则 3 第 2 段：触发分钟 close 至少比分时均线低 1.3%（朱哥 2026-06-02 拍板）
+BELOW_VWAP_PCT = 0.013   # 规则 3 第 2 段：触发分钟 close 至少比分时均线低 1.3%
 
-DROP_PCT_MIN  = 0.007    # 规则 3 第 1 段：1-3 分钟急跌阈值 ≥ 0.7%（朱哥 2026-06-02 最新版）
-VOL_MULTIPLE_MIN = 2.0   # 规则 4 量倍数 ≥ 2.0
+DROP_PCT_MIN  = 0.007    # 规则 3 第 1 段：1-3 分钟急跌阈值 ≥ 0.7%
+# 规则 4：触发量只需 ≥ 前 1-3 根绿 K 中任意一根的量（"其中一根 1 倍以上"）
+# 与"均量×2倍"不同，这里用前 1-3 根中最小量作门槛，满足"其中一根"即可
+VOL_MULTIPLE_MIN = 1.0   # 对最小前绿量的倍数门槛，≥1.0 即触发
 SHRINK_RATIO_MAX = 0.5   # 规则 5 缩量比 ≤ 0.5
 
 
@@ -318,13 +320,13 @@ def evaluate_t_signals(
     ma5_slope_up: Optional[bool] = None,
 ) -> list[dict]:
     """
-    朱哥 V1.6 做 T 规则（2026-06-03 朱哥拍板，删掉规则 1，正 T only）：
-      [删除] ~~5 日均线向上~~（朱哥 2026-06-03 删除）
-      1. 时间在 09:33-10:15 之间
-      2. 急跌 1-3 分钟跌幅 ≥ 0.7%（DROP_PCT_MIN）
-         **且** 触发分钟 close 比分时图均线（VWAP）低 ≥ 1.3%（BELOW_VWAP_PCT）
-      3. 触发分钟相比前 1-3 根绿分时量 ≥ 2 倍（"1 倍以上的绿量"）
-      4. 倍量后下一根明显缩量（缩量比 ≤ 0.5）
+    朱哥做 T 规则（5 条必须同时满足，正 T only）：
+      1. MA5 方向向上或中性偏强（slope_ok=False 时整只股跳过）
+      2. 时间在 09:33-10:15 之间
+      3. 急跌：1-3 分钟跌幅 ≥ 0.7%（DROP_PCT_MIN）
+         **且** 触发分钟 close 比分时均线（VWAP）低 ≥ 1.3%（BELOW_VWAP_PCT）
+      4. 倍量绿：触发量 ≥ 前 1-3 根绿 K 中任意一根的量（VOL_MULTIPLE_MIN=1.0）
+      5. 力度衰减：下一根明显缩量（缩量比 ≤ SHRINK_RATIO_MAX=0.5）
 
     通过 4 条全部规则 → sim_buy（正 T，先买）。止盈在 tracker 里按
     买入价 +1.5% / +3% 自动配对，本函数只负责识别 B 点。
@@ -359,13 +361,18 @@ def evaluate_t_signals(
             "fail_reason": "insufficient_bars_in_window",
         }]
 
-    # 2026-06-03 朱哥拍板：删掉「5 日均线向上」前置门
-    # 旧逻辑会拒绝 ma5 缺失或斜率向下的票，导致整只股全天跳过。
-    # 现在 ma5 / ma5_slope_up 仅作为输出字段记录，不参与判定。
     ma_val = ma5_override if ma5_override is not None else ma10_override
     if ma_val is None or ma_val <= 0:
-        ma_val = 0.0   # 仅作展示占位
+        ma_val = 0.0
+    # 规则 1：MA5 向上或中性偏强（slope_ok=True / None 放行，False 整只股跳过）
+    # run_t_intraday.py 已把"中性偏强"纳入 True（MA5 下行 ≤ 0.3% 视为中性）
     slope_ok = True if ma5_slope_up is None else bool(ma5_slope_up)
+    if not slope_ok:
+        return [{
+            "stock_code": stock_code,
+            "rule_pass": False,
+            "fail_reason": "ma5_slope_down",
+        }]
 
     signals = []
 
@@ -411,18 +418,21 @@ def evaluate_t_signals(
         if trigger_close > vwap_val * (1 - BELOW_VWAP_PCT):
             continue   # 跌得不够深（离 VWAP 不够远），不触发
 
-        # 规则 4: 触发分钟量 ≥ 前 1-3 根绿 K 均量 × 2.0（"绿量 1 倍以上" = 2 倍）
+        # 规则 4: 触发量 ≥ 前 1-3 根绿 K 中任意一根的量（"其中一根 1 倍以上"）
         prev_green = _same_color_bars(window_bars[:i], "green")
         if len(prev_green) < 1:
             continue
         prev_green = prev_green[-3:]
-        avg_vol = sum(b["volume"] for b in prev_green) / len(prev_green)
+        prev_vols = [b["volume"] for b in prev_green]
+        avg_vol = sum(prev_vols) / len(prev_vols)
+        min_prev_vol = min(prev_vols)
 
-        if avg_vol <= 0:
+        if min_prev_vol <= 0:
             continue
 
-        vol_multiple = trigger_vol / avg_vol
-        if vol_multiple < VOL_MULTIPLE_MIN:
+        # 触发量至少要超过前 1-3 根中最小那根，即"其中一根"
+        vol_multiple = trigger_vol / avg_vol   # 对比均量，仅作展示
+        if trigger_vol < min_prev_vol * VOL_MULTIPLE_MIN:
             continue
 
         # 规则 5: 下一根明显缩量（≤ SHRINK_RATIO_MAX 倍触发分钟量）

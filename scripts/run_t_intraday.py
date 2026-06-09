@@ -134,7 +134,7 @@ def _load_or_build_ma5_slope_cache(codes: list[str], today: str) -> dict[str, bo
     缓存路径：data/minute_today/_ma5_slope_<today>.json，每天首次跑时建立，
     每分钟后续跑直接读，避免每分钟拉网络。
 
-    Returns: {code: True/False}，True=ma5 斜率向上，False=向下/平/数据不足。
+    Returns: {code: True/False}，True=向上或中性偏强（下行≤0.3%），False=明确向下。
     """
     cache_path = PROJECT / "data" / "minute_today" / f"_ma5_slope_{today}.json"
     if cache_path.exists():
@@ -161,7 +161,8 @@ def _load_or_build_ma5_slope_cache(codes: list[str], today: str) -> dict[str, bo
             close = hist["close"]
             ma5_today = float(close.iloc[-5:].mean())
             ma5_prev  = float(close.iloc[-6:-1].mean())
-            slope[code] = (ma5_today > ma5_prev)
+            # 中性偏强：MA5 下行幅度 ≤ 0.3% 仍视为 True（向上或中性）
+            slope[code] = (ma5_today >= ma5_prev * 0.997)
         except Exception:
             slope[code] = True
     # 落盘缓存
