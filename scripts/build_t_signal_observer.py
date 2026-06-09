@@ -389,18 +389,19 @@ def evaluate_t_signals(
         if bar_color != "green":
             continue
 
-        # 规则 3 第 1 段: 1/2/3 分钟内累计跌幅 ≥ DROP_PCT_MIN (0.7%) (取最深的那个窗口)
+        # 规则 3 第 1 段: 窗口(过去1/2/3根K含触发bar)内最高价到当前close跌幅 ≥ 0.7%
         hit_move = False
         best_move_pct = 0.0
         best_window = 0
         for w in (1, 2, 3):
             if i < w:
                 continue
-            start_bar = window_bars[i - w]
-            start_close = start_bar["close"]
-            if start_close <= 0 or not math.isfinite(start_close):
+            window_slice = window_bars[i - w: i + 1]   # 含触发bar
+            highs = [b["high"] for b in window_slice if b["high"] > 0 and math.isfinite(b["high"])]
+            if not highs:
                 continue
-            move_pct = (trigger_close / start_close) - 1.0
+            window_high = max(highs)
+            move_pct = (trigger_close / window_high) - 1.0
             if move_pct <= -DROP_PCT_MIN and abs(move_pct) > abs(best_move_pct):
                 hit_move = True
                 best_move_pct = move_pct
