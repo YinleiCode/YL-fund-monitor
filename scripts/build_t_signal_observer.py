@@ -127,7 +127,7 @@ FIELDS = [
 # 之后自动恢复 09:33-10:15 严格窗口。
 #
 # 朱哥要延长测试: 改这一行日期即可
-EXPANDED_WINDOW_UNTIL = "20260607"   # 含此日, 之后恢复严格窗口（06-08 周一起严格）
+EXPANDED_WINDOW_UNTIL = "20260630"   # 含此日, 之后恢复严格窗口（2026-07-01 起严格）
 
 WINDOW_START = "09:33"
 WINDOW_END   = "10:15"
@@ -533,7 +533,7 @@ def evaluate_t_signals(
                 resonance_emotion_drop = _calc_window_drop_pct(emotion_bars, win_start, win_end)
                 if resonance_emotion_drop is not None:
                     emotion_ok = resonance_emotion_drop >= -RESONANCE_EMOTION_DROP_MAX
-            resonance_pass_flag = sector_ok and emotion_ok
+            resonance_pass_flag = sector_ok or emotion_ok
             if not resonance_pass_flag:
                 parts = []
                 if not sector_ok and resonance_sector_drop is not None:
