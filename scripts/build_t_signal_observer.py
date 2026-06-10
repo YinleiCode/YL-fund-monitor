@@ -599,8 +599,8 @@ def evaluate_t_signals(
         shrink_ratio = (next_vol / trigger_vol) if trigger_vol > 0 else 0.0
         shrink_confirmed = shrink_ratio <= SHRINK_RATIO_MAX
 
-        # 信号价格：缩量确认 K 的收盘价（B 点入场价）
-        signal_price = next_bar["close"]
+        # 信号价格：缩量确认 K 的最低价（B 点低点入场）
+        signal_price = next_bar["low"]
 
         signal_data = _build_signal_output(
             stock_code=stock_code,
