@@ -112,6 +112,11 @@ FIELDS = [
     "return_close",
     "max_drawdown_after_signal",
     "max_favorable_after_signal",
+    # 条件4 共振过滤字段
+    "resonance_sector_drop_pct",
+    "resonance_emotion_drop_pct",
+    "resonance_pass",
+    "resonance_skip_reason",
 ]
 
 
@@ -147,6 +152,13 @@ DROP_PCT_MIN  = 0.007    # 规则 3 第 1 段：1-3 分钟急跌阈值 ≥ 0.7%
 # 比较对象是前 1-3 根中最小那根（只要超过"某一根"的 2 倍即满足）
 VOL_MULTIPLE_MIN = 2.0   # 对最小前绿量的倍数门槛，≥2.0 即触发
 SHRINK_RATIO_MAX = 0.5   # 规则 5 缩量比 ≤ 0.5
+
+# ─────────────────── 条件4 共振过滤常量 ─────────────────────────────
+RESONANCE_SECTOR_DROP_MAX  = 0.004   # 板块/大盘窗口跌幅阈值：≤ 0.4% 通过
+RESONANCE_EMOTION_DROP_MAX = 0.005   # 情绪指数窗口跌幅阈值：≤ 0.5% 通过
+MARKET_INDEX_SH   = "000001"         # 上证综指（沪市板块代理）
+MARKET_INDEX_SZ   = "399001"         # 深证成指（深市板块代理）
+EMOTION_INDEX_CODE = "883404"        # 同花顺情绪指数
 
 
 def _time_to_minutes(t_str: str) -> int:
@@ -259,6 +271,71 @@ def _same_color_bars(bars: list[dict], color: str) -> list[dict]:
     return [b for b in bars if _bar_color(b["open"], b["close"]) == color]
 
 
+def _calc_window_drop_pct(
+    index_bars: list[dict],
+    window_start_dt: datetime,
+    window_end_dt: datetime,
+) -> Optional[float]:
+    """计算指数在时间窗口内从 max(high) 到结束时 close 的跌幅（负数=下跌）。无数据返回 None。"""
+    in_window = [
+        b for b in index_bars
+        if window_start_dt <= b["datetime"] <= window_end_dt
+        and b.get("high", 0) > 0
+        and math.isfinite(b.get("high", 0))
+    ]
+    if not in_window:
+        return None
+    end_bar = min(in_window, key=lambda b: abs((b["datetime"] - window_end_dt).total_seconds()))
+    end_close = end_bar.get("close", 0)
+    if not end_close or not math.isfinite(end_close) or end_close <= 0:
+        return None
+    window_high = max(b["high"] for b in in_window)
+    if window_high <= 0:
+        return None
+    return (end_close / window_high) - 1.0
+
+
+def _fetch_index_minute_bars_today(index_code: str) -> list[dict]:
+    """用 AKShare 拉取当日指数1分钟数据。失败时返回空列表（不阻塞主流程）。"""
+    try:
+        import akshare as ak
+        today = datetime.now().strftime("%Y-%m-%d")
+        df = ak.index_zh_a_hist_min_em(
+            symbol=index_code,
+            period="1",
+            start_date=today + " 09:30:00",
+            end_date=today + " 15:00:00",
+        )
+        if df is None or df.empty:
+            return []
+        col_map = {"时间": "datetime", "开盘": "open", "最高": "high",
+                   "最低": "low", "收盘": "close", "成交量": "volume"}
+        df = df.rename(columns=col_map)
+        rows = []
+        for _, row in df.iterrows():
+            dt = _parse_datetime(str(row.get("datetime", "")))
+            if dt is None:
+                continue
+            try:
+                bar = {
+                    "datetime": dt,
+                    "open":   float(row["open"]),
+                    "high":   float(row["high"]),
+                    "low":    float(row["low"]),
+                    "close":  float(row["close"]),
+                    "volume": float(row.get("volume", 0)),
+                }
+            except (KeyError, ValueError, TypeError):
+                continue
+            if not all(math.isfinite(v) for k, v in bar.items() if k != "datetime"):
+                continue
+            rows.append(bar)
+        return sorted(rows, key=lambda r: r["datetime"])
+    except Exception as e:
+        print(f"[resonance] 获取指数 {index_code} 失败: {e}", file=sys.stderr)
+        return []
+
+
 def _annotate_vwap_inplace(bars: list[dict]) -> None:
     """给每根 K 加 vwap 字段 = 从开盘到本根累计 VWAP（成交量加权均价 元/股）。
 
@@ -318,6 +395,8 @@ def evaluate_t_signals(
     ma10_override: Optional[float] = None,    # 兼容旧调用；新代码用 ma5_override
     ma5_override: Optional[float] = None,
     ma5_slope_up: Optional[bool] = None,
+    sector_bars: Optional[list[dict]] = None,   # 条件4：板块/大盘指数1分钟数据（可选）
+    emotion_bars: Optional[list[dict]] = None,  # 条件4：情绪指数1分钟数据（可选）
 ) -> list[dict]:
     """
     朱哥做 T 规则（5 条必须同时满足，正 T only）：
@@ -436,6 +515,56 @@ def evaluate_t_signals(
         if trigger_vol < min_prev_vol * VOL_MULTIPLE_MIN:
             continue
 
+        # 条件4 共振过滤（sector_bars / emotion_bars 未传入时跳过，不阻塞信号）
+        resonance_pass_flag: Optional[bool] = None
+        resonance_sector_drop: Optional[float] = None
+        resonance_emotion_drop: Optional[float] = None
+        resonance_skip_str = ""
+        if sector_bars is not None or emotion_bars is not None:
+            win_start = trigger["datetime"] - timedelta(minutes=max(best_window, 1))
+            win_end   = trigger["datetime"]
+            sector_ok = True
+            if sector_bars:
+                resonance_sector_drop = _calc_window_drop_pct(sector_bars, win_start, win_end)
+                if resonance_sector_drop is not None:
+                    sector_ok = resonance_sector_drop >= -RESONANCE_SECTOR_DROP_MAX
+            emotion_ok = True
+            if emotion_bars:
+                resonance_emotion_drop = _calc_window_drop_pct(emotion_bars, win_start, win_end)
+                if resonance_emotion_drop is not None:
+                    emotion_ok = resonance_emotion_drop >= -RESONANCE_EMOTION_DROP_MAX
+            resonance_pass_flag = sector_ok and emotion_ok
+            if not resonance_pass_flag:
+                parts = []
+                if not sector_ok and resonance_sector_drop is not None:
+                    parts.append(f"sector={resonance_sector_drop*100:.2f}%")
+                if not emotion_ok and resonance_emotion_drop is not None:
+                    parts.append(f"emotion={resonance_emotion_drop*100:.2f}%")
+                resonance_skip_str = "; ".join(parts)
+                signals.append(_build_signal_output(
+                    stock_code=stock_code,
+                    ma10_val=ma_val,
+                    ma10_slope_up=slope_ok,
+                    signal_type="low_absorb",
+                    trigger=trigger,
+                    prev_same_color_avg_vol=avg_vol,
+                    vol_multiple=vol_multiple,
+                    next_bar=None,
+                    shrink_ratio=None,
+                    shrink_confirmed=False,
+                    rule_pass=False,
+                    fail_reason="resonance_not_met",
+                    window_minutes=best_window,
+                    move_pct=best_move_pct,
+                    resonance_sector_drop_pct=resonance_sector_drop,
+                    resonance_emotion_drop_pct=resonance_emotion_drop,
+                    resonance_pass=False,
+                    resonance_skip_reason=resonance_skip_str,
+                ))
+                continue
+        else:
+            resonance_skip_str = "index_data_not_provided"
+
         # 规则 5: 下一根明显缩量（≤ SHRINK_RATIO_MAX 倍触发分钟量）
         if i + 1 >= len(window_bars):
             # 还没有下一根（盘中实时识别时常见），记一条"待确认"占位
@@ -452,6 +581,12 @@ def evaluate_t_signals(
                 shrink_confirmed=False,
                 rule_pass=False,
                 fail_reason="no_next_bar_for_shrink_confirmation",
+                window_minutes=best_window,
+                move_pct=best_move_pct,
+                resonance_sector_drop_pct=resonance_sector_drop,
+                resonance_emotion_drop_pct=resonance_emotion_drop,
+                resonance_pass=resonance_pass_flag,
+                resonance_skip_reason=resonance_skip_str,
             )
             signals.append(signal_data)
             continue
@@ -481,9 +616,13 @@ def evaluate_t_signals(
             rule_pass=shrink_confirmed,
             fail_reason="" if shrink_confirmed else "shrink_not_confirmed_volume_reduction_insufficient",
             signal_price_override=signal_price,
-            signal_side="sim_buy",     # 正 T 只产生买入信号
+            signal_side="sim_buy",
             window_minutes=best_window,
             move_pct=best_move_pct,
+            resonance_sector_drop_pct=resonance_sector_drop,
+            resonance_emotion_drop_pct=resonance_emotion_drop,
+            resonance_pass=resonance_pass_flag,
+            resonance_skip_reason=resonance_skip_str,
         )
         signals.append(signal_data)
 
@@ -514,6 +653,10 @@ def _build_signal_output(
     signal_side: Optional[str] = None,
     window_minutes: int = 0,
     move_pct: float = 0.0,
+    resonance_sector_drop_pct: Optional[float] = None,
+    resonance_emotion_drop_pct: Optional[float] = None,
+    resonance_pass: Optional[bool] = None,
+    resonance_skip_reason: str = "",
 ) -> dict:
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     trigger_t = trigger["datetime"]
@@ -589,6 +732,10 @@ def _build_signal_output(
         "order_status": "not_submitted",
         "broker_status": "not_connected",
         "observer_note": OBSERVER_NOTE,
+        "resonance_sector_drop_pct": round(resonance_sector_drop_pct * 100, 3) if resonance_sector_drop_pct is not None else "",
+        "resonance_emotion_drop_pct": round(resonance_emotion_drop_pct * 100, 3) if resonance_emotion_drop_pct is not None else "",
+        "resonance_pass": "" if resonance_pass is None else resonance_pass,
+        "resonance_skip_reason": resonance_skip_reason,
     }
 
 
@@ -747,6 +894,8 @@ def main() -> None:
                         help="MA5 斜率方向，格式 CODE:1|0 （1=向上 0=向下，朱哥 T 规则前置门）")
     parser.add_argument("--name-override", action="append", default=[],
                         help="股票名称，格式 CODE:名称（如 300001:龙辰科技），查不到名称时必填")
+    parser.add_argument("--resonance-check", action="store_true", default=False,
+                        help="启用条件4共振过滤：拉取大盘/情绪指数实时1分钟数据（需AKShare网络）")
     args = parser.parse_args()
 
     report_date = args.report_date
@@ -767,6 +916,19 @@ def main() -> None:
         if len(parts) == 2:
             ma5_slope_overrides[parts[0].strip()] = (parts[1].strip() in ("1", "true", "True", "TRUE", "yes"))
     name_overrides = parse_name_overrides(args.name_override)
+
+    # 条件4 共振过滤：--resonance-check 时拉取大盘+情绪指数数据（一次拉取，所有股票复用）
+    g_sector_bars_sh: list[dict] = []
+    g_sector_bars_sz: list[dict] = []
+    g_emotion_bars: list[dict] = []
+    if args.resonance_check:
+        print("[resonance] 正在拉取共振过滤指数数据...")
+        g_sector_bars_sh = _fetch_index_minute_bars_today(MARKET_INDEX_SH)
+        g_sector_bars_sz = _fetch_index_minute_bars_today(MARKET_INDEX_SZ)
+        g_emotion_bars   = _fetch_index_minute_bars_today(EMOTION_INDEX_CODE)
+        print(f"  上证综指: {len(g_sector_bars_sh)} bars | "
+              f"深证成指: {len(g_sector_bars_sz)} bars | "
+              f"情绪指数: {len(g_emotion_bars)} bars")
 
     all_signals = []
 
@@ -802,11 +964,20 @@ def main() -> None:
                 ma_info = (", " + " ".join(ma_info_parts)) if ma_info_parts else ", ma=未指定"
                 name_info = f", name={name_val}" if name_val else ""
                 print(f"  🔍 扫描 {code}{name_info}{ma_info}{sample_tag} ...")
+                # 沪市(6开头)用上证，深市(0/3开头)用深证
+                if args.resonance_check:
+                    _sec = g_sector_bars_sh if code.startswith("6") else g_sector_bars_sz
+                    _emo = g_emotion_bars
+                else:
+                    _sec = None
+                    _emo = None
                 sigs = evaluate_t_signals(
                     minute_bars, code,
                     ma10_override=ma10_val,
                     ma5_override=ma5_val,
                     ma5_slope_up=ma5_slope,
+                    sector_bars=_sec,
+                    emotion_bars=_emo,
                 )
                 for s in sigs:
                     if is_sample:
