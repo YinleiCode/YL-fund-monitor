@@ -629,6 +629,7 @@ DISPLAY_COL_CN = {
     "drop_pct_1m": "1分钟跌幅",
     "drop_pct_2m": "2分钟跌幅",
     "drop_pct_3m": "3分钟跌幅",
+    "drop_window_minutes": "急跌窗口分钟",
     "drop_pct_max": "最大急跌",
     "below_vwap_pct": "低于分时均价线",
     "green_vol_multiple": "绿K放量倍数",
@@ -661,6 +662,15 @@ RULE_CN = {
     "shrink_ratio_max": "缩量确认比例",
     "resonance_sector_drop_max": "板块跌幅上限",
     "resonance_emotion_drop_max": "情绪跌幅上限",
+    "trigger_time_rule": "触发时间规则",
+    "resonance_logic": "共振判定",
+    "entry_price_rule": "B点入场规则",
+    "take_profit_default_pct": "默认止盈",
+    "stop_loss_pct": "止损",
+    "extended_hold_enabled": "是否自动延长持有",
+    "take_profit_extended_low_pct": "延长观察下限",
+    "take_profit_extended_high_pct": "延长观察上限",
+    "extended_hold_note": "延长持有说明",
     "market_score_min": "市场情绪最低分",
     "open_change_low": "开盘跌幅下限",
     "open_change_high": "开盘涨幅上限",
@@ -5887,6 +5897,7 @@ def _render_strategy_rules_panel() -> None:
     rows = []
     for cfg in configs:
         rules = cfg.get("rules", {}) if isinstance(cfg.get("rules", {}), dict) else {}
+        sell_rules = cfg.get("sell_rules", {}) if isinstance(cfg.get("sell_rules", {}), dict) else {}
         rows.append({
             "策略": cfg.get("display_name", cfg.get("name")),
             "模块身份": MODULE_STATUS_CN.get(str(cfg.get("module_status", "")), str(cfg.get("module_status", "")) or "—"),
@@ -5894,6 +5905,7 @@ def _render_strategy_rules_panel() -> None:
             "配置来源": _source_cn(cfg.get("_source", "")),
             "读取异常": cfg.get("_load_error", "") or "—",
             "当前生效规则": _rules_cn(rules),
+            "卖出规则": _rules_cn(sell_rules) if sell_rules else "—",
         })
     st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
     st.caption("第一版策略配置只用于规则展示和实验模块读取；正式 9:36 买入、-3% 止损、收益统计仍沿用原代码口径。")
@@ -8294,6 +8306,13 @@ _FAIL_REASON_CN = {
     "insufficient_bars_in_window":       "时间窗口内分钟数据不足",
     "no_next_bar_for_shrink_confirmation": "无下一根 K 线确认缩量",
     "no_signal_triggered":               "未触发任何信号",
+    "ma5_slope_down":                    "MA5斜率不符合",
+    "not_green_k":                       "不是绿K",
+    "drop_not_enough":                   "急跌幅度不足",
+    "vwap_deviation_not_enough":         "低于分时均价线幅度不足",
+    "green_volume_not_enough":           "倍量绿不足",
+    "resonance_not_met":                 "板块/情绪共振不通过",
+    "insufficient_minute_bars":          "1分钟K数量不足",
 }
 
 
@@ -8316,8 +8335,8 @@ def _ts_bool_cn(val, t_val: str = "是", f_val: str = "否") -> str:
 
 _T_SIGNAL_CN = {"low_absorb": "低吸 T", "high_throw": "高抛 T"}
 _T_EXIT_REASON_CN = {
-    "take_profit_1_5": "止盈 1.5%",
-    "take_profit_3": "触达 3%",
+    "take_profit_1_5": "默认止盈 1.5%",
+    "take_profit_3": "触达 3%（观察）",
     "stop_loss_1_5": "止损 1.5%",
     "buyback_1_5": "回补 1.5%",
     "buyback_3": "触达回补 3%",
@@ -8493,6 +8512,7 @@ def _tt_trade_cards_html(trades: pd.DataFrame) -> str:
         s_price = r.get("entry_price", "") if str(r.get("entry_point", "")) == "S" else r.get("exit_price", "")
         target_price = r.get("take_profit_price", "") if signal_type == "low_absorb" else r.get("buyback_price", "")
         stop_price = r.get("stop_loss_price", "") if signal_type == "low_absorb" else r.get("stop_buyback_price", "")
+        target_label = "默认止盈 / 止损" if signal_type == "low_absorb" else "回补 / 踏空止损"
         cards.append(_h(f"""
         <div class="rt-v2-glass-card" style="position:relative;background:{COLOR_GLASS_BG};border:1px solid {COLOR_GLASS_EDGE};
                     border-radius:12px;padding:14px 16px 14px 18px;margin-bottom:10px;
@@ -8511,7 +8531,7 @@ def _tt_trade_cards_html(trades: pd.DataFrame) -> str:
           <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:14px;">
             <div><div class="tt-card-label">B 点</div><div class="tt-card-value">{_eh(_tt_text(b_time, '—'))} / {_tt_price_text(b_price)}</div></div>
             <div><div class="tt-card-label">S 点</div><div class="tt-card-value">{_eh(_tt_text(s_time, '—'))} / {_tt_price_text(s_price)}</div></div>
-            <div><div class="tt-card-label">目标 / 止损</div><div class="tt-card-value">{_tt_price_text(target_price)} / {_tt_price_text(stop_price)}</div></div>
+            <div><div class="tt-card-label">{_eh(target_label)}</div><div class="tt-card-value">{_tt_price_text(target_price)} / {_tt_price_text(stop_price)}</div></div>
             <div><div class="tt-card-label">盈亏</div><div class="tt-card-value" style="color:{ret_color};">{_tt_pct_text(ret)}</div></div>
           </div>
           <div style="margin-top:12px;padding-top:10px;border-top:1px solid {COLOR_DIVIDER};display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;">
@@ -8566,15 +8586,15 @@ def page_t_signal() -> None:
     """📈 做 T 观察记录 — 信号 + T 交易记录 + B/S 点统计。"""
     render_page_header(
         title="做 T 观察",
-        description="第二阶段会记录 B/S 点、止盈止损、盈亏统计，但仍然只是模拟观察，不接券商、不自动下单。",
+        description="实验模块：按严格正T规则记录 B/S 点、默认+1.5%机械止盈、-1.5%机械止损和模拟盈亏；不接券商、不自动下单。",
         kicker="做 T 模拟记录",
         badges=["只做模拟", "V1.6 旁路模块"],
         aside_title="执行边界",
-        aside_body="当前为做 T 模拟记录，不构成自动买卖指令。<br>任何买卖均未提交订单，can_execute_live 固定为 False。",
+        aside_body="B点按缩量确认K收盘价记录；默认+1.5%机械止盈，-1.5%机械止损。<br>+2%~+3%延长持有当前不自动执行，只做人工观察。",
     )
 
     status_banner(
-        "当前为做 T 模拟记录，不构成自动买卖指令。",
+        "当前为做 T 模拟记录，不构成自动买卖指令。触发规则：MA5中性偏强 + 09:33-10:15 + 急跌0.7% + 低于VWAP 1.3% + 倍量绿 + 下一根缩量 + 板块/情绪共振二选一。",
         "warning",
     )
     _render_t_trace_panel()
@@ -8627,7 +8647,7 @@ def page_t_signal() -> None:
     s1, s2, s3, s4 = st.columns(4)
     s1.markdown(kpi_card("今日 T 信号", total, COLOR_TEXT, "扫描记录总数"), unsafe_allow_html=True)
     s2.markdown(kpi_card("低吸 T 候选", n_low, "#1F883D", "扫到候选, 含未通过缩量"), unsafe_allow_html=True)
-    s3.markdown(kpi_card("低吸 T 触发", n_low_pass, COLOR_SECOND, "4 条规则全过才算"), unsafe_allow_html=True)
+    s3.markdown(kpi_card("低吸 T 触发", n_low_pass, COLOR_SECOND, "全部规则通过才算"), unsafe_allow_html=True)
     s4.markdown(kpi_card("未通过", n_fail, "#9A6700", "未满足全部规则"), unsafe_allow_html=True)
     if n_fail > 0:
         st.caption(f"当前还有 {n_fail} 条信号未通过规则确认。")
@@ -8677,7 +8697,7 @@ def page_t_signal() -> None:
     trade_show["B点价格"] = trades.apply(lambda r: r.get("entry_price", "") if str(r.get("entry_point", "")) == "B" else r.get("exit_price", ""), axis=1)
     trade_show["S点时间"] = trades.apply(lambda r: r.get("entry_time", "") if str(r.get("entry_point", "")) == "S" else r.get("exit_time", ""), axis=1)
     trade_show["S点价格"] = trades.apply(lambda r: r.get("entry_price", "") if str(r.get("entry_point", "")) == "S" else r.get("exit_price", ""), axis=1)
-    trade_show["止盈价"] = trades.apply(lambda r: r.get("take_profit_price", "") if str(r.get("signal_type", "")) == "low_absorb" else r.get("buyback_price", ""), axis=1)
+    trade_show["默认止盈价"] = trades.apply(lambda r: r.get("take_profit_price", "") if str(r.get("signal_type", "")) == "low_absorb" else r.get("buyback_price", ""), axis=1)
     trade_show["止损价"] = trades.apply(lambda r: r.get("stop_loss_price", "") if str(r.get("signal_type", "")) == "low_absorb" else r.get("stop_buyback_price", ""), axis=1)
     trade_show["退出原因"] = trades.get("exit_reason", "")
     trade_show["盈亏%"] = pd.to_numeric(trades.get("return_pct", ""), errors="coerce").map(lambda v: f"{v * 100:.2f}%" if pd.notna(v) else "")

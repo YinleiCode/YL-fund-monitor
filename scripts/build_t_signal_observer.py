@@ -132,6 +132,7 @@ TRACE_FIELDS = [
     "drop_pct_1m",
     "drop_pct_2m",
     "drop_pct_3m",
+    "drop_window_minutes",
     "drop_pct_max",
     "below_vwap_pct",
     "green_vol_multiple",
@@ -152,25 +153,11 @@ TRACE_FIELDS = [
 
 # ─────────────────── 时间窗口 ────────────────────────────────────────
 
-# 2026-06-04 朱哥临时测试用：在 EXPANDED_WINDOW_UNTIL 日期之前（包含当天），
-# 把扫描窗口扩大到 09:30-15:00 全天（除午休）, 让朱哥能看到更多 T 触发机会。
-# 之后自动恢复 09:33-10:15 严格窗口。
-#
-# 朱哥要延长测试: 改这一行日期即可
-EXPANDED_WINDOW_UNTIL = "20260630"   # 含此日, 之后恢复严格窗口（2026-07-01 起严格）
-
 WINDOW_START = "09:33"
 WINDOW_END   = "10:15"
 
 T_WINDOW_START = 9 * 60 + 33   # 09:33 in minutes
 T_WINDOW_END   = 10 * 60 + 15  # 10:15 in minutes
-
-# 临时扩展窗口（仅 EXPANDED_WINDOW_UNTIL 日期及之前生效）
-T_WINDOW_START_EXPANDED = 9 * 60 + 30   # 09:30
-T_WINDOW_END_EXPANDED   = 15 * 60       # 15:00
-# 午休跳过
-T_LUNCH_START_MIN = 11 * 60 + 30        # 11:30
-T_LUNCH_END_MIN   = 13 * 60             # 13:00
 
 # ─────────────────── 朱哥 T 规则常量 ────────────────────────────────
 # 2026-06-02 用户拍板：规则 3 加"当前位置比分时均线低于阈值"约束。
@@ -178,8 +165,7 @@ T_LUNCH_END_MIN   = 13 * 60             # 13:00
 BELOW_VWAP_PCT = 0.013   # 规则 3 第 2 段：触发分钟 close 至少比分时均线低 1.3%
 
 DROP_PCT_MIN  = 0.007    # 规则 3 第 1 段：1-3 分钟急跌阈值 ≥ 0.7%
-# 规则 4：触发量 ≥ 前 1-3 根绿 K 中任意一根的 2 倍（"其中一根的 1 倍以上"= 翻倍）
-# 比较对象是前 1-3 根中最小那根（只要超过"某一根"的 2 倍即满足）
+# 规则 4：触发量 ≥ 前 1-3 根绿 K 中最小那根的 2 倍。
 VOL_MULTIPLE_MIN = 2.0   # 对最小前绿量的倍数门槛，≥2.0 即触发
 SHRINK_RATIO_MAX = 0.5   # 规则 5 缩量比 ≤ 0.5
 
@@ -195,6 +181,7 @@ def _load_t_strategy_yaml_overrides() -> None:
     """Load experimental T thresholds from YAML, fail-open to code constants."""
     global BELOW_VWAP_PCT, DROP_PCT_MIN, VOL_MULTIPLE_MIN, SHRINK_RATIO_MAX
     global RESONANCE_SECTOR_DROP_MAX, RESONANCE_EMOTION_DROP_MAX
+    global WINDOW_START, WINDOW_END, T_WINDOW_START, T_WINDOW_END
     try:
         sys.path.insert(0, str(BASE_DIR))
         from strategy_config import load_strategy_config
@@ -209,6 +196,10 @@ def _load_t_strategy_yaml_overrides() -> None:
         SHRINK_RATIO_MAX = float(rules.get("shrink_ratio_max", SHRINK_RATIO_MAX))
         RESONANCE_SECTOR_DROP_MAX = float(rules.get("resonance_sector_drop_max", RESONANCE_SECTOR_DROP_MAX))
         RESONANCE_EMOTION_DROP_MAX = float(rules.get("resonance_emotion_drop_max", RESONANCE_EMOTION_DROP_MAX))
+        WINDOW_START = str(rules.get("time_window_start", WINDOW_START))
+        WINDOW_END = str(rules.get("time_window_end", WINDOW_END))
+        T_WINDOW_START = _time_to_minutes(WINDOW_START)
+        T_WINDOW_END = _time_to_minutes(WINDOW_END)
     except Exception as exc:
         print(f"[strategy-yaml] t_positive 读取失败，使用代码默认参数: {exc}", file=sys.stderr)
 
@@ -222,20 +213,8 @@ def _time_to_minutes(t_str: str) -> int:
 
 
 def _in_time_window(t_str: str) -> bool:
-    """Check if time falls within the T-trading window.
-
-    2026-06-04 朱哥临时测试: 在 EXPANDED_WINDOW_UNTIL 日期之前(含)用 09:30-15:00 全天,
-    之后恢复 09:33-10:15 严格窗口. 午休 11:30-13:00 始终跳过.
-    """
-    from datetime import date as _date_cls
+    """Check if trigger time falls within the strict T-trading window."""
     mins = _time_to_minutes(t_str)
-    today = _date_cls.today().strftime("%Y%m%d")
-    if today <= EXPANDED_WINDOW_UNTIL:
-        # 临时扩展窗口
-        if T_LUNCH_START_MIN <= mins < T_LUNCH_END_MIN:
-            return False   # 午休跳过 (11:30-12:59 算午休)
-        return T_WINDOW_START_EXPANDED <= mins <= T_WINDOW_END_EXPANDED
-    # 之后恢复严格窗口
     return T_WINDOW_START <= mins <= T_WINDOW_END
 
 
@@ -382,6 +361,7 @@ def build_t_condition_trace(
         bar_color = _bar_color(trigger["open"], trigger["close"])
         is_green = bar_color == "green"
         drops: dict[int, Optional[float]] = {1: None, 2: None, 3: None}
+        best_drop_window = 0
         for w in (1, 2, 3):
             if i < w:
                 continue
@@ -391,6 +371,11 @@ def build_t_condition_trace(
                 drops[w] = (trigger["close"] / max(highs)) - 1.0
         valid_drops = [d for d in drops.values() if d is not None]
         drop_max = min(valid_drops) if valid_drops else None
+        if drop_max is not None:
+            for w in (1, 2, 3):
+                if drops[w] == drop_max:
+                    best_drop_window = w
+                    break
         rule_drop = drop_max is not None and drop_max <= -DROP_PCT_MIN
 
         vwap_val = trigger.get("vwap")
@@ -419,10 +404,10 @@ def build_t_condition_trace(
         resonance_emotion_drop = None
         rule_resonance = True
         if sector_bars is not None or emotion_bars is not None:
-            win_start = trigger["datetime"] - timedelta(minutes=3)
+            win_start = trigger["datetime"] - timedelta(minutes=max(best_drop_window, 1))
             win_end = trigger["datetime"]
-            sector_ok = True
-            emotion_ok = True
+            sector_ok = False
+            emotion_ok = False
             if sector_bars:
                 resonance_sector_drop = _calc_window_drop_pct(sector_bars, win_start, win_end)
                 if resonance_sector_drop is not None:
@@ -463,6 +448,7 @@ def build_t_condition_trace(
             "drop_pct_1m": _round_pct(drops[1]),
             "drop_pct_2m": _round_pct(drops[2]),
             "drop_pct_3m": _round_pct(drops[3]),
+            "drop_window_minutes": best_drop_window,
             "drop_pct_max": _round_pct(drop_max),
             "below_vwap_pct": _round_pct(below_vwap),
             "green_vol_multiple": round(green_vol_multiple, 3) if green_vol_multiple is not None else "",
@@ -588,14 +574,14 @@ def evaluate_t_signals(
     """
     朱哥做 T 规则（5 条必须同时满足，正 T only）：
       1. MA5 方向向上或中性偏强（slope_ok=False 时整只股跳过）
-      2. 时间在 09:33-10:15 之间
+      2. 触发 K 时间在 09:33-10:15 之间
       3. 急跌：1-3 分钟跌幅 ≥ 0.7%（DROP_PCT_MIN）
          **且** 触发分钟 close 比分时均线（VWAP）低 ≥ 1.3%（BELOW_VWAP_PCT）
-      4. 倍量绿：触发量 ≥ 前 1-3 根绿 K 中任意一根的 2 倍（VOL_MULTIPLE_MIN=2.0）
+      4. 倍量绿：触发量 ≥ 前 1-3 根绿 K 中最小量的 2 倍（VOL_MULTIPLE_MIN=2.0）
       5. 力度衰减：下一根明显缩量（缩量比 ≤ SHRINK_RATIO_MAX=0.5）
 
-    通过 4 条全部规则 → sim_buy（正 T，先买）。止盈在 tracker 里按
-    买入价 +1.5% / +3% 自动配对，本函数只负责识别 B 点。
+    全部规则通过 → sim_buy（正 T，先买）。B 点入场价 = 缩量确认 K（下一根）收盘价。
+    止盈止损由 tracker 处理，本函数只负责识别 B 点。
 
     ⚠️ 用户明确：本规则只做正 T（先买再卖），不再产生 high_throw（高抛）信号。
     旧代码的 high_throw 分支已删除，tracker 里 _scan_high_throw 保留但永远收不到数据。
@@ -613,18 +599,11 @@ def evaluate_t_signals(
     # 必须用 minute_bars 全部（含 09:30/31/32），不能只用 window_bars
     _annotate_vwap_inplace(minute_bars)
 
-    # 规则 2: 时间窗口
-    window_bars = []
-    for b in minute_bars:
-        t_str = b["datetime"].strftime("%H:%M")
-        if _in_time_window(t_str):
-            window_bars.append(b)
-
-    if len(window_bars) < 4:
+    if len(minute_bars) < 4:
         return [{
             "stock_code": stock_code,
             "rule_pass": False,
-            "fail_reason": "insufficient_bars_in_window",
+            "fail_reason": "insufficient_minute_bars",
         }]
 
     ma_val = ma5_override if ma5_override is not None else ma10_override
@@ -642,9 +621,15 @@ def evaluate_t_signals(
 
     signals = []
 
-    # 逐根 K 扫描，找触发点（从 index 3 开始才有前 3 根回看空间）
-    for i in range(3, len(window_bars)):
-        trigger = window_bars[i]
+    saw_window_bar = False
+
+    # 逐根 K 扫描，触发时间必须在窗口内；回看前 1-3 根 K 使用完整分钟序列，避免 09:33 附近漏看 09:30-09:32。
+    for i in range(1, len(minute_bars)):
+        trigger = minute_bars[i]
+        t_str = trigger["datetime"].strftime("%H:%M")
+        if not _in_time_window(t_str):
+            continue
+        saw_window_bar = True
         trigger_open = trigger["open"]
         trigger_close = trigger["close"]
         trigger_vol = trigger["volume"]
@@ -655,14 +640,14 @@ def evaluate_t_signals(
         if bar_color != "green":
             continue
 
-        # 规则 3 第 1 段: 窗口(过去1/2/3根K含触发bar)内最高价到当前close跌幅 ≥ 0.7%
+        # 规则 3 第 1 段: 窗口(往前1/2/3根K，含触发bar)内最高价到当前close跌幅 ≥ 0.7%
         hit_move = False
         best_move_pct = 0.0
         best_window = 0
         for w in (1, 2, 3):
             if i < w:
                 continue
-            window_slice = window_bars[i - w: i + 1]   # 含触发bar
+            window_slice = minute_bars[i - w: i + 1]   # 含触发bar
             highs = [b["high"] for b in window_slice if b["high"] > 0 and math.isfinite(b["high"])]
             if not highs:
                 continue
@@ -685,8 +670,8 @@ def evaluate_t_signals(
         if trigger_close > vwap_val * (1 - BELOW_VWAP_PCT):
             continue   # 跌得不够深（离 VWAP 不够远），不触发
 
-        # 规则 4: 触发量 ≥ 前 1-3 根绿 K 中任意一根的量（"其中一根 1 倍以上"）
-        prev_green = _same_color_bars(window_bars[:i], "green")
+        # 规则 4: 触发量 ≥ 前 1-3 根绿 K 中最小那根的 2.0 倍
+        prev_green = _same_color_bars(minute_bars[:i], "green")
         if len(prev_green) < 1:
             continue
         prev_green = prev_green[-3:]
@@ -697,8 +682,8 @@ def evaluate_t_signals(
         if min_prev_vol <= 0:
             continue
 
-        # 触发量至少要超过前 1-3 根中最小那根，即"其中一根"
-        vol_multiple = trigger_vol / avg_vol   # 对比均量，仅作展示
+        # 触发量倍数也按最小前绿量展示，和实际规则口径一致。
+        vol_multiple = trigger_vol / min_prev_vol
         if trigger_vol < min_prev_vol * VOL_MULTIPLE_MIN:
             continue
 
@@ -710,12 +695,12 @@ def evaluate_t_signals(
         if sector_bars is not None or emotion_bars is not None:
             win_start = trigger["datetime"] - timedelta(minutes=max(best_window, 1))
             win_end   = trigger["datetime"]
-            sector_ok = True
+            sector_ok = False
             if sector_bars:
                 resonance_sector_drop = _calc_window_drop_pct(sector_bars, win_start, win_end)
                 if resonance_sector_drop is not None:
                     sector_ok = resonance_sector_drop >= -RESONANCE_SECTOR_DROP_MAX
-            emotion_ok = True
+            emotion_ok = False
             if emotion_bars:
                 resonance_emotion_drop = _calc_window_drop_pct(emotion_bars, win_start, win_end)
                 if resonance_emotion_drop is not None:
@@ -753,7 +738,7 @@ def evaluate_t_signals(
             resonance_skip_str = "index_data_not_provided"
 
         # 规则 5: 下一根明显缩量（≤ SHRINK_RATIO_MAX 倍触发分钟量）
-        if i + 1 >= len(window_bars):
+        if i + 1 >= len(minute_bars):
             # 还没有下一根（盘中实时识别时常见），记一条"待确认"占位
             signal_data = _build_signal_output(
                 stock_code=stock_code,
@@ -778,7 +763,7 @@ def evaluate_t_signals(
             signals.append(signal_data)
             continue
 
-        next_bar = window_bars[i + 1]
+        next_bar = minute_bars[i + 1]
         next_vol = next_bar["volume"]
 
         if next_vol < 0 or not math.isfinite(next_vol):
@@ -786,8 +771,8 @@ def evaluate_t_signals(
         shrink_ratio = (next_vol / trigger_vol) if trigger_vol > 0 else 0.0
         shrink_confirmed = shrink_ratio <= SHRINK_RATIO_MAX
 
-        # 信号价格：缩量确认 K 的最低价（B 点低点入场）
-        signal_price = next_bar["low"]
+        # B 点入场价：缩量确认 K（下一根）的收盘价。
+        signal_price = next_bar["close"]
 
         signal_data = _build_signal_output(
             stock_code=stock_code,
@@ -812,6 +797,13 @@ def evaluate_t_signals(
             resonance_skip_reason=resonance_skip_str,
         )
         signals.append(signal_data)
+
+    if not saw_window_bar:
+        return [{
+            "stock_code": stock_code,
+            "rule_pass": False,
+            "fail_reason": "insufficient_bars_in_window",
+        }]
 
     if not signals:
         return [{

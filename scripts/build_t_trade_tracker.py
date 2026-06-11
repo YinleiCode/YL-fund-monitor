@@ -45,6 +45,9 @@ BROKER_STATUS = "not_connected"
 TAKE_PROFIT_MIN_PCT = 0.015
 TAKE_PROFIT_MAX_PCT = 0.03
 STOP_LOSS_PCT = 0.015
+EXTENDED_TAKE_PROFIT_LOW_PCT = 0.02
+EXTENDED_TAKE_PROFIT_HIGH_PCT = 0.03
+EXTENDED_HOLD_ENABLED = False
 BUYBACK_MIN_PCT = 0.015
 BUYBACK_MAX_PCT = 0.03
 STOP_BUYBACK_PCT = 0.015
@@ -52,6 +55,29 @@ DEFAULT_SIM_QTY = 100
 OPEN_WARN_DAYS = 3
 
 TRACKER_NOTE = "当前为做 T 模拟记录，不构成自动买卖指令。"
+
+
+def _load_t_strategy_yaml_overrides() -> None:
+    """Load T sell thresholds from YAML; fall back silently to strict defaults."""
+    global TAKE_PROFIT_MIN_PCT, TAKE_PROFIT_MAX_PCT, STOP_LOSS_PCT
+    global EXTENDED_TAKE_PROFIT_LOW_PCT, EXTENDED_TAKE_PROFIT_HIGH_PCT, EXTENDED_HOLD_ENABLED
+    try:
+        import sys
+        sys.path.insert(0, str(BASE_DIR))
+        from strategy_config import load_strategy_config
+
+        cfg = load_strategy_config("t_positive")
+        if str(cfg.get("module_status", "")).lower() != "experimental":
+            return
+        sell = cfg.get("sell_rules", {}) if isinstance(cfg.get("sell_rules", {}), dict) else {}
+        TAKE_PROFIT_MIN_PCT = float(sell.get("take_profit_default_pct", TAKE_PROFIT_MIN_PCT))
+        STOP_LOSS_PCT = float(sell.get("stop_loss_pct", STOP_LOSS_PCT))
+        EXTENDED_TAKE_PROFIT_LOW_PCT = float(sell.get("take_profit_extended_low_pct", EXTENDED_TAKE_PROFIT_LOW_PCT))
+        EXTENDED_TAKE_PROFIT_HIGH_PCT = float(sell.get("take_profit_extended_high_pct", EXTENDED_TAKE_PROFIT_HIGH_PCT))
+        EXTENDED_HOLD_ENABLED = str(sell.get("extended_hold_enabled", EXTENDED_HOLD_ENABLED)).strip().lower() in {"true", "1", "yes"}
+        TAKE_PROFIT_MAX_PCT = EXTENDED_TAKE_PROFIT_HIGH_PCT
+    except Exception:
+        return
 
 T_TRADE_FIELDS = [
     "trade_id",
@@ -236,6 +262,14 @@ def _build_base_trade(row: dict) -> dict:
     note = str(row.get("note") or row.get("observer_note") or TRACKER_NOTE).strip()
     if not row.get("sim_t_qty"):
         note = f"{note}｜sim_t_qty 默认按 100 股估算"
+    strict_exit_note = (
+        f"正T默认 +{TAKE_PROFIT_MIN_PCT*100:.1f}% 机械止盈，-{STOP_LOSS_PCT*100:.1f}% 机械止损；"
+        "延长持有未启用，需人工确认极强结构"
+        if not EXTENDED_HOLD_ENABLED else
+        f"正T默认 +{TAKE_PROFIT_MIN_PCT*100:.1f}% 止盈；延长持有规则已开启，最高观察 +{TAKE_PROFIT_MAX_PCT*100:.1f}%"
+    )
+    if strict_exit_note not in note:
+        note = f"{note}｜{strict_exit_note}"
     return {
         "trade_id": _trade_id(row),
         "report_date": str(row.get("report_date", "")).strip(),
@@ -708,6 +742,7 @@ def resolve_signal_path(report_date: str, explicit_path: str) -> Path:
 
 
 def main() -> None:
+    _load_t_strategy_yaml_overrides()
     parser = argparse.ArgumentParser(description="V1.6 做 T 模拟交易记录追踪器")
     parser.add_argument("--report-date", default="", help="报告日期 YYYYMMDD")
     parser.add_argument("--signal-csv", default="", help="指定信号 CSV，默认 latest 或按 report_date 找 dated")

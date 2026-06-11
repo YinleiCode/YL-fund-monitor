@@ -35,6 +35,16 @@ DEFAULT_STRATEGIES: dict[str, dict[str, Any]] = {
             "below_vwap_pct": 0.013,
             "vol_multiple_min": 2.0,
             "shrink_ratio_max": 0.5,
+            "resonance_sector_drop_max": 0.004,
+            "resonance_emotion_drop_max": 0.005,
+            "entry_price_rule": "B点入场价 = 缩量确认K（下一根）收盘价",
+        },
+        "sell_rules": {
+            "take_profit_default_pct": 0.015,
+            "stop_loss_pct": 0.015,
+            "extended_hold_enabled": False,
+            "take_profit_extended_low_pct": 0.02,
+            "take_profit_extended_high_pct": 0.03,
         },
     },
     "funds_alpha": {

@@ -12,7 +12,8 @@ scripts/backtest_t_signal.py
         [--no-resonance]
 
 数据源: AKShare (需网络)
-止盈目标: +1.5% / +3%（先到先出）
+止盈目标: +1.5% 机械止盈（默认必须执行）
+延长持有: +2%~+3% 只做观察统计，当前回测不自动延长
 止损: -1.5%（严格执行）
 """
 from __future__ import annotations
@@ -39,8 +40,8 @@ from build_t_signal_observer import (
 )
 
 # ─────────────────── 回测参数 ────────────────────────────────────────
-TARGET_PROFIT_1  = 0.015   # 第一目标 +1.5%
-TARGET_PROFIT_2  = 0.030   # 第二目标 +3%
+TARGET_PROFIT_1  = 0.015   # 默认机械止盈 +1.5%
+TARGET_PROFIT_2  = 0.030   # 强势结构延长观察 +3%，不作为默认退出价
 STOP_LOSS_PCT    = -0.015  # 止损 -1.5%
 FORWARD_BARS_MAX = 60      # 每个信号最多向前看 60 根（约1小时）
 
@@ -223,13 +224,6 @@ def _simulate_trade(day_bars: list[dict], entry_idx: int, entry_price: float) ->
             out["exit_time"]   = bar["datetime"].strftime("%H:%M")
             out["hit_stop"]    = True
             break
-        if hi >= tp2:
-            out["exit_price"]  = tp2
-            out["exit_reason"] = "take_profit_2"
-            out["exit_time"]   = bar["datetime"].strftime("%H:%M")
-            out["hit_profit_1"] = True
-            out["hit_profit_2"] = True
-            break
         if hi >= tp1:
             out["exit_price"]  = tp1
             out["exit_reason"] = "take_profit_1"
@@ -237,11 +231,22 @@ def _simulate_trade(day_bars: list[dict], entry_idx: int, entry_price: float) ->
             out["hit_profit_1"] = True
             break
 
+    if out["exit_time"] is not None:
+        try:
+            exit_dt = datetime.strptime(out["exit_time"], "%H:%M").time()
+            out["hit_profit_2"] = any(
+                b["datetime"].time() >= exit_dt and b["high"] >= tp2
+                for b in day_bars[start:end]
+            )
+        except Exception:
+            out["hit_profit_2"] = False
+
     if out["exit_price"] is None:
         last = day_bars[min(end - 1, len(day_bars) - 1)]
         out["exit_price"]  = last["close"]
         out["exit_reason"] = "timeout_close"
         out["exit_time"]   = last["datetime"].strftime("%H:%M")
+        out["hit_profit_2"] = any(b["high"] >= tp2 for b in day_bars[start:end])
 
     out["return_pct"] = round((out["exit_price"] / entry_price - 1) * 100, 3)
     return out
@@ -427,7 +432,7 @@ def main() -> None:
     print(f"  股票代码   : {', '.join(codes)}")
     print(f"  信号总数   : {total}")
     print(f"  胜率(+1.5%): {wins}/{total} = {wins/total*100:.1f}%")
-    print(f"  止盈+3%    : {tp2_cnt}/{total} = {tp2_cnt/total*100:.1f}%")
+    print(f"  触达+3%(观察): {tp2_cnt}/{total} = {tp2_cnt/total*100:.1f}%")
     print(f"  止损-1.5%  : {stops}/{total} = {stops/total*100:.1f}%")
     print(f"  平均收益   : {avg_ret:+.3f}%")
     print(f"  最大亏损   : {max_dd:+.3f}%")

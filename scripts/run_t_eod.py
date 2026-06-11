@@ -137,6 +137,7 @@ def main() -> int:
         sys.executable, str(observer),
         "--report-date", today,
         "--codes", ",".join(fetched),
+        "--resonance-check",
     ]
     for code in fetched:
         cmd1 += ["--input-minute-csv", str(minute_dir / f"{today}_{code}.csv")]
