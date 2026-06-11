@@ -47,6 +47,12 @@ from services.dashboard_status import (
 )
 from services.freshness_service import file_freshness
 from services.provider_health_service import summarize_provider_health
+from services.provider_health_service import load_provider_health_history, summarize_provider_health_trend
+from services.task_status_service import (
+    build_task_status_snapshot,
+    load_latest_task_status,
+    write_task_status_snapshot,
+)
 from services.t_trace_service import explain_fail_reasons, summarize_t_trace
 
 # 手动「只观察」开关（朱哥 2026-06-05 加，替代 V1.6 plan 自动拦截）
@@ -641,6 +647,18 @@ def _render_t_trace_panel() -> None:
     c3.markdown(kpi_card("延迟K线", summary.delayed, COLOR_WARN_YELLOW if summary.delayed else COLOR_BOUGHT, ">180秒"), unsafe_allow_html=True)
     c4.markdown(kpi_card("首要失败", explain_fail_reasons(summary.top_fail_reason) if summary.top_fail_reason else "—", COLOR_DROP if summary.top_fail_reason else COLOR_BOUGHT), unsafe_allow_html=True)
 
+    tab_rules, tab_stock, tab_detail = st.tabs(["规则矩阵", "按股票汇总", "逐K明细"])
+    with tab_rules:
+        if summary.rule_matrix is not None and not summary.rule_matrix.empty:
+            st.dataframe(summary.rule_matrix, width="stretch", hide_index=True)
+        else:
+            status_banner("暂无规则矩阵数据。", "info")
+    with tab_stock:
+        if summary.by_stock is not None and not summary.by_stock.empty:
+            st.dataframe(summary.by_stock, width="stretch", hide_index=True)
+        else:
+            status_banner("暂无按股票汇总数据。", "info")
+
     if not summary.latest_pass.empty:
         st.markdown("#### 为什么触发")
         pass_cards = []
@@ -679,7 +697,8 @@ def _render_t_trace_panel() -> None:
         df["失败原因中文"] = df["fail_reasons"].map(explain_fail_reasons)
         show_cols.append("失败原因中文")
     show_cols = [c for c in show_cols if c in df.columns]
-    st.dataframe(df[show_cols].tail(80), width="stretch", hide_index=True)
+    with tab_detail:
+        st.dataframe(df[show_cols].tail(120), width="stretch", hide_index=True)
 
 
 def enrich_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -5398,10 +5417,38 @@ def page_manual_rerun() -> None:
     st.code(log_tail, language="text", line_numbers=False)
 
     st.divider()
+    _render_task_status_panel()
+
+    st.divider()
     _render_provider_health_panel()
 
     st.divider()
     _render_strategy_rules_panel()
+
+
+def _render_task_status_panel() -> None:
+    st.markdown("### 任务状态诊断")
+    df_all = load_trade_review()
+    col_a, col_b = st.columns([1, 4])
+    with col_a:
+        if st.button("生成任务状态快照", key="btn_build_task_status", width="stretch"):
+            statuses = build_task_status_snapshot(df_all, output_dir=OUTPUT_DIR)
+            path = write_task_status_snapshot(statuses, output_dir=OUTPUT_DIR)
+            status_banner(f"已生成任务状态快照：{path.name}", "success")
+    with col_b:
+        st.caption("该快照只读取本地文件状态，写入 output/diagnostics/task_status_YYYYMMDD.json，不触发 run.py。")
+
+    statuses = load_latest_task_status(OUTPUT_DIR)
+    if not statuses:
+        statuses = [s.__dict__ for s in build_task_status_snapshot(df_all, output_dir=OUTPUT_DIR)]
+    df = pd.DataFrame(statuses)
+    if df.empty:
+        status_banner("暂无任务状态数据。", "info")
+        return
+    if "status" in df.columns:
+        df["状态"] = df["status"].map(lambda v: "完成" if str(v) == "done" else "缺失/未完成")
+    cols = [c for c in ["date", "task", "状态", "source", "official", "experimental", "updated_at", "detail"] if c in df.columns]
+    st.dataframe(df[cols], width="stretch", hide_index=True)
 
 
 def _render_provider_health_panel() -> None:
@@ -5450,6 +5497,12 @@ def _render_provider_health_panel() -> None:
     c4.markdown(kpi_card("正式使用", summary.official_count, COLOR_WARN_YELLOW if summary.official_count else COLOR_BOUGHT, "应为 0；probe 旁路"), unsafe_allow_html=True)
 
     st.dataframe(summary.by_provider, width="stretch", hide_index=True)
+
+    history = load_provider_health_history(DIAGNOSTICS_DIR, limit_files=14)
+    trend = summarize_provider_health_trend(history)
+    if not trend.empty:
+        st.markdown("### 近14个诊断文件趋势")
+        st.dataframe(trend.tail(80), width="stretch", hide_index=True)
 
     if not summary.failed.empty:
         st.markdown("### 最近失败原因")

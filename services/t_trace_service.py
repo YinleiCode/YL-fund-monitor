@@ -24,6 +24,8 @@ class TTraceSummary:
     top_fail_reason: str
     latest_pass: pd.DataFrame
     latest_fail: pd.DataFrame
+    rule_matrix: pd.DataFrame | None = None
+    by_stock: pd.DataFrame | None = None
 
 
 def normalize_bool_columns(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
@@ -36,7 +38,7 @@ def normalize_bool_columns(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
 
 def summarize_t_trace(df: pd.DataFrame) -> TTraceSummary:
     if df.empty:
-        return TTraceSummary(0, 0, 0, "", pd.DataFrame(), pd.DataFrame())
+        return TTraceSummary(0, 0, 0, "", pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame())
     work = normalize_bool_columns(df, [
         "final_pass",
         "rule_drop_pass",
@@ -56,7 +58,46 @@ def summarize_t_trace(df: pd.DataFrame) -> TTraceSummary:
             top = str(counts.index[0])
     latest_pass = work[work.get("final_pass", pd.Series(dtype=bool)) == True].tail(20) if "final_pass" in work.columns else pd.DataFrame()
     latest_fail = work[work.get("final_pass", pd.Series(dtype=bool)) == False].tail(80) if "final_pass" in work.columns else work.tail(80)
-    return TTraceSummary(len(work), final_pass, delayed, top, latest_pass, latest_fail)
+    rule_cols = [
+        ("rule_drop_pass", "急跌"),
+        ("rule_vwap_pass", "VWAP偏离"),
+        ("rule_green_vol_pass", "倍量绿"),
+        ("rule_shrink_pass", "缩量确认"),
+        ("rule_resonance_pass", "共振"),
+        ("final_pass", "最终触发"),
+    ]
+    rule_rows = []
+    for col, label in rule_cols:
+        if col in work.columns:
+            passed = int(work[col].sum())
+            total = len(work)
+            rule_rows.append({
+                "规则": label,
+                "通过": passed,
+                "未通过": total - passed,
+                "通过率": round(passed / total * 100, 1) if total else 0,
+            })
+    rule_matrix = pd.DataFrame(rule_rows)
+    by_stock = pd.DataFrame()
+    if "stock_code" in work.columns:
+        tmp = work.copy()
+        if "final_pass" not in tmp.columns:
+            tmp["final_pass"] = False
+        if "bar_delay_seconds" in tmp.columns:
+            tmp["_delayed"] = pd.to_numeric(tmp["bar_delay_seconds"], errors="coerce").fillna(0) > 180
+        else:
+            tmp["_delayed"] = False
+        group_cols = ["stock_code"] + (["stock_name"] if "stock_name" in tmp.columns else [])
+        by_stock = (
+            tmp.groupby(group_cols, dropna=False)
+            .agg(
+                trace_rows=("stock_code", "size"),
+                final_pass=("final_pass", "sum"),
+                delayed=("_delayed", "sum"),
+            )
+            .reset_index()
+        )
+    return TTraceSummary(len(work), final_pass, delayed, top, latest_pass, latest_fail, rule_matrix, by_stock)
 
 
 def explain_fail_reasons(raw: str) -> str:

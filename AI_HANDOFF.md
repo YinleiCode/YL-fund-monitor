@@ -33,6 +33,11 @@
   - T trace 增加共振字段：`resonance_sector_drop_pct`、`resonance_emotion_drop_pct`、`rule_resonance_pass`。
   - T 实验模块可安全读取 `t_positive.yaml` 参数；读取失败回落代码默认值。
   - `requirements.txt` 增加 `efinance` / `pytdx`，仅用于 provider health probe。
+  - 进一步新增长期诊断与 UI 审计：
+    - `services/task_status_service.py` 生成 `output/diagnostics/task_status_YYYYMMDD.json`。
+    - provider health 支持近 14 个诊断文件趋势汇总。
+    - T trace 增加规则矩阵、按股票汇总、逐 K 明细 tab。
+    - `research/dashboard_ui_audit.py` 使用 Streamlit AppTest 跑 6 个导航页 smoke audit。
 - 本次未修改 `run.py`、`trade_review.py`、`config/version_flags.yaml`、`launchd/*.plist`、`output/trade_review.csv`。
 
 ### 2026-06-11 Codex 补充：严格正T独立回测框架

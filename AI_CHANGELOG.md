@@ -53,6 +53,58 @@ Codex
 
 ---
 
+## 2026-06-11 Codex（V1.6-clean 全面诊断与 UI 审计增强）
+
+### 操作模型
+
+Codex
+
+### 本次任务
+
+继续完善所有诊断能力，并对 UI 做可运行性审计：长期 provider health、任务状态快照、T trace 规则矩阵、Dashboard 自动审计脚本与 Chrome 打开检查。
+
+### 做了什么
+
+- `services/provider_health_service.py`
+  - 新增 provider health 历史加载。
+  - 新增近 14 个诊断文件趋势汇总：按日期/provider 统计成功率、平均延迟、失败次数。
+- 新增 `services/task_status_service.py`
+  - 根据 `trade_review.csv`、T 信号、T trace、provider health 文件生成任务状态快照。
+  - 输出 `output/diagnostics/task_status_YYYYMMDD.json`。
+- `dashboard_app.py`
+  - 系统工具页新增“任务状态诊断”面板与“生成任务状态快照”按钮。
+  - 数据源健康面板新增近 14 个诊断文件趋势表。
+  - 做T页逐条件 trace 增加规则矩阵、按股票汇总、逐K明细 tab。
+- `services/t_trace_service.py`
+  - 新增规则通过率矩阵和按股票汇总。
+- 新增 `research/dashboard_ui_audit.py`
+  - 使用 Streamlit AppTest 自动跑 6 个导航页。
+  - 输出 `output/diagnostics/dashboard_ui_audit_latest.json`。
+
+### 验收与结果
+
+- `python3 -m py_compile dashboard_app.py diagnostics.py strategy_config.py services/*.py providers/*.py research/provider_probe.py research/strict_t0_backtest.py research/dashboard_ui_audit.py scripts/build_t_signal_observer.py` 通过。
+- `python research/dashboard_ui_audit.py` 通过，6 个导航页全部 OK。
+- 手动生成 `output/diagnostics/task_status_20260611.json` 成功，共 8 个任务状态。
+- AppTest 全页面 smoke 测试通过：
+  - 今日驾驶舱
+  - 持仓中心
+  - 自选池
+  - 盘中低吸 / 做T
+  - 复盘中心
+  - 系统工具
+- Chrome 已打开测试看板 `http://127.0.0.1:8504`，Streamlit 服务日志无运行期异常。
+
+### 安全边界
+
+- 未运行 `python run.py`。
+- 未修改 `run.py`、`trade_review.py`、`config/version_flags.yaml`、`launchd/*.plist`。
+- 未修改 `output/trade_review.csv`。
+- 未接券商、未自动下单。
+- 新增诊断只写 `output/diagnostics/*`，不参与正式买入、止损或收益统计。
+
+---
+
 ## 2026-06-11 Codex（V1.6-clean 收尾补齐）
 
 ### 操作模型
