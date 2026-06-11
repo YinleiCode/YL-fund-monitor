@@ -9958,6 +9958,52 @@ def page_watchlist() -> None:
                 status_banner("保存失败，请检查文件权限。", "error")
 
 
+# ─── 数据新鲜度：今日驾驶舱顶部状态条 ──────────────────────────────────────
+
+def _render_data_freshness(df_all: pd.DataFrame) -> None:
+    """今日驾驶舱顶部：4个维度数据新鲜度说明条。"""
+    from datetime import datetime as _dt, date as _date
+    today = _date.today()
+    today_str  = today.strftime("%Y%m%d")
+    today_iso  = today.strftime("%Y-%m-%d")
+
+    # 1. 09:36 行情是否完成
+    bought_today = False
+    if not df_all.empty:
+        date_col = next(
+            (c for c in ["pick_date", "trade_date", "date", "signal_date"] if c in df_all.columns),
+            None,
+        )
+        if date_col:
+            bought_today = df_all[df_all[date_col].astype(str).str[:10] == today_iso].shape[0] > 0
+
+    # 2. T模块是否跑过今天
+    t_path = OUTPUT_DIR / "t_signal" / f"t_signal_{today_str}.csv"
+    t_done = t_path.exists() and t_path.stat().st_size > 100
+
+    # 3. 复盘是否今日更新
+    csv_mtime = CSV_PATH.stat().st_mtime if CSV_PATH.exists() else 0
+    review_today = _dt.fromtimestamp(csv_mtime).date() == today if csv_mtime else False
+
+    items = [
+        ("09:36 行情",  "✅ 已完成" if bought_today else "⏳ 未完成 / 非交易日",  bought_today),
+        ("资金数据",    "⚠️ V1.5 实验口径，不影响买入",                            None),
+        ("T 模块",      "✅ 今日已扫描" if t_done else "⏳ 尚未运行",               t_done),
+        ("复盘数据",    "✅ 今日已更新" if review_today else "⏳ 昨日或更早",        review_today),
+    ]
+    cols = st.columns(len(items))
+    for col, (label, status, ok) in zip(cols, items):
+        border = "#00d4aa" if ok else ("#f59e0b" if ok is None else "#6b7280")
+        col.markdown(
+            f"""<div style="padding:6px 10px;border-left:3px solid {border};
+            background:#0a1628;border-radius:4px;font-size:12px;line-height:1.7;margin-bottom:2px">
+            <span style="color:#8899aa;font-size:10px;text-transform:uppercase;letter-spacing:.5px">{label}</span><br>
+            <span style="color:#e2e8f0">{status}</span></div>""",
+            unsafe_allow_html=True,
+        )
+    st.markdown("<div style='margin-bottom:4px'></div>", unsafe_allow_html=True)
+
+
 # ─── main ───────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -10796,16 +10842,14 @@ def main() -> None:
     </style>
     """, unsafe_allow_html=True)
     render_shell_topbar()
-    # 2026-06-06 朱哥精简: 11 → 6 + 1 折叠
-    # 合并: 今日总览+买入确认 / 持仓+未买入 / T+1+周月+候选 → 内嵌 tab 切换
+    # V1.6-clean: 导航重整 — 6个清晰模块，用途一目了然
     nav_pages = [
-        "📌 今日",       # = 今日总览 + 买入确认 (内嵌 segment)
-        "🔥 跟踪",       # = 持仓追踪 + 未买入跟踪 (内嵌 tab)
-        "📈 做T",         # = 做T观察
-        "📅 明日",       # = 明日计划
-        "⭐ 自选",       # = 我的自选 (含 V1.7 情绪雷达)
-        "📊 复盘",       # = T+1 + 周月 + 候选 (内嵌 tab)
-        "⚙ 补跑",         # = 精简过的手动补跑
+        "📍 今日驾驶舱",        # 正式模块：今日KPI + 数据新鲜度
+        "📦 持仓中心",           # 正式模块：持仓追踪 + 未买入 + 明日计划
+        "⭐ 自选池",             # 正式模块：我的自选（含V1.7情绪雷达）
+        "🧪 盘中低吸 / 做T",    # 实验模块：做T观察信号
+        "📊 复盘中心",           # 正式模块：T+1 + 周月 + 候选
+        "⚙ 系统工具",            # 系统工具：补跑、日志、资金自检
     ]
     st.markdown("<div class='top-nav-radio'></div>", unsafe_allow_html=True)
     page = st.radio(
@@ -10876,26 +10920,41 @@ def main() -> None:
             unsafe_allow_html=True,
         )
 
-    # 2026-06-06 朱哥精简: 7 个主页 + 内嵌 tab 合并低频页 ----------------
+    # V1.6-clean 路由派发 ─────────────────────────────────────────────────────
 
-    # 📈 做T  (不依赖 trade_review)
+    # 模块身份标签（注入在每个页面顶部）
+    _BADGE = {
+        "正式模块": ("#00d4aa", "#003d30"),
+        "实验模块": ("#f59e0b", "#3d2a00"),
+        "观察模块": ("#818cf8", "#1e1b4b"),
+        "系统工具": ("#6b7280", "#1a1a1a"),
+    }
+
+    def _badge(label: str) -> None:
+        fg, bg = _BADGE.get(label, ("#6b7280", "#1a1a1a"))
+        st.markdown(
+            f"""<div style="display:inline-block;padding:2px 10px;border-radius:4px;
+            background:{bg};color:{fg};font-size:11px;font-weight:600;
+            border:1px solid {fg}55;margin-bottom:6px;letter-spacing:.5px">{label}</div>""",
+            unsafe_allow_html=True,
+        )
+
+    # 🧪 盘中低吸/做T（实验模块，不依赖 trade_review）
     if "做T" in page:
+        _badge("实验模块")
         page_t_signal()
         return
 
-    # ⭐ 自选  (不依赖 trade_review)
+    # ⭐ 自选池（正式模块，不依赖 trade_review）
     if "自选" in page:
+        _badge("正式模块")
         page_watchlist()
         return
 
-    # ⚙ 补跑  (不依赖 trade_review)
-    if "补跑" in page:
+    # ⚙ 系统工具（补跑 + 日志 + 资金自检，不依赖 trade_review）
+    if "系统" in page:
+        _badge("系统工具")
         page_manual_rerun()
-        return
-
-    # 📅 明日  (独立读 tomorrow_plan_latest.csv)
-    if "明日" in page:
-        page_tomorrow_plan()
         return
 
     # —— 以下页面需要 trade_review.csv ——
@@ -10910,23 +10969,30 @@ def main() -> None:
 
     _render_simulated_pollution_warning(df_all, scope="trade_review.csv")
 
-    # 📌 今日 = 今日总览 (纯净 KPI hero 单屏, 不再 segment, 避免与 KPI 卡冲突)
-    # '买入确认' 已挪到 📊 复盘 tab.
+    # 📍 今日驾驶舱（正式模块 + 数据新鲜度）
     if "今日" in page:
+        _badge("正式模块")
+        _render_data_freshness(df_all)
         page_today(df_all)
         return
 
-    # 🔥 跟踪 = 持仓追踪 + 未买入跟踪 (tab 切换)
-    if "跟踪" in page:
-        tab_hold, tab_miss = st.tabs(["🔥 持仓中（已买入）", "📉 未买入跟踪"])
+    # 📦 持仓中心（持仓追踪 + 未买入 + 明日计划，三合一）
+    if "持仓" in page:
+        _badge("正式模块")
+        tab_hold, tab_miss, tab_plan = st.tabs([
+            "🔥 持仓中（已买入）", "📉 未买入跟踪", "📅 明日计划",
+        ])
         with tab_hold:
             page_holding_track(df_all)
         with tab_miss:
             page_not_bought(df_all)
+        with tab_plan:
+            page_tomorrow_plan()
         return
 
-    # 📊 复盘 = 9:36 判定细节 + T+1 + 周月 + 候选生命周期 (tab 切换)
+    # 📊 复盘中心（9:36判定 + T+1 + 周月 + 候选生命周期）
     if "复盘" in page:
+        _badge("正式模块")
         tab_buy, tab_t1, tab_pm, tab_cl = st.tabs([
             "🔍 9:36 判定细节", "📊 T+1 复盘", "📅 周月复盘", "🔁 候选生命周期",
         ])

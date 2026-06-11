@@ -1019,6 +1019,69 @@ def fetch_stock_history(
     return raw_df
 
 
+def _fetch_minute_direct(code: str, date_iso: str, end_dt: str) -> Optional[pd.DataFrame]:
+    """腾讯证券1分钟K线接口，东财 push2 不可达时的替代方案。
+
+    end_dt: 'YYYY-MM-DD HH:MM:SS' 截止时间（含，精确到分钟）
+    返回列：datetime, open, high, low, close, volume, amount
+    volume 单位：手（与 akshare 一致）
+    amount 单位：元（用 close × volume × 100 近似）
+    """
+    import requests as _req
+    market = "sh" if code.startswith("6") or code.startswith("688") else "sz"
+    if code.startswith(("4", "8", "9")):
+        market = "bj"
+    url = "https://ifzq.gtimg.cn/appstock/app/kline/mkline"
+    params = {
+        "param": f"{market}{code},m1,,400",
+        "_var": f"m1_{market}{code}",
+    }
+    headers = {
+        "Referer": "https://gu.qq.com/",
+        "User-Agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+    }
+    import json as _json
+    r = _req.get(url, params=params, headers=headers, timeout=8)
+    r.raise_for_status()
+    # 响应格式: m1_sh600519={...}
+    txt = r.text.split("=", 1)[-1].strip().rstrip(";")
+    bars = _json.loads(txt)["data"][f"{market}{code}"]["m1"]
+
+    # 每条格式: [YYYYMMDDHHmm, open, close, high, low, volume(手), {}, ...]
+    end_prefix = end_dt[:16].replace("-", "").replace(" ", "").replace(":", "")  # YYYYMMDDHHmm
+    date_prefix = date_iso.replace("-", "")  # YYYYMMDD
+    rows = []
+    for bar in bars:
+        if len(bar) < 6:
+            continue
+        t = str(bar[0])           # "YYYYMMDDHHmm"
+        if not t.startswith(date_prefix):
+            continue
+        if t > end_prefix:
+            break
+        dt_str = f"{t[:4]}-{t[4:6]}-{t[6:8]} {t[8:10]}:{t[10:12]}"
+        close_val = float(bar[2])
+        vol_val   = float(bar[5])
+        rows.append({
+            "datetime": dt_str,
+            "open":     float(bar[1]),
+            "close":    close_val,
+            "high":     float(bar[3]),
+            "low":      float(bar[4]),
+            "volume":   vol_val,
+            "amount":   round(close_val * vol_val * 100, 2),
+        })
+
+    if not rows:
+        return None
+    df = pd.DataFrame(rows)
+    return df[["datetime", "open", "high", "low", "close", "volume", "amount"]]
+
+
 def fetch_minute_today(
     code: str,
     date_str: Optional[str] = None,
@@ -1054,6 +1117,21 @@ def fetch_minute_today(
     date_iso = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
     start = f"{date_iso} 09:30:00"
     end   = f"{date_iso} {end_time or '15:00:00'}"
+
+    # 优先直连东财实时接口，失败再 fallback akshare
+    try:
+        df = _fetch_minute_direct(code, date_iso, end)
+        if df is not None and not df.empty:
+            logger.info(f"[minute] {code} 直连东财成功 {len(df)} bars")
+            if save_dir is not None:
+                save_dir = Path(save_dir)
+                save_dir.mkdir(parents=True, exist_ok=True)
+                out = save_dir / f"{date_str}_{code}.csv"
+                df.to_csv(out, index=False, encoding="utf-8")
+                logger.info(f"[minute] {code} 已保存 {len(df)} bars → {out}")
+            return df
+    except Exception as e:
+        logger.warning(f"[minute] {code} 直连东财失败: {type(e).__name__}: {e}，fallback akshare")
 
     df = None
     for attempt in range(retries + 1):
