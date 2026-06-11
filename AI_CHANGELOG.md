@@ -4,6 +4,68 @@
 
 ---
 
+## 2026-06-11 Codex（严格正T新规则落地 + 文档更新）
+
+### 操作模型
+
+Codex
+
+### 本次任务
+
+按朱哥最新口径重做实验做 T 规则：正 T 低吸为主，严格多重过滤，B 点用缩量确认 K 收盘价，卖出默认 +1.5% 机械止盈、-1.5% 机械止损。
+
+### 做了什么
+
+- `scripts/build_t_signal_observer.py`
+  - 取消旧的 6 月内全天扩展扫描，恢复严格 `09:33-10:15` 触发窗口。
+  - 急跌窗口按触发 K 往前 1/2/3 根 K（含触发 K）计算。
+  - VWAP 偏离阈值保持 `1.3%`。
+  - 倍量绿按“前 1-3 根绿 K 中最小量 × 2.0”计算，展示倍数也同步这个口径。
+  - B 点入场价改为缩量确认 K（下一根）的收盘价，不再用下一根最低价。
+  - trace 新增 `drop_window_minutes`，共振窗口跟急跌窗口一致。
+- `scripts/build_t_trade_tracker.py`
+  - 默认 +1.5% 机械止盈、-1.5% 机械止损。
+  - 延长持有 `+2%~+3%` 保持关闭，仅作为人工观察说明。
+  - 备注避免重复追加规则说明。
+- `scripts/backtest_t_signal.py`
+  - 回测默认先到 +1.5% 即退出。
+  - +3% 只统计“触达观察”，不作为默认卖出价。
+- `scripts/run_t_eod.py`
+  - 收盘做 T 观察也加 `--resonance-check`，与盘中口径一致。
+- `config/strategies/t_positive.yaml` / `strategy_config.py`
+  - 补齐买入、共振、入场价、卖出规则配置。
+- `dashboard_app.py`
+  - 做 T 页面中文说明更新为新规则。
+  - 策略规则表新增“卖出规则”列。
+  - 退出原因显示“默认止盈 1.5% / 触达 3%（观察）”。
+- `docs/做T规则说明书.md`
+  - 已重写为 2026-06-11 最新规则，删除旧的“全天扫描 / B 点最低价”等过时内容。
+
+### 验收与结果
+
+- `python3 -m py_compile scripts/build_t_signal_observer.py scripts/build_t_trade_tracker.py scripts/backtest_t_signal.py scripts/run_t_eod.py dashboard_app.py strategy_config.py services/t_trace_service.py` 通过。
+- 函数级断言通过：
+  - 构造样例中触发 K 下一根收盘价为 `98.2`，最低价为 `97.9`，输出 B 点 `signal_price=98.2`。
+  - 后续触达 +1.5%，退出原因为 `take_profit_1_5`。
+- `python3 research/dashboard_ui_audit.py` 通过，6 个导航页全部 OK。
+- `git diff --check` 通过。
+
+### 安全边界
+
+- 未运行 `python run.py`。
+- 未修改正式 9:36 买入规则。
+- 未修改主链路 -3% 止损规则。
+- 未修改正式模拟收益口径。
+- 未修改 `output/trade_review.csv`。
+- 未接券商、未自动下单。
+
+### Git
+
+- 代码提交：`b38b674 feat(t): enforce strict positive T rules`
+- 文档提交：待本条记录提交后生成。
+
+---
+
 ## 2026-06-11 Codex（Dashboard 中文化漏项收尾）
 
 ### 操作模型

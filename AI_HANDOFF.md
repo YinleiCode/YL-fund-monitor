@@ -78,6 +78,39 @@
   - 做T诊断：`VWAP` 展示为“分时均价线”，失败原因同步改中文。
   - 表格布尔值：`true / false` 展示为“是 / 否”。
   - 明日计划预览：`full模式 / theme_auto模式` 展示为“全A模式 / 主题龙头模式”，只改显示，不写回 MD。
+
+### 2026-06-11 Codex 补充：严格正T新规则已落地
+
+- 最新代码提交：`b38b674 feat(t): enforce strict positive T rules`。
+- 最新做 T 规则文档：`docs/做T规则说明书.md`，已重写为 2026-06-11 版本。
+- 当前做 T 模块仍是实验旁路：
+  - 不接券商
+  - 不自动下单
+  - 不写 `output/trade_review.csv`
+  - 不影响 9:36 正式买入
+  - 不影响主链路 -3% 止损
+  - 不影响正式模拟收益口径
+- 当前买入规则：
+  - MA5 今日 ≥ 昨日 MA5 × 0.997
+  - 触发 K 时间 `09:33-10:15`
+  - 触发 K 必须是绿 K
+  - 1/2/3 分钟窗口内 `max(high)` 到触发 K `close` 急跌 ≥ 0.7%
+  - 触发 K `close` ≤ 分时 VWAP × 0.987
+  - 触发 K 成交量 ≥ 前 1-3 根绿 K 最小量 × 2.0
+  - 下一根 K 成交量 ≤ 触发 K 成交量 × 0.5
+  - 板块/指数窗口跌幅 ≤ 0.4% 或 同花顺情绪 `883404` 跌幅 ≤ 0.5%，满足其一
+- 当前 B 点：
+  - B 点入场价 = 缩量确认 K（下一根）收盘价
+  - 不再使用下一根最低价
+- 当前卖出：
+  - 默认 `+1.5%` 机械止盈
+  - `-1.5%` 机械止损
+  - `+2%~+3%` 延长持有不自动执行，只作人工观察；`extended_hold_enabled=false`
+- 盘中 `scripts/run_t_intraday.py` 和收盘 `scripts/run_t_eod.py` 都带 `--resonance-check`，做 T 口径一致。
+- 已验证：
+  - py_compile 通过
+  - 函数级断言：B 点按确认 K 收盘价，+1.5% 先止盈
+  - `research/dashboard_ui_audit.py` 六个导航页全部 OK
   - 资金源健康卡片：`active_source / system_status / checked_at / push2his / ths_simple` 等改为中文标签和中文值。
 - 验证：
   - `python -m py_compile dashboard_app.py services/dashboard_status.py services/task_status_service.py services/t_trace_service.py research/dashboard_ui_audit.py` ✅
