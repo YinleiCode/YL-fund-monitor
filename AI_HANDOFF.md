@@ -6,17 +6,38 @@
 - `AI_HANDOFF.md`
 - `AI_CHANGELOG.md`
 
-## 当前项目状态（最近一次更新：2026-06-08 Claude）
+## 当前项目状态（最近一次更新：2026-06-11 Codex）
 
 - 项目名称：朱哥短线雷达 V1.6（含 V1.7 LLM 情绪分析师，mark_only 旁路）
 - 项目路径：`/Users/yinlei/Desktop/量化/stock_screener`
-- 当前分支：`restore/radar-terminal-keep-t`
+- 当前分支：`v16-clean-big-refactor`
 - 当前系统性质：本地量化观察系统，不自动下单，不接券商。
 - **当前自选池数量：27 只**（不再是 13；2026-06-03 朱哥调过一次，2026-06-05 仍是 27 只）
 - 当前自选池定位：优先进入观察/评估，不是只从自选池选，也不是强行推荐或强行买入。
 - **V1.6 自动拦截已关**（2026-06-05 朱哥拍板）：`config/version_flags.yaml` 里 `v16.affect_check_buy=false`。V1.6 计划层只打审计标签，**不再阻塞 9:36 买入**。"只观察"改为**用户手动开关**（见下文 V1.7-A）。
 - **V1.7 LLM 情绪分析师已上线**（2026-06-05，mark_only 旁路）：每天 18:30 自动跑，对 27 只自选池调 Claude/DeepSeek 生成情绪分 + 风险提示。**永远不影响 9:36 买入**。详见 `AI_CHANGELOG.md` 2026-06-05 条目。
 - **看板导航已精简**（2026-06-06）：11 个 tab → 7 个（详见下文「看板导航」）
+
+### 2026-06-11 Codex 补充：V1.6-clean 第一阶段重构
+
+- 新分支：`v16-clean-big-refactor`。
+- 看板导航重排为 6 个模块：`📍 今日驾驶舱` / `📦 持仓中心` / `⭐ 自选池` / `🧪 盘中低吸 / 做T` / `📊 复盘中心` / `⚙ 系统工具`。
+- 今日驾驶舱新增今日任务状态矩阵与数据新鲜度卡，展示 9:36 行情、分钟K、资金、板块/情绪、T+1复盘、T 模块数据的 source/timestamp/freshness/status。
+- 新增旁路 providers 管理层：`providers/` + `diagnostics.py` + `research/provider_probe.py`，输出 `output/diagnostics/provider_health_YYYYMMDD.csv`。`efinance_probe` / `pytdx_probe` 仅记录 health，`used_for_official=False`。
+- `scripts/build_t_signal_observer.py` 新增逐条件 trace 输出：`output/diagnostics/t_signal_trace_YYYYMMDD.csv`，记录急跌、VWAP、倍量、缩量、失败原因，不改变原有 `rule_pass` 判定。
+- 新增策略 YAML：`config/strategies/v16_buy_confirm.yaml` / `t_positive.yaml` / `funds_alpha.yaml`，第一版只用于看板展示和实验读取，正式 9:36 / -3% 止损 / 收益统计仍沿用原代码。
+- 本次未修改 `run.py`、`trade_review.py`、`config/version_flags.yaml`、`launchd/*.plist`、`output/trade_review.csv`。
+
+### 2026-06-11 Codex 补充：严格正T独立回测框架
+
+- 新增 `research/strict_t0_backtest.py`，这是**独立研究脚本**，不接入 `run.py` / dashboard / launchd / `trade_review.csv`。
+- 默认回测 `sh601689`、`20260401-20260610`，同时输出基础版（无共振）与完整版（板块 + 情绪共振）对比。
+- 输出目录：`output/research/strict_t0/`；缓存目录：`output/research/strict_t0/cache/`。
+- 当前 AKShare 历史 1 分钟接口实际只返回 2026-06-05 至 2026-06-10 共 4 个交易日、964 根分钟 K，报告已标记覆盖不足。
+- 板块 / 情绪 / 大盘分钟接口可能被远端断开或 DNS 失败；脚本已支持本地 CSV 覆盖参数：
+  `--local-stock-minute-csv` / `--local-sector-minute-csv` /
+  `--local-emotion-minute-csv` / `--local-market-minute-csv`。
+- 本次未修改主策略、主 T 模块、看板、launchd 或 `output/trade_review.csv`。
 
 ## 最新 10 个 Commit
 
@@ -33,21 +54,20 @@ b5081cb fix(dashboard): 今日页 segment 与 KPI 卡冲突 → 改放复盘 tab
 8195b14 fix(manual_observe): 周一前的雷区清理 (语义严谨化 + 多模块翻译同步)
 ```
 
-## 看板导航 (2026-06-06 精简后)
+## 看板导航 (2026-06-11 V1.6-clean)
 
 ```
-📌 今日       🔥 跟踪       📈 做T       📅 明日       ⭐ 自选       📊 复盘       ⚙ 补跑
+📍 今日驾驶舱       📦 持仓中心       ⭐ 自选池       🧪 盘中低吸 / 做T       📊 复盘中心       ⚙ 系统工具
 ```
 
 | Tab | 内容 | 频率 |
 |-----|------|------|
-| 📌 今日 | 今日总览 (KPI hero 单屏) | 每天 ★★★★★ |
-| 🔥 跟踪 | st.tabs: 持仓中 / 未买入跟踪 | 每天 ★★★★ |
-| 📈 做T | T 信号观察 (独立读 t_signal_latest.csv) | 几乎每天 ★★★★ |
-| 📅 明日 | V1.6 明日计划 + 4 个一键操作 | 晚上 ★★★★ |
-| ⭐ 自选 | 自选池 27 只 + ✋ 手动只观察名单 + ✨ V1.7 情绪雷达 | 每天 ★★★★★ |
-| 📊 复盘 | st.tabs: 9:36 判定细节 / T+1 / 周月 / 候选生命周期 | 偶尔 ★★ |
-| ⚙ 补跑 | 4 个补跑按钮 (T+1/周/月/V1.7) + 日志 | 出错才用 ✦ |
+| 📍 今日驾驶舱 | 今日任务状态、数据新鲜度、今日总览 | 每天 ★★★★★ |
+| 📦 持仓中心 | 持仓中 / 未买入跟踪 / 明日计划 | 每天 ★★★★ |
+| ⭐ 自选池 | 自选池 27 只 + 手动只观察 + V1.7 情绪雷达 | 每天 ★★★★★ |
+| 🧪 盘中低吸 / 做T | T 信号、T 交易模拟、逐条件 trace | 几乎每天 ★★★★ |
+| 📊 复盘中心 | 9:36 判定 / T+1 / 周月 / 候选生命周期 | 偶尔 ★★ |
+| ⚙ 系统工具 | 补跑、日志、provider health、策略规则展示 | 出错才用 ✦ |
 
 ## 新增模块速查 (2026-06-05～06)
 

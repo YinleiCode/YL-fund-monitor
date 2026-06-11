@@ -1,0 +1,16 @@
+name: v16_buy_confirm
+display_name: V1.6 9:36 买入确认
+module_status: official
+used_for_official: true
+description: "正式模拟买入口径展示；第一版 YAML 只用于看板展示，正式规则仍由原代码执行。"
+rules:
+  market_score_min: 5
+  open_change_low: -3.0
+  open_change_high: 4.0
+  price_must_above_open: true
+  price_must_above_ma5: true
+  not_one_word_limit_up: true
+safety:
+  broker_connected: false
+  auto_order: false
+  changes_official_logic: false

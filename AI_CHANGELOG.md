@@ -4,6 +4,89 @@
 
 ---
 
+## 2026-06-11 Codex（V1.6-clean 第一阶段大重构）
+
+### 操作模型
+
+Codex
+
+### 本次任务
+
+按朱哥要求启动 `v16-clean-big-refactor` 分支，做 V1.6-clean 第一阶段重构：看板导航、今日驾驶舱、数据新鲜度、provider health、T 信号 trace、策略 YAML。
+
+### 做了什么
+
+- 新增 `providers/` 旁路数据源管理层：`akshare` / `eastmoney_direct` / `sina` / `efinance_probe` / `pytdx_probe`。
+- 新增 `diagnostics.py` 和 `research/provider_probe.py`，输出 `output/diagnostics/provider_health_YYYYMMDD.csv`。
+- `efinance_probe` / `pytdx_probe` 明确只做 provider health，所有记录 `used_for_official=False`，不进入正式买入。
+- `dashboard_app.py`：
+  - 保留并补齐 6 模块新导航：今日驾驶舱、持仓中心、自选池、盘中低吸/做T、复盘中心、系统工具。
+  - 每个模块顶部保留身份标签：正式模块 / 实验模块 / 系统工具。
+  - 今日驾驶舱新增任务状态矩阵：交易日、08:50 pick、08:55 theme_auto、09:36 check_buy、10:01 second_check、19:00 update_review、持仓、买入、止损、数据异常、正式/实验模块边界。
+  - 今日页新增数据新鲜度卡：9:36行情、分钟K、资金、板块/情绪、T+1复盘、T模块数据。
+  - 做T页新增逐条件 trace 展示。
+  - 系统工具页新增 provider health、最近失败原因、各 provider 成功率/延迟、策略 YAML 展示。
+- `scripts/build_t_signal_observer.py`：
+  - 新增逐条件 trace 输出 `output/diagnostics/t_signal_trace_YYYYMMDD.csv`。
+  - trace 记录绿K、1/2/3分钟跌幅、VWAP偏离、倍量、缩量、每条规则 pass/fail、失败原因。
+  - 不改变原 `evaluate_t_signals()` 的通过逻辑、入场价、T 交易模拟口径。
+- 新增 `strategy_config.py` 与：
+  - `config/strategies/v16_buy_confirm.yaml`
+  - `config/strategies/t_positive.yaml`
+  - `config/strategies/funds_alpha.yaml`
+  YAML 读取失败会回落默认配置；第一版只展示/实验读取，不改变正式策略阈值。
+
+### 验收与结果
+
+- `python3 -m py_compile dashboard_app.py diagnostics.py strategy_config.py providers/*.py research/provider_probe.py scripts/build_t_signal_observer.py` 通过。
+- `python3 research/provider_probe.py --symbols 601689 --data-types realtime` 跑通并生成 provider health CSV；当前环境 DNS 失败和缺少 `efinance`/`pytdx` 均被记录为旁路诊断。
+- `python3 scripts/build_t_signal_observer.py --report-date 20260611 --codes 601689 --input-minute-csv data/minute_today/20260611_601689.csv --name-override 601689:拓普集团 --ma5-slope-override 601689:1` 跑通并生成 T trace CSV。
+- Streamlit 测试服务 `http://127.0.0.1:8502` HTTP 200，服务日志无启动异常。
+
+### 安全边界
+
+- 未修改 `run.py`、`trade_review.py`、`config/version_flags.yaml`、`launchd/*.plist`。
+- 未修改 `output/trade_review.csv`。
+- 未运行 `python run.py` 或任何正式交易任务。
+- 未接券商、未自动下单、未新增真实交易执行逻辑。
+- V1.5 资金层仍为观察；9:36 正式买入规则、-3% 止损、正式模拟收益口径均未改变。
+
+---
+
+## 2026-06-11 Codex（严格多重过滤正T独立回测框架）
+
+### 操作模型
+
+Codex
+
+### 本次任务
+
+按朱哥要求新增一个**不接入现有主程序**的 A 股日内正 T 回测研究框架，用于验证「严格多重过滤正T策略（2026年4-6月版）」。
+
+### 做了什么
+
+- 新增 `research/strict_t0_backtest.py` 独立脚本。
+- 支持基础版（不加共振）和完整版（板块 + 情绪共振）同跑对比。
+- 参数全部命令行化：急跌阈值、VWAP 偏离、倍量绿、缩量确认、止盈止损、时间窗口、T 仓位等。
+- 支持 AKShare 拉取分钟 / 日线数据，并缓存到 `output/research/strict_t0/cache/`。
+- 支持本地 CSV 覆盖：`--local-stock-minute-csv`、`--local-sector-minute-csv`、`--local-emotion-minute-csv`、`--local-market-minute-csv`，用于 AKShare 无法提供完整历史分钟数据时导入外部数据。
+- 输出独立研究结果到 `output/research/strict_t0/`，包括 signals / trades / summary / time_distribution / report.md。
+
+### 验收与结果
+
+- `python -m py_compile research/strict_t0_backtest.py` 通过。
+- 默认 `sh601689`、`20260401-20260610` 跑通，但 AKShare 实际只返回 2026-06-05 至 2026-06-10 共 4 个交易日、964 根分钟 K，报告中已明确标记覆盖不足。
+- 板块 / 情绪 / 大盘分钟接口多次被远端断开或 DNS 失败，脚本已降级生成报告；完整版在无共振数据时无有效信号。
+- 严格窗口与全天窗口在当前 AKShare 返回的 4 个交易日样本中均为 0 信号。
+
+### 安全边界
+
+- 未修改 `run.py`、`trade_review.py`、`dashboard_app.py`、`config/version_flags.yaml`、`launchd/*.plist`。
+- 未读取或写入 `output/trade_review.csv`。
+- 未接入任何真实交易、券商或下单逻辑。
+
+---
+
 ## 2026-06-08 Claude（update_review 复盘崩溃修复 + 涨跌幅显示 bug）
 
 ### 操作模型

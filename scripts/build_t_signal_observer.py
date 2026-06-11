@@ -46,6 +46,7 @@ from typing import Optional
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 OUTPUT_DIR = BASE_DIR / "output" / "t_signal"
+DIAGNOSTICS_DIR = BASE_DIR / "output" / "diagnostics"
 SAMPLE_DIR = BASE_DIR / "data" / "minute_samples"
 
 OBSERVER_NOTE = "当前仅为 T 信号模拟记录，不构成自动买卖指令"
@@ -117,6 +118,32 @@ FIELDS = [
     "resonance_emotion_drop_pct",
     "resonance_pass",
     "resonance_skip_reason",
+]
+
+TRACE_FIELDS = [
+    "date",
+    "scan_time",
+    "stock_code",
+    "stock_name",
+    "data_source",
+    "bar_timestamp",
+    "bar_delay_seconds",
+    "is_green_k",
+    "drop_pct_1m",
+    "drop_pct_2m",
+    "drop_pct_3m",
+    "drop_pct_max",
+    "below_vwap_pct",
+    "green_vol_multiple",
+    "shrink_ratio",
+    "rule_time_window_pass",
+    "rule_drop_pass",
+    "rule_vwap_pass",
+    "rule_green_vol_pass",
+    "rule_shrink_pass",
+    "final_pass",
+    "fail_reasons",
+    "signal_side",
 ]
 
 
@@ -293,6 +320,118 @@ def _calc_window_drop_pct(
     if window_high <= 0:
         return None
     return (end_close / window_high) - 1.0
+
+
+def _round_pct(value: Optional[float]) -> str:
+    if value is None:
+        return ""
+    try:
+        return round(float(value) * 100, 3)
+    except Exception:
+        return ""
+
+
+def build_t_condition_trace(
+    minute_bars: list[dict],
+    stock_code: str,
+    stock_name: str = "",
+    data_source: str = "minute_csv",
+    ma5_slope_up: Optional[bool] = None,
+    sector_bars: Optional[list[dict]] = None,
+    emotion_bars: Optional[list[dict]] = None,
+) -> list[dict]:
+    """Build per-bar T rule trace without changing signal decisions."""
+    if not minute_bars:
+        return []
+    bars = [dict(b) for b in minute_bars]
+    _annotate_vwap_inplace(bars)
+    scan_time = datetime.now()
+    slope_ok = True if ma5_slope_up is None else bool(ma5_slope_up)
+    rows: list[dict] = []
+    for i, trigger in enumerate(bars):
+        t_str = trigger["datetime"].strftime("%H:%M")
+        time_ok = _in_time_window(t_str)
+        if not time_ok:
+            continue
+
+        bar_color = _bar_color(trigger["open"], trigger["close"])
+        is_green = bar_color == "green"
+        drops: dict[int, Optional[float]] = {1: None, 2: None, 3: None}
+        for w in (1, 2, 3):
+            if i < w:
+                continue
+            window_slice = bars[i - w: i + 1]
+            highs = [b["high"] for b in window_slice if b["high"] > 0 and math.isfinite(b["high"])]
+            if highs:
+                drops[w] = (trigger["close"] / max(highs)) - 1.0
+        valid_drops = [d for d in drops.values() if d is not None]
+        drop_max = min(valid_drops) if valid_drops else None
+        rule_drop = drop_max is not None and drop_max <= -DROP_PCT_MIN
+
+        vwap_val = trigger.get("vwap")
+        below_vwap = None
+        if vwap_val is not None and vwap_val > 0:
+            below_vwap = (trigger["close"] / vwap_val) - 1.0
+        rule_vwap = below_vwap is not None and below_vwap <= -BELOW_VWAP_PCT
+
+        prev_green = _same_color_bars(bars[:i], "green")[-3:]
+        green_vol_multiple = None
+        rule_green_vol = False
+        if prev_green:
+            prev_vols = [b["volume"] for b in prev_green if b.get("volume", 0) > 0]
+            if prev_vols:
+                min_prev_vol = min(prev_vols)
+                green_vol_multiple = trigger["volume"] / min_prev_vol if min_prev_vol > 0 else None
+                rule_green_vol = green_vol_multiple is not None and green_vol_multiple >= VOL_MULTIPLE_MIN
+
+        shrink_ratio = None
+        rule_shrink = False
+        if i + 1 < len(bars) and trigger.get("volume", 0) > 0:
+            shrink_ratio = bars[i + 1]["volume"] / trigger["volume"]
+            rule_shrink = shrink_ratio <= SHRINK_RATIO_MAX
+
+        fail_reasons = []
+        if not slope_ok:
+            fail_reasons.append("ma5_slope_down")
+        if not is_green:
+            fail_reasons.append("not_green_k")
+        if not rule_drop:
+            fail_reasons.append("drop_not_enough")
+        if not rule_vwap:
+            fail_reasons.append("vwap_deviation_not_enough")
+        if not rule_green_vol:
+            fail_reasons.append("green_volume_not_enough")
+        if not rule_shrink:
+            fail_reasons.append("shrink_not_confirmed")
+
+        final_pass = bool(slope_ok and is_green and rule_drop and rule_vwap and rule_green_vol and rule_shrink)
+        delay = int((scan_time - trigger["datetime"]).total_seconds())
+        rows.append({
+            "date": scan_time.strftime("%Y%m%d"),
+            "scan_time": scan_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "stock_code": stock_code,
+            "stock_name": stock_name,
+            "data_source": data_source,
+            "bar_timestamp": trigger["datetime"].strftime("%Y-%m-%d %H:%M:%S"),
+            "bar_delay_seconds": max(delay, 0),
+            "is_green_k": is_green,
+            "drop_pct_1m": _round_pct(drops[1]),
+            "drop_pct_2m": _round_pct(drops[2]),
+            "drop_pct_3m": _round_pct(drops[3]),
+            "drop_pct_max": _round_pct(drop_max),
+            "below_vwap_pct": _round_pct(below_vwap),
+            "green_vol_multiple": round(green_vol_multiple, 3) if green_vol_multiple is not None else "",
+            "shrink_ratio": round(shrink_ratio, 4) if shrink_ratio is not None else "",
+            "rule_time_window_pass": time_ok,
+            "rule_drop_pass": rule_drop,
+            "rule_vwap_pass": rule_vwap,
+            "rule_green_vol_pass": rule_green_vol,
+            "rule_shrink_pass": rule_shrink,
+            "final_pass": final_pass,
+            "fail_reasons": ";".join(fail_reasons),
+            "signal_side": "sim_buy" if final_pass else "",
+        })
+    return rows
 
 
 def _fetch_index_minute_bars_today(index_code: str) -> list[dict]:
@@ -837,6 +976,20 @@ def write_output(all_signals: list[dict], report_date: str) -> None:
     print(f"✅ 已覆盖：{latest_path.name}")
 
 
+def write_trace_output(trace_rows: list[dict], report_date: str) -> None:
+    """Write per-condition T trace diagnostics. This is observer-only."""
+    if not trace_rows:
+        return
+    DIAGNOSTICS_DIR.mkdir(parents=True, exist_ok=True)
+    path = DIAGNOSTICS_DIR / f"t_signal_trace_{report_date}.csv"
+    with open(path, "w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=TRACE_FIELDS)
+        writer.writeheader()
+        for row in trace_rows:
+            writer.writerow({field: row.get(field, "") for field in TRACE_FIELDS})
+    print(f"✅ 已写入逐条件 trace：{path}")
+
+
 # ─────────────────── CLI ──────────────────────────────────────────────
 
 def parse_ma10_overrides(raw: list[str]) -> dict[str, float]:
@@ -931,6 +1084,7 @@ def main() -> None:
               f"情绪指数: {len(g_emotion_bars)} bars")
 
     all_signals = []
+    all_trace_rows = []
 
     if args.input_minute_csv:
         for csv_path in args.input_minute_csv:
@@ -979,6 +1133,15 @@ def main() -> None:
                     sector_bars=_sec,
                     emotion_bars=_emo,
                 )
+                all_trace_rows.extend(build_t_condition_trace(
+                    minute_bars,
+                    code,
+                    stock_name=name_val or "名称未获取",
+                    data_source="minute_sample" if is_sample else "minute_csv",
+                    ma5_slope_up=ma5_slope,
+                    sector_bars=_sec,
+                    emotion_bars=_emo,
+                ))
                 for s in sigs:
                     if is_sample:
                         # 测试样例模式：使用测试名称，标记为非真实
@@ -1019,6 +1182,7 @@ def main() -> None:
         return
 
     write_output(all_signals, report_date)
+    write_trace_output(all_trace_rows, report_date)
 
     # Summary
     n_pass = sum(1 for s in all_signals if s.get("rule_pass") is True)

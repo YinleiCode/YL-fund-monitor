@@ -1,0 +1,19 @@
+name: t_positive
+display_name: 严格多重过滤正T
+module_status: experimental
+used_for_official: false
+description: "盘中低吸/做T实验模块配置展示；不参与正式模拟收益。"
+rules:
+  time_window_start: "09:33"
+  time_window_end: "10:15"
+  drop_pct_min: 0.007
+  below_vwap_pct: 0.013
+  vol_multiple_min: 2.0
+  shrink_ratio_max: 0.5
+  resonance_sector_drop_max: 0.004
+  resonance_emotion_drop_max: 0.005
+safety:
+  execution_mode: simulate
+  can_execute_live: false
+  order_status: not_submitted
+  broker_status: not_connected

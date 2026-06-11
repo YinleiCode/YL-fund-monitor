@@ -37,6 +37,8 @@ from typing import Optional, Tuple
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+from diagnostics import latest_diagnostics_file
+from strategy_config import load_all_strategy_configs
 
 # 手动「只观察」开关（朱哥 2026-06-05 加，替代 V1.6 plan 自动拦截）
 from manual_observe import (
@@ -80,6 +82,7 @@ WATCHLIST_PATH   = BASE_DIR / "data" / "watchlist" / "custom_stock_pool.csv"
 # —— V1.7 · LLM 情绪+新闻分析师 (mark_only, 朱哥 2026-06-05 立项) ——
 V17_SENTIMENT_DIR    = OUTPUT_DIR / "news_sentiment"
 V17_SENTIMENT_LATEST = V17_SENTIMENT_DIR / "news_sentiment_latest.csv"
+DIAGNOSTICS_DIR      = OUTPUT_DIR / "diagnostics"
 
 # ─── 颜色（RADAR_TERMINAL：深蓝黑·电光青·霓虹绿·玻璃态磨砂）──────────────
 # 参考 Material You dark palette — surface #0F141B, tertiary #00DAF3, secondary-fixed-dim #00E479
@@ -597,6 +600,82 @@ def last_modified(path: Path) -> str:
     if not path.exists():
         return "（文件不存在）"
     return datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _file_status(path: Path) -> dict:
+    if not path.exists():
+        return {
+            "source": str(path.relative_to(BASE_DIR)) if path.is_absolute() or path.parts else str(path),
+            "timestamp": "",
+            "freshness": "missing",
+            "is_realtime": False,
+            "is_delayed": False,
+            "is_fallback": False,
+            "is_missing": True,
+            "is_experimental": False,
+            "used_for_official": False,
+        }
+    mtime = datetime.fromtimestamp(path.stat().st_mtime)
+    age = (datetime.now() - mtime).total_seconds()
+    return {
+        "source": str(path.relative_to(BASE_DIR)) if path.is_relative_to(BASE_DIR) else str(path),
+        "timestamp": mtime.strftime("%Y-%m-%d %H:%M:%S"),
+        "freshness": "fresh" if age <= 900 else ("stale" if age <= 86400 else "old"),
+        "is_realtime": age <= 180,
+        "is_delayed": age > 180,
+        "is_fallback": False,
+        "is_missing": False,
+        "is_experimental": False,
+        "used_for_official": False,
+    }
+
+
+def _read_latest_diag(prefix: str) -> pd.DataFrame:
+    path = latest_diagnostics_file(prefix)
+    if path is None or not path.exists():
+        return pd.DataFrame()
+    try:
+        return pd.read_csv(path, dtype=str, keep_default_na=False, encoding="utf-8-sig")
+    except Exception:
+        return pd.DataFrame()
+
+
+def _render_t_trace_panel() -> None:
+    df = _read_latest_diag("t_signal_trace")
+    if df.empty:
+        status_banner(
+            "暂无 T 信号逐条件 trace。下一次运行 `scripts/build_t_signal_observer.py` 后会生成 `output/diagnostics/t_signal_trace_YYYYMMDD.csv`。",
+            "info",
+        )
+        return
+    st.markdown("### 逐条件 Trace")
+    df = df.copy()
+    for col in ("final_pass", "rule_drop_pass", "rule_vwap_pass", "rule_green_vol_pass", "rule_shrink_pass"):
+        if col in df.columns:
+            df[col] = df[col].astype(str).str.lower().isin(("true", "1", "yes"))
+    total = len(df)
+    final_pass = int(df.get("final_pass", pd.Series(dtype=bool)).sum()) if "final_pass" in df.columns else 0
+    delayed = 0
+    if "bar_delay_seconds" in df.columns:
+        delayed = int((pd.to_numeric(df["bar_delay_seconds"], errors="coerce").fillna(0) > 180).sum())
+    fail_top = ""
+    if "fail_reasons" in df.columns and not df["fail_reasons"].empty:
+        fail_top = df["fail_reasons"].astype(str).str.split(";").explode().replace("", pd.NA).dropna().value_counts().head(1)
+        fail_top = "" if fail_top.empty else str(fail_top.index[0])
+    c1, c2, c3, c4 = st.columns(4)
+    c1.markdown(kpi_card("Trace 行数", total, COLOR_TEXT), unsafe_allow_html=True)
+    c2.markdown(kpi_card("最终触发", final_pass, COLOR_SECOND), unsafe_allow_html=True)
+    c3.markdown(kpi_card("延迟K线", delayed, COLOR_WARN_YELLOW if delayed else COLOR_BOUGHT, ">180秒"), unsafe_allow_html=True)
+    c4.markdown(kpi_card("首要失败", fail_top or "—", COLOR_DROP if fail_top else COLOR_BOUGHT), unsafe_allow_html=True)
+
+    show_cols = [
+        "scan_time", "stock_code", "stock_name", "bar_timestamp", "bar_delay_seconds",
+        "is_green_k", "drop_pct_max", "below_vwap_pct", "green_vol_multiple", "shrink_ratio",
+        "rule_drop_pass", "rule_vwap_pass", "rule_green_vol_pass", "rule_shrink_pass",
+        "final_pass", "fail_reasons", "signal_side",
+    ]
+    show_cols = [c for c in show_cols if c in df.columns]
+    st.dataframe(df[show_cols].tail(80), width="stretch", hide_index=True)
 
 
 def enrich_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -2743,6 +2822,9 @@ def page_today(df_all: pd.DataFrame) -> None:
     旧的 render_today_terminal_home / render_today_hero / render_today_banner
     仍然保留在代码中，但 page_today 不再调用，避免视觉风格混合。
     """
+    _render_today_command_center(df_all)
+    st.divider()
+
     # 合并多个数据源的日期
     all_dates = _collect_available_dates()
     if not all_dates:
@@ -5310,6 +5392,73 @@ def page_manual_rerun() -> None:
 
     log_tail = _read_log_tail(AUTO_LOG, lines=100)
     st.code(log_tail, language="text", line_numbers=False)
+
+    st.divider()
+    _render_provider_health_panel()
+
+    st.divider()
+    _render_strategy_rules_panel()
+
+
+def _render_provider_health_panel() -> None:
+    st.markdown("### 数据源健康")
+    df = _read_latest_diag("provider_health")
+    if df.empty:
+        status_banner(
+            "暂无 provider health 诊断。可手动运行 `python research/provider_probe.py --symbols 601689,688160`，该脚本只写 diagnostics，不写 trade_review.csv。",
+            "info",
+        )
+        return
+    df = df.copy()
+    df["latency_ms_num"] = pd.to_numeric(df.get("latency_ms", ""), errors="coerce")
+    df["ok"] = df.get("status", "").astype(str).eq("ok")
+    total = len(df)
+    ok_count = int(df["ok"].sum())
+    fallback_count = int(df.get("is_fallback", pd.Series(dtype=str)).astype(str).str.lower().isin(("true", "1")).sum())
+    official_count = int(df.get("used_for_official", pd.Series(dtype=str)).astype(str).str.lower().isin(("true", "1")).sum())
+    c1, c2, c3, c4 = st.columns(4)
+    c1.markdown(kpi_card("诊断记录", total, COLOR_TEXT), unsafe_allow_html=True)
+    c2.markdown(kpi_card("成功率", f"{ok_count / total * 100:.1f}%" if total else "0%", COLOR_BOUGHT if ok_count else COLOR_DROP), unsafe_allow_html=True)
+    c3.markdown(kpi_card("平均延迟", f"{df['latency_ms_num'].mean():.0f} ms" if df["latency_ms_num"].notna().any() else "—", COLOR_SECOND), unsafe_allow_html=True)
+    c4.markdown(kpi_card("正式使用", official_count, COLOR_WARN_YELLOW if official_count else COLOR_BOUGHT, "应为 0；probe 旁路"), unsafe_allow_html=True)
+
+    by_provider = (
+        df.groupby("provider", dropna=False)
+        .agg(
+            records=("provider", "size"),
+            success=("ok", "sum"),
+            avg_latency_ms=("latency_ms_num", "mean"),
+            failures=("status", lambda s: int((s.astype(str) != "ok").sum())),
+        )
+        .reset_index()
+    )
+    by_provider["success_rate"] = (by_provider["success"] / by_provider["records"] * 100).round(1)
+    by_provider["avg_latency_ms"] = by_provider["avg_latency_ms"].round(0)
+    st.dataframe(by_provider, width="stretch", hide_index=True)
+
+    failed = df[df.get("status", "").astype(str) != "ok"].copy()
+    if not failed.empty:
+        st.markdown("### 最近失败原因")
+        cols = [c for c in ["time", "provider", "data_type", "symbol", "status", "latency_ms", "error_message", "used_for_official"] if c in failed.columns]
+        st.dataframe(failed[cols].tail(30), width="stretch", hide_index=True)
+
+
+def _render_strategy_rules_panel() -> None:
+    st.markdown("### 当前策略规则")
+    configs = load_all_strategy_configs()
+    rows = []
+    for cfg in configs:
+        rules = cfg.get("rules", {}) if isinstance(cfg.get("rules", {}), dict) else {}
+        rows.append({
+            "策略": cfg.get("display_name", cfg.get("name")),
+            "状态": cfg.get("module_status", ""),
+            "正式使用": cfg.get("used_for_official", False),
+            "来源": cfg.get("_source", ""),
+            "读取异常": cfg.get("_load_error", ""),
+            "规则": json.dumps(rules, ensure_ascii=False),
+        })
+    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+    st.caption("第一版 YAML 只用于规则展示和实验模块读取；正式 9:36 买入、-3% 止损、收益统计仍沿用原代码口径。")
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -7956,6 +8105,7 @@ def page_t_signal() -> None:
         "当前为做 T 模拟记录，不构成自动买卖指令。",
         "warning",
     )
+    _render_t_trace_panel()
 
     signals_raw = _ts_load_signals()
     trades_raw = _tt_load_latest()
@@ -9961,47 +10111,128 @@ def page_watchlist() -> None:
 # ─── 数据新鲜度：今日驾驶舱顶部状态条 ──────────────────────────────────────
 
 def _render_data_freshness(df_all: pd.DataFrame) -> None:
-    """今日驾驶舱顶部：4个维度数据新鲜度说明条。"""
+    """今日驾驶舱顶部：关键数据新鲜度说明条。"""
     from datetime import datetime as _dt, date as _date
     today = _date.today()
     today_str  = today.strftime("%Y%m%d")
-    today_iso  = today.strftime("%Y-%m-%d")
 
-    # 1. 09:36 行情是否完成
-    bought_today = False
-    if not df_all.empty:
-        date_col = next(
-            (c for c in ["pick_date", "trade_date", "date", "signal_date"] if c in df_all.columns),
-            None,
-        )
-        if date_col:
-            bought_today = df_all[df_all[date_col].astype(str).str[:10] == today_iso].shape[0] > 0
-
-    # 2. T模块是否跑过今天
     t_path = OUTPUT_DIR / "t_signal" / f"t_signal_{today_str}.csv"
-    t_done = t_path.exists() and t_path.stat().st_size > 100
-
-    # 3. 复盘是否今日更新
-    csv_mtime = CSV_PATH.stat().st_mtime if CSV_PATH.exists() else 0
-    review_today = _dt.fromtimestamp(csv_mtime).date() == today if csv_mtime else False
+    trace_path = DIAGNOSTICS_DIR / f"t_signal_trace_{today_str}.csv"
+    health_path = latest_diagnostics_file("provider_health")
+    review_mtime = CSV_PATH.stat().st_mtime if CSV_PATH.exists() else 0
+    review_today = _dt.fromtimestamp(review_mtime).date() == today if review_mtime else False
+    rows_today = _today_rows(df_all, today_str)
+    check_done = _check_buy_done(rows_today)
 
     items = [
-        ("09:36 行情",  "✅ 已完成" if bought_today else "⏳ 未完成 / 非交易日",  bought_today),
-        ("资金数据",    "⚠️ V1.5 实验口径，不影响买入",                            None),
-        ("T 模块",      "✅ 今日已扫描" if t_done else "⏳ 尚未运行",               t_done),
-        ("复盘数据",    "✅ 今日已更新" if review_today else "⏳ 昨日或更早",        review_today),
+        ("9:36行情数据", _file_status(CSV_PATH) | {"used_for_official": True, "is_missing": not check_done}),
+        ("分钟K数据", _file_status(t_path) | {"is_experimental": True}),
+        ("资金数据", _file_status(OUTPUT_DIR / "money_flow" / f"money_flow_{today_str}.csv") | {"is_experimental": True}),
+        ("板块/情绪数据", _file_status(health_path) if health_path else {"source": "output/diagnostics/provider_health_*.csv", "timestamp": "", "freshness": "missing", "is_realtime": False, "is_delayed": False, "is_fallback": False, "is_missing": True, "is_experimental": True, "used_for_official": False}),
+        ("T+1复盘数据", _file_status(CSV_PATH) | {"used_for_official": True, "is_missing": not review_today}),
+        ("T模块数据", _file_status(trace_path) | {"is_experimental": True}),
     ]
-    cols = st.columns(len(items))
-    for col, (label, status, ok) in zip(cols, items):
-        border = "#00d4aa" if ok else ("#f59e0b" if ok is None else "#6b7280")
+    cols = st.columns(3)
+    for idx, (label, meta) in enumerate(items):
+        col = cols[idx % 3]
+        missing = bool(meta.get("is_missing"))
+        experimental = bool(meta.get("is_experimental"))
+        official = bool(meta.get("used_for_official"))
+        border = COLOR_DROP if missing else (COLOR_WARN_YELLOW if experimental else COLOR_BOUGHT)
+        status = "MISSING" if missing else str(meta.get("freshness", "unknown")).upper()
+        role = "正式" if official else ("实验" if experimental else "观察")
         col.markdown(
-            f"""<div style="padding:6px 10px;border-left:3px solid {border};
-            background:#0a1628;border-radius:4px;font-size:12px;line-height:1.7;margin-bottom:2px">
-            <span style="color:#8899aa;font-size:10px;text-transform:uppercase;letter-spacing:.5px">{label}</span><br>
-            <span style="color:#e2e8f0">{status}</span></div>""",
+            f"""<div style="padding:10px 12px;border-left:3px solid {border};
+            background:rgba(10,22,40,.78);border-radius:8px;font-size:12px;line-height:1.7;margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;gap:8px;">
+              <span style="color:#8899aa;font-size:10px;text-transform:uppercase;letter-spacing:.5px">{_eh(label)}</span>
+              <span style="color:{border};font-family:{FONT_MONO};font-size:10px">{role}</span>
+            </div>
+            <div style="color:#e2e8f0;font-weight:700">{status}</div>
+            <div style="color:{COLOR_MUTED};font-size:11px">source: {_eh(str(meta.get("source", "")))}</div>
+            <div style="color:{COLOR_MUTED};font-size:11px">timestamp: {_eh(str(meta.get("timestamp", "") or "—"))}</div>
+            <div style="color:{COLOR_FAINT};font-size:10px">realtime={meta.get("is_realtime")} delayed={meta.get("is_delayed")} fallback={meta.get("is_fallback")}</div>
+            </div>""",
             unsafe_allow_html=True,
         )
     st.markdown("<div style='margin-bottom:4px'></div>", unsafe_allow_html=True)
+
+
+def _today_rows(df_all: pd.DataFrame, today_str: Optional[str] = None) -> pd.DataFrame:
+    if today_str is None:
+        today_str = datetime.now().strftime("%Y%m%d")
+    if df_all.empty or "report_date" not in df_all.columns:
+        return pd.DataFrame()
+    return df_all[df_all["report_date"].astype(str).str.replace("-", "", regex=False) == today_str].copy()
+
+
+def _check_buy_done(rows: pd.DataFrame) -> bool:
+    if rows.empty:
+        return False
+    for col in ("buy_signal_0935", "price_0935", "check_buy_time", "adjusted_buy_price"):
+        if col in rows.columns and rows[col].astype(str).str.strip().ne("").any():
+            return True
+    return False
+
+
+def _today_is_trading_day() -> tuple[bool, str]:
+    try:
+        import data_fetcher
+
+        ok = bool(data_fetcher._is_trading_day(datetime.now().date()))
+        return ok, "交易日历"
+    except Exception as exc:
+        weekday_ok = datetime.now().weekday() < 5
+        return weekday_ok, f"weekday fallback: {type(exc).__name__}"
+
+
+def _count_truthy(rows: pd.DataFrame, col: str) -> int:
+    if rows.empty or col not in rows.columns:
+        return 0
+    return int(rows[col].map(_gb).eq(True).sum())
+
+
+def _render_today_command_center(df_all: pd.DataFrame) -> None:
+    today_str = datetime.now().strftime("%Y%m%d")
+    rows = _today_rows(df_all, today_str)
+    is_trading, cal_source = _today_is_trading_day()
+    mode_values = rows.get("mode", pd.Series(dtype=str)).astype(str).tolist() if not rows.empty else []
+    full_done = "full" in mode_values
+    theme_done = "theme_auto" in mode_values
+    check_done = _check_buy_done(rows)
+    second_done = "second_check_time" in rows.columns and rows["second_check_time"].astype(str).str.strip().ne("").any() if not rows.empty else False
+    review_done = any(c in rows.columns and rows[c].astype(str).str.strip().ne("").any() for c in ("simulated_trade_return", "t1_max_return", "max_drawdown")) if not rows.empty else False
+    current_holding = 0
+    if not df_all.empty and "holding_status" in df_all.columns:
+        current_holding = int(df_all["holding_status"].astype(str).str.contains("holding|open|持仓", case=False, regex=True).sum())
+    bought_today = _count_truthy(rows, "buy_signal_0935")
+    stop_loss_today = _count_truthy(rows, "stop_loss_triggered")
+    missing_mask = pd.Series(False, index=rows.index) if not rows.empty else pd.Series(dtype=bool)
+    if not rows.empty:
+        for col in ("notes", "fail_reason", "realtime_data_status"):
+            if col in rows.columns:
+                missing_mask = missing_mask | rows[col].astype(str).str.contains("missing|invalid|fail|缺失|失败", case=False, regex=True, na=False)
+    data_anomaly_count = int(missing_mask.sum()) if not rows.empty else 0
+
+    items = [
+        ("今天是否交易日", "是" if is_trading else "否", cal_source, is_trading),
+        ("08:50 pick", "完成" if full_done else "未完成", "full 模式记录", full_done),
+        ("08:55 theme_auto", "完成" if theme_done else "未完成", "主题龙头模式记录", theme_done),
+        ("09:36 check_buy", "完成" if check_done else "未完成", "正式模拟买入开关", check_done),
+        ("10:01 second_check", "完成" if second_done else "未完成", "观察模块", second_done),
+        ("19:00 update_review", "完成" if review_done else "未完成", "正式复盘口径", review_done),
+        ("当前持仓", str(current_holding), "模拟持仓/跟踪", True),
+        ("今日模拟买入", str(bought_today), "正式模拟收益口径", True),
+        ("今日止损", str(stop_loss_today), "-3% 主链路口径", stop_loss_today == 0),
+        ("数据异常", str(data_anomaly_count), "缺失/延迟/失败标记", data_anomaly_count == 0),
+        ("正式模块", "今日/持仓/自选/复盘", "影响或展示正式模拟收益", True),
+        ("实验模块", "做T/资金/Provider Probe", "不参与正式收益", None),
+    ]
+    st.markdown("### 今日驾驶舱")
+    cols = st.columns(4)
+    for idx, (label, value, sub, ok) in enumerate(items):
+        color = COLOR_BOUGHT if ok is True else (COLOR_WARN_YELLOW if ok is None else COLOR_DROP)
+        cols[idx % 4].markdown(kpi_card(label, value, color, sub), unsafe_allow_html=True)
 
 
 # ─── main ───────────────────────────────────────────────────────────────
@@ -10884,17 +11115,9 @@ def main() -> None:
         st.markdown(
             """
             <style>
-              html, body, [data-testid="stAppViewContainer"], .stApp, section.main {
-                overflow: hidden !important;
-                height: 100vh !important;
-                max-height: 100vh !important;
-              }
               .main .block-container {
-                height: calc(100vh - 40px) !important;
-                max-height: calc(100vh - 40px) !important;
-                overflow: hidden !important;
-                padding-top: 0 !important;
-                padding-bottom: 0 !important;
+                padding-top: 28px !important;
+                padding-bottom: 32px !important;
               }
               .main [data-testid="stVerticalBlock"] {
                 gap: 0.18rem !important;

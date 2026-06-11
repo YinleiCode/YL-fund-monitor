@@ -1,0 +1,12 @@
+name: funds_alpha
+display_name: 资金条件层观察
+module_status: observational
+used_for_official: false
+description: "V1.5 资金预筛观察口径，不接入正式 9:36 买入，不改变收益统计。"
+rules:
+  mode: observe_only
+  affect_check_buy: false
+  write_audit_fields: true
+safety:
+  changes_official_logic: false
+  changes_trade_review_schema: false
