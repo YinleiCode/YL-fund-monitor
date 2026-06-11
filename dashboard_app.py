@@ -2543,19 +2543,23 @@ def _v2_stock_card(r) -> str:
 
 def _v2_sidebar_capital(daily: Optional[dict]) -> str:
     """侧栏 1：市场脉冲（北向资金 / 两市成交 / 涨停 / 跌停）。"""
+    missing_daily = not bool(daily)
     advance = _md_get_int(daily, "advance_count")
     decline = _md_get_int(daily, "decline_count")
     total_amount = _md_get_float(daily, "total_amount")
     lu = _md_get_int(daily, "limit_up_count")
     ld = _md_get_int(daily, "limit_down_count")
     amount_str = f"{(total_amount or 0) / 1e8:,.0f} 亿" if total_amount else "—"
-    # 北向资金（如果 daily 里有则取，否则用 ADR 估算占位）
+    # 北向资金：当前 market_daily 没有稳定接入该字段，不能用横杠伪装成正常空值。
     north = _md_get_float(daily, "northbound_capital_amount")
     if north is not None:
         north_str = f"{'+' if north >= 0 else ''}{north / 1e8:.2f} 亿"
         north_color = COLOR_BOUGHT if north >= 0 else COLOR_MAGENTA_NEON
-    else:
+    elif missing_daily:
         north_str = "—"
+        north_color = COLOR_MUTED
+    else:
+        north_str = "未接入"
         north_color = COLOR_MUTED
 
     rows = [
@@ -2566,6 +2570,14 @@ def _v2_sidebar_capital(daily: Optional[dict]) -> str:
         ("涨停数", str(lu) if lu is not None else "—", COLOR_BOUGHT if lu is not None else COLOR_MUTED),
         ("跌停数", str(ld) if ld is not None else "—", COLOR_MAGENTA_NEON if ld is not None else COLOR_MUTED),
     ]
+    note_html = ""
+    if missing_daily:
+        note_html = _h(f"""
+        <div style="margin-top:10px;padding:8px 10px;border:1px solid {COLOR_WARN_YELLOW}55;
+                    border-radius:8px;background:{COLOR_WARN_YELLOW}10;
+                    color:{COLOR_WARN_YELLOW};font-family:{FONT_BODY};font-size:11px;line-height:1.55;">
+          今日市场快照未生成。该卡依赖 19:00 复盘任务生成的本地市场文件，不是实时行情源。
+        </div>""")
     rows_html = "".join(
         _h(f"""
         <div style="display:flex;justify-content:space-between;align-items:center;
@@ -2591,6 +2603,7 @@ def _v2_sidebar_capital(daily: Optional[dict]) -> str:
         <div style="font-family:{FONT_HEADLINE};font-size:15px;color:{COLOR_TEXT};
                     font-weight:700;margin-top:2px;">市场脉冲</div>
         <div style="margin-top:6px;">{rows_html}</div>
+        {note_html}
       </div>
     </div>""")
 
@@ -2655,31 +2668,31 @@ def _v2_sidebar_v16_rates(df: pd.DataFrame, state: dict) -> str:
 
 
 def _v2_sidebar_top3(df: pd.DataFrame) -> str:
-    """侧栏 3：核心推荐（按涨幅 TOP3）。无数据时返回空字符串，不渲染整张卡。"""
+    """侧栏 3：候选优先级（按系统排名/总分）。无数据时返回空字符串。"""
     if df.empty:
         return ""  # 空数据时不渲染本卡，避免右侧栏过高导致两栏不齐
 
-    # 没有任何涨跌幅数据也直接不渲染
-    tmp_check = df.copy()
-    tmp_check["__pct"] = tmp_check["open_change_pct"].apply(_gf)
-    tmp_check = tmp_check.dropna(subset=["__pct"])
-    if tmp_check.empty:
+    tmp = df.copy()
+    tmp["__rank_num"] = tmp.get("rank", pd.Series(["999"] * len(tmp))).apply(_gf)
+    tmp["__score_num"] = tmp.get("total_score", pd.Series([""] * len(tmp))).apply(_gf)
+    tmp["__rank_num"] = tmp["__rank_num"].fillna(999)
+    tmp["__score_num"] = tmp["__score_num"].fillna(-999)
+    tmp = tmp.sort_values(["__rank_num", "__score_num"], ascending=[True, False], kind="stable").head(3)
+    if tmp.empty:
         return ""
 
     inner_rows_html = ""
     if True:
-        tmp = df.copy()
-        tmp["__pct"] = tmp["open_change_pct"].apply(_gf)
-        tmp = tmp.dropna(subset=["__pct"]).sort_values("__pct", ascending=False).head(3)
         medals = ["#FFD700", "#C0C0C0", "#CD7F32"]
         medal_chars = ["🥇", "🥈", "🥉"]
         rows = []
         for i, (_, r) in enumerate(tmp.iterrows()):
             medal = medals[i] if i < 3 else "#909096"
             mc = medal_chars[i] if i < 3 else "·"
-            pct = r["__pct"]
-            pct_color = COLOR_BOUGHT if pct >= 0 else COLOR_MAGENTA_NEON
-            sign = "+" if pct >= 0 else ""
+            score = _gf(r.get("total_score"))
+            status_text = "9:36 已确认" if is_bought(r) else ("持续观察" if not is_not_checked(r) else "待检查")
+            status_color = COLOR_BOUGHT if is_bought(r) else (COLOR_SECOND if not is_not_checked(r) else COLOR_WARN_YELLOW)
+            score_text = f"总分 {score:.1f}" if score is not None else status_text
             rows.append(_h(f"""
             <div style="display:flex;align-items:center;gap:10px;padding:10px 0;
                         border-bottom:1px solid {COLOR_DIVIDER};">
@@ -2696,7 +2709,7 @@ def _v2_sidebar_top3(df: pd.DataFrame) -> str:
                             margin-top:2px;">{_eh(r.get("stock_code", "—"))}</div>
               </div>
               <div style="font-family:{FONT_MONO};font-size:13px;font-weight:700;
-                          color:{pct_color};white-space:nowrap;">{sign}{pct:.2f}%</div>
+                          color:{status_color};white-space:nowrap;">{_eh(score_text)}</div>
             </div>"""))
         inner_rows_html = "".join(rows)
     if not inner_rows_html:
@@ -2725,9 +2738,12 @@ def _v2_sidebar_top3(df: pd.DataFrame) -> str:
       <div style="margin-left:6px;">
         <div style="font-family:{FONT_MONO};font-size:10px;color:{COLOR_MAGENTA_NEON};
                     letter-spacing:0.16em;text-transform:uppercase;
-                    text-shadow:0 0 6px rgba(255,61,138,0.45);">核心推荐</div>
+                    text-shadow:0 0 6px rgba(255,61,138,0.45);">候选优先级</div>
         <div style="font-family:{FONT_HEADLINE};font-size:15px;color:{COLOR_TEXT};
-                    font-weight:700;margin-top:2px;">核心推荐</div>
+                    font-weight:700;margin-top:2px;">候选优先级</div>
+        <div style="margin-top:5px;font-family:{FONT_BODY};font-size:11px;color:{COLOR_FAINT};line-height:1.5;">
+          按系统排名和总分展示，不代表额外买入建议。
+        </div>
         <div style="margin-top:8px;">{inner_rows_html}</div>
       </div>
     </div>""")
