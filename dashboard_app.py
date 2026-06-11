@@ -8977,7 +8977,7 @@ def page_watchlist() -> None:
           }
           .watchlist-page-head {
             max-width: 1060px;
-            margin: -112px auto 8px auto;
+            margin: 0 auto 8px auto;
           }
           .watchlist-hero {
             display: grid;
@@ -9582,7 +9582,7 @@ def page_watchlist() -> None:
               padding-right: 18px !important;
             }
             .watchlist-page-head {
-              margin-top: -40px;
+              margin-top: 0;
             }
             .watchlist-hero,
             .watchlist-alert-row {
@@ -10133,7 +10133,7 @@ def main() -> None:
           font-size: 12px !important;
       }}
       .st-key-today_date_sel {{
-          margin-top: -144px !important;
+          margin-top: 8px !important;
           margin-bottom: -6px !important;
       }}
       .st-key-today_date_sel::before {{
@@ -10348,8 +10348,8 @@ def main() -> None:
       .top-nav-radio + div[data-testid="stRadio"] [role="radiogroup"],
       div[data-testid="stElementContainer"]:has(.top-nav-radio) + div[data-testid="stElementContainer"] div[data-testid="stRadio"] [role="radiogroup"] {{
           display: grid !important;
-          /* 2026-06-06 朱哥精简: 11 → 7 列 (内嵌 tab 合并低频页) */
-          grid-template-columns: repeat(7, minmax(0, 1fr));
+          /* 2026-06-10 V1.6-clean: 7 → 6 列 */
+          grid-template-columns: repeat(6, minmax(0, 1fr));
           flex-wrap: nowrap;
           gap: 6px;
           overflow: visible;
