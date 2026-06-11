@@ -46,9 +46,9 @@ def main() -> int:
 
     results = []
     ok = True
-    for page in PAGES:
+    for page_idx, page in enumerate(PAGES):
         at = AppTest.from_file(str(BASE_DIR / "dashboard_app.py"), default_timeout=30)
-        at.session_state["top_nav_page"] = page
+        at.query_params["page"] = str(page_idx)
         at.run()
         exceptions = [str(e.value) for e in at.exception]
         text = _collect_text(at)

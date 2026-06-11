@@ -1089,7 +1089,7 @@ def kpi_card(
     Stitch RADAR_TERMINAL V2 设计稿同步（2026-06-01）。
     向后兼容：trend/accent_bar 是新参数且都有默认值，老调用点不受影响。
     """
-    sub_html = (f'<div style="font-size:12px;color:{COLOR_MUTED};margin-top:6px;font-family:{FONT_MONO};">'
+    sub_html = (f'<div style="font-size:11px;color:{COLOR_MUTED};margin-top:4px;font-family:{FONT_MONO};">'
                 f'{sub}</div>') if sub else ""
     trend_html = ""
     if trend == "up":
@@ -1098,7 +1098,7 @@ def kpi_card(
     elif trend == "down":
         trend_html = (f'<span style="margin-left:8px;font-size:18px;color:{COLOR_MAGENTA_NEON};'
                       f'vertical-align:middle;">&#9660;</span>')
-    accent = (f'<div style="position:absolute;left:0;top:14px;bottom:14px;width:2px;'
+    accent = (f'<div style="position:absolute;left:0;top:10px;bottom:10px;width:2px;'
               f'background:{color};border-radius:0 2px 2px 0;box-shadow:0 0 12px {color}66;"></div>'
               if accent_bar else '')
     return f"""
@@ -1108,14 +1108,14 @@ def kpi_card(
         backdrop-filter:blur(20px);
         -webkit-backdrop-filter:blur(20px);
         border:1px solid {COLOR_GLASS_EDGE};
-        border-radius:12px;
-        padding:14px 18px 14px 22px;
+        border-radius:8px;
+        padding:10px 12px 10px 16px;
         height:100%;
         transition:transform .18s ease, border-color .18s ease, box-shadow .18s ease;">
       {accent}
-      <div style="font-size:10px;color:{COLOR_MUTED};text-transform:uppercase;letter-spacing:0.14em;font-family:{FONT_MONO};">{label}</div>
-      <div style="margin-top:8px;display:flex;align-items:baseline;">
-        <span style="font-size:30px;font-weight:700;color:{color};line-height:1.1;font-family:{FONT_MONO};letter-spacing:-0.01em;">{value}</span>
+      <div style="font-size:10px;color:{COLOR_MUTED};text-transform:uppercase;letter-spacing:0.10em;font-family:{FONT_MONO};">{label}</div>
+      <div style="margin-top:5px;display:flex;align-items:baseline;">
+        <span style="font-size:24px;font-weight:700;color:{color};line-height:1.05;font-family:{FONT_MONO};letter-spacing:-0.01em;">{value}</span>
         {trend_html}
       </div>
       {sub_html}
@@ -1126,13 +1126,13 @@ def kpi_card(
 def glass_card_html(
     inner: str,
     *,
-    padding: str = "14px 16px",
-    radius: str = "12px",
+    padding: str = "11px 13px",
+    radius: str = "8px",
     accent: Optional[str] = None,      # 左侧 2px accent 条颜色
     extra_style: str = "",
 ) -> str:
     """V2 通用玻璃态卡片容器。配合 st.markdown(..., unsafe_allow_html=True) 渲染。"""
-    acc = (f'<div style="position:absolute;left:0;top:14px;bottom:14px;width:2px;'
+    acc = (f'<div style="position:absolute;left:0;top:10px;bottom:10px;width:2px;'
            f'background:{accent};border-radius:0 2px 2px 0;box-shadow:0 0 10px {accent}55;"></div>'
            if accent else '')
     pad = padding
@@ -1278,11 +1278,11 @@ def status_banner(message: str, level: str = "info") -> None:
             background:{bg};
             border-left:4px solid {fg};
             color:{COLOR_TEXT};
-            padding:11px 16px;
-            border-radius:10px;
-            font-size:13px;
+            padding:8px 12px;
+            border-radius:8px;
+            font-size:12px;
             font-weight:500;
-            margin-bottom:14px;">
+            margin-bottom:8px;">
           <span style="color:{fg};margin-right:8px;">{icon}</span>{message}
         </div>
         """,
@@ -1300,38 +1300,38 @@ def render_page_header(
 ) -> None:
     badges = badges or []
     badge_html = "".join(
-        f"<span style='display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;"
+        f"<span style='display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;"
         f"background:rgba(255,255,255,0.03);border:1px solid {COLOR_BORDER_SOFT};"
-        f"font-family:{FONT_MONO};font-size:11px;font-weight:700;color:{COLOR_MUTED};"
+        f"font-family:{FONT_MONO};font-size:10px;font-weight:700;color:{COLOR_MUTED};"
         f"letter-spacing:0.04em;'>{_eh(b)}</span>"
         for b in badges
     )
     aside_html = ""
     if aside_title or aside_body:
         aside_html = (
-            f"<div style='width:320px;max-width:100%;background:rgba(22,27,34,0.5);"
+            f"<div style='width:280px;max-width:100%;background:rgba(22,27,34,0.5);"
             f"backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.08);"
-            f"border-radius:12px;padding:16px 18px;"
+            f"border-radius:8px;padding:11px 13px;"
             f"box-shadow:inset 0 1px 0 rgba(255,255,255,0.03);'>"
             f"<div style='font-size:10px;letter-spacing:0.16em;color:{COLOR_MUTED};"
             f"font-family:\"JetBrains Mono\",monospace;'>{_eh(aside_title)}</div>"
-            f"<div style='margin-top:8px;font-size:13px;line-height:1.8;color:{COLOR_TEXT};'>{aside_body}</div>"
+            f"<div style='margin-top:5px;font-size:12px;line-height:1.55;color:{COLOR_TEXT};'>{aside_body}</div>"
             f"</div>"
         )
     st.markdown(
         f"""
-        <div class="rt-page-hero" style="margin:0 0 12px 0;padding:18px 20px 16px 20px;border-radius:14px;border:1px solid rgba(255,255,255,0.08);
+        <div class="rt-page-hero" style="margin:0 0 8px 0;padding:12px 14px 11px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);
                     background:
                       radial-gradient(circle at top right, rgba(0,218,243,0.08), transparent 28%),
                       linear-gradient(180deg, rgba(15,20,27,0.7) 0%, rgba(10,14,23,0.85) 100%);
                     backdrop-filter: blur(18px);
                     box-shadow:0 18px 48px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.03);">
-          <div style="display:flex;justify-content:space-between;gap:18px;align-items:flex-start;flex-wrap:wrap;">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
             <div style="flex:1;min-width:320px;">
 	              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.24em;color:{COLOR_SECOND};text-shadow:0 0 10px rgba(0,218,243,0.3);">{_eh(kicker)}</div>
-              <div style="margin-top:8px;font-size:30px;font-weight:700;line-height:1.06;color:{COLOR_TEXT};letter-spacing:-0.03em;font-family:'Hanken Grotesk','Inter',sans-serif;">{_eh(title)}</div>
-              <div style="margin-top:9px;max-width:760px;font-size:13px;line-height:1.72;color:{COLOR_MUTED};">{_eh(description)}</div>
-              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">{badge_html}</div>
+              <div style="margin-top:5px;font-size:24px;font-weight:700;line-height:1.04;color:{COLOR_TEXT};letter-spacing:-0.02em;font-family:'Hanken Grotesk','Inter',sans-serif;">{_eh(title)}</div>
+              <div style="margin-top:5px;max-width:820px;font-size:12px;line-height:1.5;color:{COLOR_MUTED};">{_eh(description)}</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px;">{badge_html}</div>
             </div>
             {aside_html}
           </div>
@@ -1367,6 +1367,44 @@ def render_shell_topbar() -> None:
         """,
         unsafe_allow_html=True,
     )
+
+
+def _query_param_first(name: str, default: str = "") -> str:
+    try:
+        value = st.query_params.get(name, default)
+        if isinstance(value, list):
+            return str(value[0]) if value else default
+        return str(value)
+    except Exception:
+        try:
+            params = st.experimental_get_query_params()
+            value = params.get(name, [default])
+            return str(value[0]) if isinstance(value, list) and value else str(value)
+        except Exception:
+            return default
+
+
+def render_fixed_top_nav(nav_pages: list[str]) -> str:
+    """Render fixed-size HTML navigation and return selected page."""
+    page_raw = _query_param_first("page", "0")
+    try:
+        page_idx = int(page_raw)
+    except Exception:
+        page_idx = 0
+    page_idx = max(0, min(page_idx, len(nav_pages) - 1))
+    links = []
+    for idx, label in enumerate(nav_pages):
+        active = " is-active" if idx == page_idx else ""
+        links.append(
+            f"<a class='top-nav-link{active}' href='?page={idx}' title='{_eh(label)}'>{_eh(label)}</a>"
+        )
+    st.markdown(
+        "<div class='top-nav-fixed'><nav class='top-nav-grid'>"
+        + "".join(links)
+        + "</nav></div>",
+        unsafe_allow_html=True,
+    )
+    return nav_pages[page_idx]
 
 
 def _friendly_market_env_desc(raw: str) -> str:
@@ -10701,9 +10739,13 @@ def main() -> None:
           font-family: "Inter", "PingFang SC", "Helvetica Neue", system-ui, sans-serif;
       }}
       .main .block-container {{
-          padding-top:0;
-          padding-bottom:0.1rem;
-          max-width: 1360px;
+          padding-top: 54px !important;
+          padding-bottom: 0.35rem !important;
+          max-width: 1480px;
+      }}
+      div[data-testid="stMainBlockContainer"] > div[data-testid="stVerticalBlock"],
+      .main .block-container > div[data-testid="stVerticalBlock"] {{
+          gap: 0.26rem !important;
       }}
       div[data-testid="stElementContainer"]:has(.radar-topbar-mount),
       div[data-testid="stElementContainer"]:has(.top-nav-radio) {{
@@ -10779,8 +10821,8 @@ def main() -> None:
           background-color: rgba(28,34,45,0.92) !important;
           border-color: rgba(255,255,255,0.08) !important;
           color: {COLOR_TEXT} !important;
-          border-radius: 12px !important;
-          min-height: 48px;
+          border-radius: 8px !important;
+          min-height: 38px;
       }}
       div[data-baseweb="select"] span,
       div[data-baseweb="popover"] * {{
@@ -10893,16 +10935,16 @@ def main() -> None:
       h1, h2, h3, h4, h5 {{ color: {COLOR_TEXT}; }}
       .stCaption, small {{ color: {COLOR_MUTED}; }}
       h2 {{
-          font-size: 1.85rem;
-          margin-top: 0.25rem;
-          margin-bottom: 0.85rem;
+          font-size: 1.55rem;
+          margin-top: 0.12rem;
+          margin-bottom: 0.45rem;
           font-family: "Hanken Grotesk", "Inter", sans-serif;
           font-weight: 700;
       }}
       h3 {{
-          font-size: 1.28rem;
-          margin-top: 1rem;
-          margin-bottom: 0.65rem;
+          font-size: 1.08rem;
+          margin-top: 0.52rem;
+          margin-bottom: 0.38rem;
           font-family: "Hanken Grotesk", "Inter", sans-serif;
           font-weight: 700;
       }}
@@ -10913,7 +10955,7 @@ def main() -> None:
 
       /* 分隔线 */
       hr {{
-          margin: 0.6rem 0 1rem 0;
+          margin: 0.35rem 0 0.55rem 0;
           border-color: {COLOR_BORDER_SOFT};
       }}
 
@@ -10991,7 +11033,7 @@ def main() -> None:
           top: 0;
           left: 0;
           right: 0;
-          height: 42px;
+          height: 46px;
           z-index: 32;
           background: linear-gradient(180deg, rgba(8, 12, 18, 0.98) 0%, rgba(9, 14, 22, 0.93) 100%);
           backdrop-filter: blur(16px);
@@ -11008,6 +11050,58 @@ def main() -> None:
           height: 1px;
           background: linear-gradient(90deg, rgba(0,218,243,0.0), rgba(0,218,243,0.42), rgba(0,218,243,0.0));
       }}
+      .top-nav-fixed {{
+          position: fixed;
+          top: 0;
+          left: 246px;
+          right: 18px;
+          height: 46px;
+          z-index: 44;
+          display: flex;
+          align-items: center;
+          pointer-events: auto;
+      }}
+      .top-nav-grid {{
+          display: grid;
+          grid-template-columns: repeat(6, minmax(0, 1fr));
+          gap: 6px;
+          width: 100%;
+          height: 46px;
+          align-items: center;
+      }}
+      .top-nav-link {{
+          box-sizing: border-box;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 100%;
+          height: 44px;
+          min-width: 0;
+          padding: 0 6px;
+          border: 1px solid transparent;
+          border-bottom: 2px solid transparent;
+          color: rgba(222,226,236,0.58) !important;
+          text-decoration: none !important;
+          font-family: "Inter", "PingFang SC", sans-serif !important;
+          font-size: 12px !important;
+          font-weight: 700 !important;
+          line-height: 1 !important;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          background: transparent;
+      }}
+      .top-nav-link:hover {{
+          color: {COLOR_TEXT} !important;
+          background: linear-gradient(180deg, rgba(0,218,243,0.055), rgba(0,218,243,0.012));
+      }}
+      .top-nav-link.is-active {{
+          color: {COLOR_SECOND} !important;
+          border-bottom-color: {COLOR_SECOND};
+          background: linear-gradient(180deg, rgba(0,218,243,0.08), rgba(0,218,243,0.018));
+          box-shadow: inset 0 -10px 18px rgba(0,218,243,0.06);
+          text-shadow: 0 0 10px rgba(0,218,243,0.28);
+      }}
       .top-nav-radio + div[data-testid="stRadio"],
       div[data-testid="stElementContainer"]:has(.top-nav-radio) + div[data-testid="stElementContainer"] div[data-testid="stRadio"] {{
           position: fixed;
@@ -11019,7 +11113,7 @@ def main() -> None:
           margin: 0 !important;
           padding: 0 !important;
           min-height: 0 !important;
-          height: 42px !important;
+          height: 46px !important;
       }}
       .top-nav-radio + div[data-testid="stRadio"] [role="radiogroup"],
       div[data-testid="stElementContainer"]:has(.top-nav-radio) + div[data-testid="stElementContainer"] div[data-testid="stRadio"] [role="radiogroup"] {{
@@ -11030,7 +11124,7 @@ def main() -> None:
           gap: 6px;
           overflow: visible;
           padding: 0 !important;
-          height: 42px !important;
+          height: 46px !important;
           padding-top: 0 !important;
           padding-bottom: 0 !important;
           align-items: center;
@@ -11052,8 +11146,8 @@ def main() -> None:
           padding: 0 4px !important;
           min-width: 0 !important;
           width: 100% !important;
-          min-height: 40px !important;
-          height: 40px !important;
+          min-height: 44px !important;
+          height: 44px !important;
           box-shadow: none !important;
           white-space: nowrap !important;
           overflow: hidden !important;
@@ -11068,7 +11162,7 @@ def main() -> None:
       }}
       .top-nav-radio + div[data-testid="stRadio"] [role="radiogroup"] > label p,
       div[data-testid="stElementContainer"]:has(.top-nav-radio) + div[data-testid="stElementContainer"] div[data-testid="stRadio"] [role="radiogroup"] > label p {{
-          font-size: 11px !important;
+          font-size: 12px !important;
           color: rgba(222,226,236,0.55) !important;
           font-family: "Inter", "PingFang SC", sans-serif !important;
           letter-spacing: 0 !important;
@@ -11096,7 +11190,7 @@ def main() -> None:
           top: 0;
           left: 0;
           right: 0;
-          height: 42px;
+          height: 46px;
           display: flex;
           justify-content: flex-start;
           align-items: center;
@@ -11223,6 +11317,17 @@ def main() -> None:
           border-radius: 1px;
       }}
       @media (max-width: 1180px) {{
+          .top-nav-fixed {{
+              left: 220px;
+              right: 10px;
+          }}
+          .top-nav-grid {{
+              gap: 3px;
+          }}
+          .top-nav-link {{
+              font-size: 10px !important;
+              padding: 0 3px;
+          }}
           .top-nav-radio + div[data-testid="stRadio"],
           div[data-testid="stElementContainer"]:has(.top-nav-radio) + div[data-testid="stElementContainer"] div[data-testid="stRadio"] {{
               left: 220px;
@@ -11290,6 +11395,43 @@ def main() -> None:
           flex-direction: column !important;
       }}
 
+      /* 0) 全局紧凑密度：减少页面散乱感 */
+      .rt-page-hero {{
+          margin: 0 0 10px 0 !important;
+      }}
+      .rt-v2-hero-grid {{
+          gap: 10px !important;
+      }}
+      .rt-v2-kpi-card,
+      .rt-v2-glass-card {{
+          border-radius: 8px !important;
+      }}
+      .rt-v2-kpi-card {{
+          padding: 10px 12px !important;
+          min-height: 0 !important;
+      }}
+      .rt-v2-glass-card {{
+          padding: 12px 14px !important;
+      }}
+      div[data-testid="column"] {{
+          padding-left: 0.28rem !important;
+          padding-right: 0.28rem !important;
+      }}
+      div[data-testid="stHorizontalBlock"] {{
+          gap: 0.35rem !important;
+      }}
+      div[data-testid="stAlert"] {{
+          padding: 9px 12px !important;
+          border-radius: 8px !important;
+      }}
+      div[data-testid="stMetric"] {{
+          padding: 10px 12px 10px 16px !important;
+          border-radius: 8px !important;
+      }}
+      div[data-testid="stMetric"] [data-testid="stMetricValue"] {{
+          font-size: 22px !important;
+      }}
+
       /* 1) V2 玻璃态卡片 / KPI 卡 hover 上抬 + 内描边发光 */
       .rt-v2-kpi-card:hover,
       .rt-v2-glass-card:hover {{
@@ -11341,14 +11483,14 @@ def main() -> None:
           position: relative;
           background: {COLOR_GLASS_BG} !important;
           border: 1px solid {COLOR_GLASS_EDGE} !important;
-          border-radius: 12px !important;
-          padding: 14px 18px 14px 22px !important;
+          border-radius: 8px !important;
+          padding: 10px 12px 10px 16px !important;
           transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
       }}
       div[data-testid="stMetric"]::before {{
           content: "";
           position: absolute;
-          left: 0; top: 14px; bottom: 14px; width: 2px;
+          left: 0; top: 10px; bottom: 10px; width: 2px;
           background: {COLOR_SECOND};
           box-shadow: 0 0 12px rgba(0,218,243,0.40);
           border-radius: 0 2px 2px 0;
@@ -11369,7 +11511,7 @@ def main() -> None:
       }}
       div[data-testid="stMetric"] [data-testid="stMetricValue"] {{
           font-family: {FONT_MONO} !important;
-          font-size: 28px !important;
+          font-size: 22px !important;
           font-weight: 700 !important;
           letter-spacing: -0.01em;
       }}
@@ -11397,12 +11539,12 @@ def main() -> None:
 	          position: relative;
 	          display: flex;
 	          align-items: center;
-	          gap: 10px;
-	          margin: 14px 0 10px 0 !important;
-	          padding: 10px 14px 10px 18px !important;
+	          gap: 8px;
+	          margin: 8px 0 6px 0 !important;
+	          padding: 7px 11px 7px 14px !important;
 	          border: 1px solid {COLOR_GLASS_EDGE};
 	          border-left: 2px solid {COLOR_SECOND};
-	          border-radius: 12px;
+	          border-radius: 8px;
 	          background:
 	            radial-gradient(circle at top right, rgba(0,218,243,0.08), transparent 30%),
 	            linear-gradient(180deg, rgba(16,21,29,0.88) 0%, rgba(10,14,23,0.78) 100%);
@@ -11412,18 +11554,18 @@ def main() -> None:
 	          letter-spacing: -0.01em;
 	      }}
 	      .main .block-container div[data-testid="stMarkdown"] h3 {{
-	          font-size: 18px !important;
+	          font-size: 15px !important;
 	      }}
 	      .main .block-container div[data-testid="stMarkdown"] h2 {{
-	          font-size: 22px !important;
+	          font-size: 18px !important;
 	      }}
 	      .main .block-container div[data-testid="stMarkdown"] h2::before,
 	      .main .block-container div[data-testid="stMarkdown"] h3::before {{
 	          content: "";
 	          position: absolute;
 	          left: 0;
-	          top: 12px;
-	          bottom: 12px;
+	          top: 9px;
+	          bottom: 9px;
 	          width: 2px;
 	          background: {COLOR_SECOND};
 	          box-shadow: 0 0 12px rgba(0,218,243,0.55);
@@ -11437,7 +11579,7 @@ def main() -> None:
 	          font-family: {FONT_BODY} !important;
 	      }}
 	      div[data-testid="stDivider"] {{
-	          margin: 14px 0 !important;
+	          margin: 8px 0 !important;
 	      }}
 	      div[data-testid="stDivider"] > div {{
 	          border-color: rgba(0,218,243,0.18) !important;
@@ -11528,28 +11670,7 @@ def main() -> None:
         "⚙ 系统工具",            # 系统工具：补跑、日志、资金自检
     ]
     st.markdown("<div class='top-nav-radio'></div>", unsafe_allow_html=True)
-    page = st.radio(
-        "顶部导航",
-        nav_pages,
-        horizontal=True,
-        label_visibility="collapsed",
-        format_func=lambda x: x,
-        key="top_nav_page",
-    )
-
-    prev_page = st.session_state.get("_last_rendered_top_nav_page")
-    if prev_page != page:
-        st.session_state["_last_rendered_top_nav_page"] = page
-        st.iframe(
-            """
-            <script>
-              const main = window.parent.document.querySelector('[data-testid="stMain"]');
-              if (main) main.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-              window.parent.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-            </script>
-            """,
-            height=1,
-        )
+    page = render_fixed_top_nav(nav_pages)
 
     # 兼容旧关键字匹配 (CSS / 滚动逻辑还在用)
     # 2026-06-06 决定: '📌 今日' 不再内嵌 segment, 改保留 KPI hero 单屏纯净布局,
@@ -11561,11 +11682,11 @@ def main() -> None:
             """
             <style>
               .main .block-container {
-                padding-top: 28px !important;
-                padding-bottom: 32px !important;
+                padding-top: 54px !important;
+                padding-bottom: 18px !important;
               }
               .main [data-testid="stVerticalBlock"] {
-                gap: 0.18rem !important;
+                gap: 0.20rem !important;
               }
             </style>
             """,
@@ -11578,10 +11699,10 @@ def main() -> None:
               html, body, [data-testid="stAppViewContainer"], .stApp { overflow: auto !important; height: auto !important; max-height: none !important; }
               section.main, .main .block-container { overflow: visible !important; height: auto !important; max-height: none !important; }
               .main .block-container {
-                padding-top: 52px !important;
+                padding-top: 54px !important;
               }
               div[data-testid="stMainBlockContainer"] > div[data-testid="stVerticalBlock"] {
-                gap: 0.35rem !important;
+                gap: 0.26rem !important;
               }
             </style>
             """,

@@ -111,6 +111,27 @@
   - py_compile 通过
   - 函数级断言：B 点按确认 K 收盘价，+1.5% 先止盈
   - `research/dashboard_ui_audit.py` 六个导航页全部 OK
+
+### 2026-06-11 Codex 补充：Dashboard 固定导航与紧凑布局
+
+- 朱哥要求：每个导航栏固定，不要上下移动；界面更紧凑。
+- 修改文件：`dashboard_app.py`。
+- 已做：
+  - 删除页面切换时的 `scrollTo(0)` iframe 脚本。
+  - 彻底替换原生 `st.radio` 导航，改为自定义 fixed HTML 网格导航。
+  - 顶部导航 marker、自定义导航链接、品牌条统一 fixed，高度 `46px`。
+  - 6 个导航项宽高恒定，选中态只改颜色/底线，不改尺寸。
+  - 所有页面统一顶部 padding `54px`，避免不同页面切换时内容上下错位。
+  - 页面整体 vertical gap 收紧到 `0.26rem` 级别。
+  - KPI、玻璃卡、页面头、章节标题、alert、metric、selectbox、列间距全部压缩。
+- 验证：
+  - `python3 -m py_compile dashboard_app.py` 通过。
+  - `python3 research/dashboard_ui_audit.py` 六个导航页全部 OK。
+  - `research/dashboard_ui_audit.py` 已同步为 `?page=<idx>` 新导航方式。
+  - CSS 断言确认 fixed 导航、统一 padding、无 `scrollTo` / `st.iframe` 切页滚动脚本、主导航不再用 `st.radio`。
+- 注意：
+  - Chrome headless 在当前环境会停在 Streamlit `CONNECTING` 骨架，不能作为视觉截图依据。
+  - 若后续继续做 UI，优先用 Streamlit AppTest + 本机实际浏览器肉眼确认。
   - 资金源健康卡片：`active_source / system_status / checked_at / push2his / ths_simple` 等改为中文标签和中文值。
 - 验证：
   - `python -m py_compile dashboard_app.py services/dashboard_status.py services/task_status_service.py services/t_trace_service.py research/dashboard_ui_audit.py` ✅

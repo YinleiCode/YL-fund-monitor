@@ -4,6 +4,57 @@
 
 ---
 
+## 2026-06-11 Codex（Dashboard 固定导航与紧凑布局）
+
+### 操作模型
+
+Codex
+
+### 本次任务
+
+按朱哥要求修两个界面问题：
+
+1. 每个导航栏都要固定，不要上下移动。
+2. 当前界面太散乱，要更紧凑。
+
+### 做了什么
+
+- `dashboard_app.py`
+  - 删除页面切换时注入的 `st.iframe(... scrollTo(0) ...)` 脚本，避免切换导航时页面主动跳动。
+  - 彻底替换原生 `st.radio` 导航，改为自定义 fixed HTML 网格导航。
+  - 顶部导航条、品牌条、自定义导航链接统一固定为 `position: fixed`、`height: 46px`。
+  - 6 个导航项宽高恒定，选中态只改颜色/底线，不改尺寸。
+  - 所有页面统一顶部安全距离：`.block-container padding-top: 54px`，不再今日页/非今日页两套高度。
+  - 全局 vertical gap 从旧的松散间距收紧到 `0.26rem` 级别。
+  - KPI 卡片压缩：字体 `30px → 24px`，padding `14/18/22 → 10/12/16`，圆角 `12px → 8px`。
+  - 通用玻璃卡默认 padding 压缩为 `11px 13px`，圆角 `8px`。
+  - 页面头从大 hero 改为紧凑工作台标题栏：标题 `30px → 24px`，说明文字、标签、右侧说明卡同步收紧。
+  - 章节标题、分割线、alert、metric、selectbox、列间距统一压缩。
+
+### 验收与结果
+
+- `python3 -m py_compile dashboard_app.py` 通过。
+- `research/dashboard_ui_audit.py` 已同步为 `?page=<idx>` 新导航方式。
+- `python3 research/dashboard_ui_audit.py` 通过，6 个导航页全部 OK。
+- CSS 断言通过：
+  - 导航 marker fixed
+  - 自定义 HTML 导航 fixed
+  - 固定高度 46px
+  - 页面顶部 padding 54px
+  - 不再存在 `scrollTo` / `st.iframe` 切页滚动脚本
+  - 主导航不再使用 `st.radio`
+  - KPI / hero / gap 紧凑规则已落地
+- Chrome headless 在当前环境仍停在 Streamlit `CONNECTING` 骨架，截图不能作为页面视觉依据；本轮以 Streamlit AppTest 和 CSS 断言作为验证。
+
+### 安全边界
+
+- 未运行 `python run.py`。
+- 未修改正式买入、止损、收益口径。
+- 未修改 `output/trade_review.csv`。
+- 未接券商、未自动下单。
+
+---
+
 ## 2026-06-11 Codex（严格正T新规则落地 + 文档更新）
 
 ### 操作模型
