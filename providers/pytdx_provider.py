@@ -42,6 +42,11 @@ class PytdxProvider(BaseProvider):
                     api.disconnect()
                 except Exception:
                     pass
+                try:
+                    if getattr(api, "client", None) is not None:
+                        api.client.close()
+                except Exception:
+                    pass
         if last_error:
             raise last_error
         raise RuntimeError("pytdx no server connected")

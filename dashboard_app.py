@@ -39,6 +39,15 @@ import plotly.express as px
 import streamlit as st
 from diagnostics import latest_diagnostics_file
 from strategy_config import load_all_strategy_configs
+from services.dashboard_status import (
+    build_freshness_cards,
+    build_today_status_items,
+    check_buy_done,
+    today_rows,
+)
+from services.freshness_service import file_freshness
+from services.provider_health_service import summarize_provider_health
+from services.t_trace_service import explain_fail_reasons, summarize_t_trace
 
 # 手动「只观察」开关（朱哥 2026-06-05 加，替代 V1.6 plan 自动拦截）
 from manual_observe import (
@@ -603,31 +612,7 @@ def last_modified(path: Path) -> str:
 
 
 def _file_status(path: Path) -> dict:
-    if not path.exists():
-        return {
-            "source": str(path.relative_to(BASE_DIR)) if path.is_absolute() or path.parts else str(path),
-            "timestamp": "",
-            "freshness": "missing",
-            "is_realtime": False,
-            "is_delayed": False,
-            "is_fallback": False,
-            "is_missing": True,
-            "is_experimental": False,
-            "used_for_official": False,
-        }
-    mtime = datetime.fromtimestamp(path.stat().st_mtime)
-    age = (datetime.now() - mtime).total_seconds()
-    return {
-        "source": str(path.relative_to(BASE_DIR)) if path.is_relative_to(BASE_DIR) else str(path),
-        "timestamp": mtime.strftime("%Y-%m-%d %H:%M:%S"),
-        "freshness": "fresh" if age <= 900 else ("stale" if age <= 86400 else "old"),
-        "is_realtime": age <= 180,
-        "is_delayed": age > 180,
-        "is_fallback": False,
-        "is_missing": False,
-        "is_experimental": False,
-        "used_for_official": False,
-    }
+    return file_freshness(path, base_dir=BASE_DIR).to_dict()
 
 
 def _read_latest_diag(prefix: str) -> pd.DataFrame:
@@ -649,31 +634,50 @@ def _render_t_trace_panel() -> None:
         )
         return
     st.markdown("### 逐条件 Trace")
-    df = df.copy()
-    for col in ("final_pass", "rule_drop_pass", "rule_vwap_pass", "rule_green_vol_pass", "rule_shrink_pass"):
-        if col in df.columns:
-            df[col] = df[col].astype(str).str.lower().isin(("true", "1", "yes"))
-    total = len(df)
-    final_pass = int(df.get("final_pass", pd.Series(dtype=bool)).sum()) if "final_pass" in df.columns else 0
-    delayed = 0
-    if "bar_delay_seconds" in df.columns:
-        delayed = int((pd.to_numeric(df["bar_delay_seconds"], errors="coerce").fillna(0) > 180).sum())
-    fail_top = ""
-    if "fail_reasons" in df.columns and not df["fail_reasons"].empty:
-        fail_top = df["fail_reasons"].astype(str).str.split(";").explode().replace("", pd.NA).dropna().value_counts().head(1)
-        fail_top = "" if fail_top.empty else str(fail_top.index[0])
+    summary = summarize_t_trace(df)
     c1, c2, c3, c4 = st.columns(4)
-    c1.markdown(kpi_card("Trace 行数", total, COLOR_TEXT), unsafe_allow_html=True)
-    c2.markdown(kpi_card("最终触发", final_pass, COLOR_SECOND), unsafe_allow_html=True)
-    c3.markdown(kpi_card("延迟K线", delayed, COLOR_WARN_YELLOW if delayed else COLOR_BOUGHT, ">180秒"), unsafe_allow_html=True)
-    c4.markdown(kpi_card("首要失败", fail_top or "—", COLOR_DROP if fail_top else COLOR_BOUGHT), unsafe_allow_html=True)
+    c1.markdown(kpi_card("Trace 行数", summary.total, COLOR_TEXT), unsafe_allow_html=True)
+    c2.markdown(kpi_card("最终触发", summary.final_pass, COLOR_SECOND), unsafe_allow_html=True)
+    c3.markdown(kpi_card("延迟K线", summary.delayed, COLOR_WARN_YELLOW if summary.delayed else COLOR_BOUGHT, ">180秒"), unsafe_allow_html=True)
+    c4.markdown(kpi_card("首要失败", explain_fail_reasons(summary.top_fail_reason) if summary.top_fail_reason else "—", COLOR_DROP if summary.top_fail_reason else COLOR_BOUGHT), unsafe_allow_html=True)
+
+    if not summary.latest_pass.empty:
+        st.markdown("#### 为什么触发")
+        pass_cards = []
+        for _, row in summary.latest_pass.tail(6).iterrows():
+            pass_cards.append(
+                f"<div style='padding:10px 12px;border:1px solid {COLOR_BORDER_SOFT};border-left:3px solid {COLOR_BOUGHT};border-radius:8px;background:rgba(0,228,121,.05);'>"
+                f"<b>{_eh(str(row.get('stock_code','')))} {_eh(str(row.get('stock_name','')))}</b><br>"
+                f"<span style='color:{COLOR_MUTED};font-size:12px;'>"
+                f"{_eh(str(row.get('bar_timestamp','')))} ｜ 急跌 {_eh(str(row.get('drop_pct_max','')))}% ｜ VWAP偏离 {_eh(str(row.get('below_vwap_pct','')))}% ｜ 倍量 {_eh(str(row.get('green_vol_multiple','')))} ｜ 缩量 {_eh(str(row.get('shrink_ratio','')))}"
+                f"</span></div>"
+            )
+        st.markdown("<div style='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;'>" + "".join(pass_cards) + "</div>", unsafe_allow_html=True)
+
+    if not summary.latest_fail.empty:
+        st.markdown("#### 为什么没触发")
+        fail_sample = summary.latest_fail.tail(8).copy()
+        fail_cards = []
+        for _, row in fail_sample.iterrows():
+            fail_cards.append(
+                f"<div style='padding:10px 12px;border:1px solid {COLOR_BORDER_SOFT};border-left:3px solid {COLOR_WARN_YELLOW};border-radius:8px;background:rgba(255,182,39,.05);'>"
+                f"<b>{_eh(str(row.get('stock_code','')))} {_eh(str(row.get('stock_name','')))}</b> "
+                f"<span style='color:{COLOR_MUTED};font-size:12px;'>{_eh(str(row.get('bar_timestamp','')))}</span><br>"
+                f"<span style='color:{COLOR_TEXT};font-size:12px;'>{_eh(explain_fail_reasons(str(row.get('fail_reasons',''))))}</span>"
+                f"</div>"
+            )
+        st.markdown("<div style='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;'>" + "".join(fail_cards) + "</div>", unsafe_allow_html=True)
 
     show_cols = [
         "scan_time", "stock_code", "stock_name", "bar_timestamp", "bar_delay_seconds",
         "is_green_k", "drop_pct_max", "below_vwap_pct", "green_vol_multiple", "shrink_ratio",
-        "rule_drop_pass", "rule_vwap_pass", "rule_green_vol_pass", "rule_shrink_pass",
+        "rule_drop_pass", "rule_vwap_pass", "rule_green_vol_pass", "rule_shrink_pass", "rule_resonance_pass",
         "final_pass", "fail_reasons", "signal_side",
     ]
+    df = df.copy()
+    if "fail_reasons" in df.columns:
+        df["失败原因中文"] = df["fail_reasons"].map(explain_fail_reasons)
+        show_cols.append("失败原因中文")
     show_cols = [c for c in show_cols if c in df.columns]
     st.dataframe(df[show_cols].tail(80), width="stretch", hide_index=True)
 
@@ -5402,6 +5406,35 @@ def page_manual_rerun() -> None:
 
 def _render_provider_health_panel() -> None:
     st.markdown("### 数据源健康")
+    with st.expander("运行旁路 provider probe", expanded=False):
+        symbols = st.text_input("探测股票代码", value="601689,688160", key="provider_probe_symbols")
+        data_types = st.multiselect(
+            "数据类型",
+            options=["realtime", "minute", "daily"],
+            default=["realtime"],
+            key="provider_probe_data_types",
+        )
+        confirm = st.checkbox(
+            "我确认只运行旁路 provider_probe，不写 trade_review.csv，不影响正式策略",
+            key="provider_probe_confirm",
+        )
+        if st.button("运行 provider_probe", disabled=not confirm, key="btn_provider_probe"):
+            cmd = [
+                str(PYTHON_BIN if PYTHON_BIN.exists() else sys.executable),
+                str(BASE_DIR / "research" / "provider_probe.py"),
+                "--symbols", symbols,
+                "--data-types", ",".join(data_types or ["realtime"]),
+            ]
+            with st.spinner("正在运行 provider_probe..."):
+                result = subprocess.run(cmd, cwd=str(BASE_DIR), capture_output=True, text=True, timeout=90)
+            if result.returncode == 0:
+                status_banner("provider_probe 已完成，刷新后可查看最新诊断。", "success")
+                if result.stdout:
+                    st.code(result.stdout[-4000:], language="text")
+            else:
+                status_banner(f"provider_probe 失败：exit={result.returncode}", "error")
+                st.code((result.stderr or result.stdout)[-4000:], language="text")
+
     df = _read_latest_diag("provider_health")
     if df.empty:
         status_banner(
@@ -5409,38 +5442,19 @@ def _render_provider_health_panel() -> None:
             "info",
         )
         return
-    df = df.copy()
-    df["latency_ms_num"] = pd.to_numeric(df.get("latency_ms", ""), errors="coerce")
-    df["ok"] = df.get("status", "").astype(str).eq("ok")
-    total = len(df)
-    ok_count = int(df["ok"].sum())
-    fallback_count = int(df.get("is_fallback", pd.Series(dtype=str)).astype(str).str.lower().isin(("true", "1")).sum())
-    official_count = int(df.get("used_for_official", pd.Series(dtype=str)).astype(str).str.lower().isin(("true", "1")).sum())
+    summary = summarize_provider_health(df)
     c1, c2, c3, c4 = st.columns(4)
-    c1.markdown(kpi_card("诊断记录", total, COLOR_TEXT), unsafe_allow_html=True)
-    c2.markdown(kpi_card("成功率", f"{ok_count / total * 100:.1f}%" if total else "0%", COLOR_BOUGHT if ok_count else COLOR_DROP), unsafe_allow_html=True)
-    c3.markdown(kpi_card("平均延迟", f"{df['latency_ms_num'].mean():.0f} ms" if df["latency_ms_num"].notna().any() else "—", COLOR_SECOND), unsafe_allow_html=True)
-    c4.markdown(kpi_card("正式使用", official_count, COLOR_WARN_YELLOW if official_count else COLOR_BOUGHT, "应为 0；probe 旁路"), unsafe_allow_html=True)
+    c1.markdown(kpi_card("诊断记录", summary.total, COLOR_TEXT), unsafe_allow_html=True)
+    c2.markdown(kpi_card("成功率", f"{summary.ok_count / summary.total * 100:.1f}%" if summary.total else "0%", COLOR_BOUGHT if summary.ok_count else COLOR_DROP), unsafe_allow_html=True)
+    c3.markdown(kpi_card("平均延迟", f"{summary.avg_latency_ms:.0f} ms" if summary.avg_latency_ms is not None else "—", COLOR_SECOND), unsafe_allow_html=True)
+    c4.markdown(kpi_card("正式使用", summary.official_count, COLOR_WARN_YELLOW if summary.official_count else COLOR_BOUGHT, "应为 0；probe 旁路"), unsafe_allow_html=True)
 
-    by_provider = (
-        df.groupby("provider", dropna=False)
-        .agg(
-            records=("provider", "size"),
-            success=("ok", "sum"),
-            avg_latency_ms=("latency_ms_num", "mean"),
-            failures=("status", lambda s: int((s.astype(str) != "ok").sum())),
-        )
-        .reset_index()
-    )
-    by_provider["success_rate"] = (by_provider["success"] / by_provider["records"] * 100).round(1)
-    by_provider["avg_latency_ms"] = by_provider["avg_latency_ms"].round(0)
-    st.dataframe(by_provider, width="stretch", hide_index=True)
+    st.dataframe(summary.by_provider, width="stretch", hide_index=True)
 
-    failed = df[df.get("status", "").astype(str) != "ok"].copy()
-    if not failed.empty:
+    if not summary.failed.empty:
         st.markdown("### 最近失败原因")
-        cols = [c for c in ["time", "provider", "data_type", "symbol", "status", "latency_ms", "error_message", "used_for_official"] if c in failed.columns]
-        st.dataframe(failed[cols].tail(30), width="stretch", hide_index=True)
+        cols = [c for c in ["time", "provider", "data_type", "symbol", "status", "latency_ms", "error_message", "used_for_official"] if c in summary.failed.columns]
+        st.dataframe(summary.failed[cols].tail(30), width="stretch", hide_index=True)
 
 
 def _render_strategy_rules_panel() -> None:
@@ -10112,25 +10126,15 @@ def page_watchlist() -> None:
 
 def _render_data_freshness(df_all: pd.DataFrame) -> None:
     """今日驾驶舱顶部：关键数据新鲜度说明条。"""
-    from datetime import datetime as _dt, date as _date
-    today = _date.today()
-    today_str  = today.strftime("%Y%m%d")
-
-    t_path = OUTPUT_DIR / "t_signal" / f"t_signal_{today_str}.csv"
-    trace_path = DIAGNOSTICS_DIR / f"t_signal_trace_{today_str}.csv"
-    health_path = latest_diagnostics_file("provider_health")
-    review_mtime = CSV_PATH.stat().st_mtime if CSV_PATH.exists() else 0
-    review_today = _dt.fromtimestamp(review_mtime).date() == today if review_mtime else False
-    rows_today = _today_rows(df_all, today_str)
-    check_done = _check_buy_done(rows_today)
-
     items = [
-        ("9:36行情数据", _file_status(CSV_PATH) | {"used_for_official": True, "is_missing": not check_done}),
-        ("分钟K数据", _file_status(t_path) | {"is_experimental": True}),
-        ("资金数据", _file_status(OUTPUT_DIR / "money_flow" / f"money_flow_{today_str}.csv") | {"is_experimental": True}),
-        ("板块/情绪数据", _file_status(health_path) if health_path else {"source": "output/diagnostics/provider_health_*.csv", "timestamp": "", "freshness": "missing", "is_realtime": False, "is_delayed": False, "is_fallback": False, "is_missing": True, "is_experimental": True, "used_for_official": False}),
-        ("T+1复盘数据", _file_status(CSV_PATH) | {"used_for_official": True, "is_missing": not review_today}),
-        ("T模块数据", _file_status(trace_path) | {"is_experimental": True}),
+        (label, meta.to_dict())
+        for label, meta in build_freshness_cards(
+            df_all,
+            base_dir=BASE_DIR,
+            output_dir=OUTPUT_DIR,
+            csv_path=CSV_PATH,
+            diagnostics_dir=DIAGNOSTICS_DIR,
+        )
     ]
     cols = st.columns(3)
     for idx, (label, meta) in enumerate(items):
@@ -10158,23 +10162,6 @@ def _render_data_freshness(df_all: pd.DataFrame) -> None:
     st.markdown("<div style='margin-bottom:4px'></div>", unsafe_allow_html=True)
 
 
-def _today_rows(df_all: pd.DataFrame, today_str: Optional[str] = None) -> pd.DataFrame:
-    if today_str is None:
-        today_str = datetime.now().strftime("%Y%m%d")
-    if df_all.empty or "report_date" not in df_all.columns:
-        return pd.DataFrame()
-    return df_all[df_all["report_date"].astype(str).str.replace("-", "", regex=False) == today_str].copy()
-
-
-def _check_buy_done(rows: pd.DataFrame) -> bool:
-    if rows.empty:
-        return False
-    for col in ("buy_signal_0935", "price_0935", "check_buy_time", "adjusted_buy_price"):
-        if col in rows.columns and rows[col].astype(str).str.strip().ne("").any():
-            return True
-    return False
-
-
 def _today_is_trading_day() -> tuple[bool, str]:
     try:
         import data_fetcher
@@ -10186,53 +10173,19 @@ def _today_is_trading_day() -> tuple[bool, str]:
         return weekday_ok, f"weekday fallback: {type(exc).__name__}"
 
 
-def _count_truthy(rows: pd.DataFrame, col: str) -> int:
-    if rows.empty or col not in rows.columns:
-        return 0
-    return int(rows[col].map(_gb).eq(True).sum())
-
-
 def _render_today_command_center(df_all: pd.DataFrame) -> None:
-    today_str = datetime.now().strftime("%Y%m%d")
-    rows = _today_rows(df_all, today_str)
     is_trading, cal_source = _today_is_trading_day()
-    mode_values = rows.get("mode", pd.Series(dtype=str)).astype(str).tolist() if not rows.empty else []
-    full_done = "full" in mode_values
-    theme_done = "theme_auto" in mode_values
-    check_done = _check_buy_done(rows)
-    second_done = "second_check_time" in rows.columns and rows["second_check_time"].astype(str).str.strip().ne("").any() if not rows.empty else False
-    review_done = any(c in rows.columns and rows[c].astype(str).str.strip().ne("").any() for c in ("simulated_trade_return", "t1_max_return", "max_drawdown")) if not rows.empty else False
-    current_holding = 0
-    if not df_all.empty and "holding_status" in df_all.columns:
-        current_holding = int(df_all["holding_status"].astype(str).str.contains("holding|open|持仓", case=False, regex=True).sum())
-    bought_today = _count_truthy(rows, "buy_signal_0935")
-    stop_loss_today = _count_truthy(rows, "stop_loss_triggered")
-    missing_mask = pd.Series(False, index=rows.index) if not rows.empty else pd.Series(dtype=bool)
-    if not rows.empty:
-        for col in ("notes", "fail_reason", "realtime_data_status"):
-            if col in rows.columns:
-                missing_mask = missing_mask | rows[col].astype(str).str.contains("missing|invalid|fail|缺失|失败", case=False, regex=True, na=False)
-    data_anomaly_count = int(missing_mask.sum()) if not rows.empty else 0
-
-    items = [
-        ("今天是否交易日", "是" if is_trading else "否", cal_source, is_trading),
-        ("08:50 pick", "完成" if full_done else "未完成", "full 模式记录", full_done),
-        ("08:55 theme_auto", "完成" if theme_done else "未完成", "主题龙头模式记录", theme_done),
-        ("09:36 check_buy", "完成" if check_done else "未完成", "正式模拟买入开关", check_done),
-        ("10:01 second_check", "完成" if second_done else "未完成", "观察模块", second_done),
-        ("19:00 update_review", "完成" if review_done else "未完成", "正式复盘口径", review_done),
-        ("当前持仓", str(current_holding), "模拟持仓/跟踪", True),
-        ("今日模拟买入", str(bought_today), "正式模拟收益口径", True),
-        ("今日止损", str(stop_loss_today), "-3% 主链路口径", stop_loss_today == 0),
-        ("数据异常", str(data_anomaly_count), "缺失/延迟/失败标记", data_anomaly_count == 0),
-        ("正式模块", "今日/持仓/自选/复盘", "影响或展示正式模拟收益", True),
-        ("实验模块", "做T/资金/Provider Probe", "不参与正式收益", None),
-    ]
+    items = build_today_status_items(
+        df_all,
+        is_trading_day=is_trading,
+        calendar_source=cal_source,
+        bool_parser=_gb,
+    )
     st.markdown("### 今日驾驶舱")
     cols = st.columns(4)
-    for idx, (label, value, sub, ok) in enumerate(items):
-        color = COLOR_BOUGHT if ok is True else (COLOR_WARN_YELLOW if ok is None else COLOR_DROP)
-        cols[idx % 4].markdown(kpi_card(label, value, color, sub), unsafe_allow_html=True)
+    for idx, item in enumerate(items):
+        color = COLOR_BOUGHT if item.ok is True else (COLOR_WARN_YELLOW if item.ok is None else COLOR_DROP)
+        cols[idx % 4].markdown(kpi_card(item.label, item.value, color, item.sub), unsafe_allow_html=True)
 
 
 # ─── main ───────────────────────────────────────────────────────────────

@@ -5,6 +5,8 @@ pyyaml>=6.0
 requests>=2.31.0
 python-dotenv>=1.0.0
 openpyxl>=3.1.0
+efinance>=0.5.3
+pytdx>=1.72
 
 # —— 本地复盘看板 dashboard_app.py 需要（不影响主流程，不会被 launchd 调用）——
 streamlit>=1.30.0

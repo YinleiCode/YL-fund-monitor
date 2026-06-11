@@ -141,6 +141,9 @@ TRACE_FIELDS = [
     "rule_vwap_pass",
     "rule_green_vol_pass",
     "rule_shrink_pass",
+    "resonance_sector_drop_pct",
+    "resonance_emotion_drop_pct",
+    "rule_resonance_pass",
     "final_pass",
     "fail_reasons",
     "signal_side",
@@ -186,6 +189,28 @@ RESONANCE_EMOTION_DROP_MAX = 0.005   # 情绪指数窗口跌幅阈值：≤ 0.5%
 MARKET_INDEX_SH   = "000001"         # 上证综指（沪市板块代理）
 MARKET_INDEX_SZ   = "399001"         # 深证成指（深市板块代理）
 EMOTION_INDEX_CODE = "883404"        # 同花顺情绪指数
+
+
+def _load_t_strategy_yaml_overrides() -> None:
+    """Load experimental T thresholds from YAML, fail-open to code constants."""
+    global BELOW_VWAP_PCT, DROP_PCT_MIN, VOL_MULTIPLE_MIN, SHRINK_RATIO_MAX
+    global RESONANCE_SECTOR_DROP_MAX, RESONANCE_EMOTION_DROP_MAX
+    try:
+        sys.path.insert(0, str(BASE_DIR))
+        from strategy_config import load_strategy_config
+
+        cfg = load_strategy_config("t_positive")
+        if str(cfg.get("module_status", "")).lower() != "experimental":
+            return
+        rules = cfg.get("rules", {}) if isinstance(cfg.get("rules", {}), dict) else {}
+        BELOW_VWAP_PCT = float(rules.get("below_vwap_pct", BELOW_VWAP_PCT))
+        DROP_PCT_MIN = float(rules.get("drop_pct_min", DROP_PCT_MIN))
+        VOL_MULTIPLE_MIN = float(rules.get("vol_multiple_min", VOL_MULTIPLE_MIN))
+        SHRINK_RATIO_MAX = float(rules.get("shrink_ratio_max", SHRINK_RATIO_MAX))
+        RESONANCE_SECTOR_DROP_MAX = float(rules.get("resonance_sector_drop_max", RESONANCE_SECTOR_DROP_MAX))
+        RESONANCE_EMOTION_DROP_MAX = float(rules.get("resonance_emotion_drop_max", RESONANCE_EMOTION_DROP_MAX))
+    except Exception as exc:
+        print(f"[strategy-yaml] t_positive 读取失败，使用代码默认参数: {exc}", file=sys.stderr)
 
 
 def _time_to_minutes(t_str: str) -> int:
@@ -390,6 +415,24 @@ def build_t_condition_trace(
             shrink_ratio = bars[i + 1]["volume"] / trigger["volume"]
             rule_shrink = shrink_ratio <= SHRINK_RATIO_MAX
 
+        resonance_sector_drop = None
+        resonance_emotion_drop = None
+        rule_resonance = True
+        if sector_bars is not None or emotion_bars is not None:
+            win_start = trigger["datetime"] - timedelta(minutes=3)
+            win_end = trigger["datetime"]
+            sector_ok = True
+            emotion_ok = True
+            if sector_bars:
+                resonance_sector_drop = _calc_window_drop_pct(sector_bars, win_start, win_end)
+                if resonance_sector_drop is not None:
+                    sector_ok = resonance_sector_drop >= -RESONANCE_SECTOR_DROP_MAX
+            if emotion_bars:
+                resonance_emotion_drop = _calc_window_drop_pct(emotion_bars, win_start, win_end)
+                if resonance_emotion_drop is not None:
+                    emotion_ok = resonance_emotion_drop >= -RESONANCE_EMOTION_DROP_MAX
+            rule_resonance = sector_ok or emotion_ok
+
         fail_reasons = []
         if not slope_ok:
             fail_reasons.append("ma5_slope_down")
@@ -403,8 +446,10 @@ def build_t_condition_trace(
             fail_reasons.append("green_volume_not_enough")
         if not rule_shrink:
             fail_reasons.append("shrink_not_confirmed")
+        if not rule_resonance:
+            fail_reasons.append("resonance_not_met")
 
-        final_pass = bool(slope_ok and is_green and rule_drop and rule_vwap and rule_green_vol and rule_shrink)
+        final_pass = bool(slope_ok and is_green and rule_drop and rule_vwap and rule_green_vol and rule_shrink and rule_resonance)
         delay = int((scan_time - trigger["datetime"]).total_seconds())
         rows.append({
             "date": scan_time.strftime("%Y%m%d"),
@@ -427,6 +472,9 @@ def build_t_condition_trace(
             "rule_vwap_pass": rule_vwap,
             "rule_green_vol_pass": rule_green_vol,
             "rule_shrink_pass": rule_shrink,
+            "resonance_sector_drop_pct": _round_pct(resonance_sector_drop),
+            "resonance_emotion_drop_pct": _round_pct(resonance_emotion_drop),
+            "rule_resonance_pass": rule_resonance,
             "final_pass": final_pass,
             "fail_reasons": ";".join(fail_reasons),
             "signal_side": "sim_buy" if final_pass else "",
@@ -1033,6 +1081,7 @@ def parse_name_overrides(raw: list[str]) -> dict[str, str]:
 
 
 def main() -> None:
+    _load_t_strategy_yaml_overrides()
     parser = argparse.ArgumentParser(description="V1.6 T 信号观察模块")
     parser.add_argument("--report-date", required=True, help="报告日期 YYYYMMDD")
     parser.add_argument("--codes", help="股票代码，逗号分隔（如 300001,600000）")

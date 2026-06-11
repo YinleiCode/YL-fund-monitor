@@ -53,6 +53,51 @@ Codex
 
 ---
 
+## 2026-06-11 Codex（V1.6-clean 收尾补齐）
+
+### 操作模型
+
+Codex
+
+### 本次任务
+
+继续补齐 V1.6-clean 剩余项：service/helper 拆分、provider health 可运行入口、T trace 中文解释、共振 trace、YAML 安全读取、可选 provider 依赖和页面级验证。
+
+### 做了什么
+
+- 新增 `services/`：
+  - `freshness_service.py`：统一 `DataFreshness` 模型。
+  - `dashboard_status.py`：今日驾驶舱状态与数据新鲜度聚合。
+  - `provider_health_service.py`：provider health 汇总。
+  - `t_trace_service.py`：T trace 摘要与失败原因中文解释。
+- `dashboard_app.py` 改为调用 service/helper，减少新增逻辑继续堆在主文件。
+- 系统工具页新增 `provider_probe` 旁路运行入口，必须勾选确认，只写 diagnostics，不写 `trade_review.csv`。
+- 做T页新增“为什么触发 / 为什么没触发”中文解释卡。
+- T trace 增加共振字段：板块跌幅、情绪跌幅、共振通过状态。
+- `scripts/build_t_signal_observer.py` 安全读取 `config/strategies/t_positive.yaml`，读取失败继续使用代码默认参数。
+- `requirements.txt` 增加 `efinance` / `pytdx`，仅作为 provider health probe 可选数据源。
+- 修复 `PytdxProvider` 探测失败时 socket 清理。
+
+### 验收与结果
+
+- `python3 -m py_compile dashboard_app.py diagnostics.py strategy_config.py services/*.py providers/*.py research/provider_probe.py research/strict_t0_backtest.py scripts/build_t_signal_observer.py` 通过。
+- `streamlit.testing.v1.AppTest` 六个导航页全部通过：
+  `今日驾驶舱` / `持仓中心` / `自选池` / `盘中低吸 / 做T` / `复盘中心` / `系统工具`。
+- AppTest 关键文本验证通过：今日驾驶舱、逐条件 Trace、为什么没触发、数据源健康、当前策略规则。
+- `.venv` 已安装并验证 `efinance` / `pytdx` 可 import。
+- `provider_probe.py --symbols 601689 --data-types realtime` 跑通并落盘；当前网络 DNS 失败按 provider health 记录。
+- `build_t_signal_observer.py` 使用本地 601689 分钟 K 跑通并生成带共振字段的 T trace。
+
+### 安全边界
+
+- 未运行 `python run.py`。
+- 未修改 `run.py`、`trade_review.py`、`config/version_flags.yaml`、`launchd/*.plist`。
+- 未修改 `output/trade_review.csv`。
+- 未接券商、未自动下单。
+- 未改变正式 9:36 买入规则、-3% 止损规则、正式模拟收益口径。
+
+---
+
 ## 2026-06-11 Codex（严格多重过滤正T独立回测框架）
 
 ### 操作模型

@@ -26,6 +26,13 @@
 - 新增旁路 providers 管理层：`providers/` + `diagnostics.py` + `research/provider_probe.py`，输出 `output/diagnostics/provider_health_YYYYMMDD.csv`。`efinance_probe` / `pytdx_probe` 仅记录 health，`used_for_official=False`。
 - `scripts/build_t_signal_observer.py` 新增逐条件 trace 输出：`output/diagnostics/t_signal_trace_YYYYMMDD.csv`，记录急跌、VWAP、倍量、缩量、失败原因，不改变原有 `rule_pass` 判定。
 - 新增策略 YAML：`config/strategies/v16_buy_confirm.yaml` / `t_positive.yaml` / `funds_alpha.yaml`，第一版只用于看板展示和实验读取，正式 9:36 / -3% 止损 / 收益统计仍沿用原代码。
+- 2026-06-11 后续补齐：
+  - 新增 `services/` 轻量 service/helper 层：`freshness_service.py`、`dashboard_status.py`、`provider_health_service.py`、`t_trace_service.py`。
+  - 系统工具页新增带确认 checkbox 的 provider_probe 旁路运行入口。
+  - 做T页新增“为什么触发 / 为什么没触发”中文解释卡。
+  - T trace 增加共振字段：`resonance_sector_drop_pct`、`resonance_emotion_drop_pct`、`rule_resonance_pass`。
+  - T 实验模块可安全读取 `t_positive.yaml` 参数；读取失败回落代码默认值。
+  - `requirements.txt` 增加 `efinance` / `pytdx`，仅用于 provider health probe。
 - 本次未修改 `run.py`、`trade_review.py`、`config/version_flags.yaml`、`launchd/*.plist`、`output/trade_review.csv`。
 
 ### 2026-06-11 Codex 补充：严格正T独立回测框架
