@@ -51,6 +51,25 @@
   `--local-emotion-minute-csv` / `--local-market-minute-csv`。
 - 本次未修改主策略、主 T 模块、看板、launchd 或 `output/trade_review.csv`。
 
+### 2026-06-11 Codex 补充：Dashboard 全导航中文化与可读性收尾
+
+- `dashboard_app.py` 新增统一展示层中文映射，仅改前台显示，不改底层 CSV / YAML 字段。
+- 已中文化：
+  - 今日驾驶舱数据新鲜度卡：来源、时间、实时/延迟/兜底状态。
+  - 做T逐条件诊断：按股票汇总、逐K明细、失败原因、规则通过状态。
+  - 系统工具：任务状态、数据源健康、失败原因、策略规则。
+  - 复盘中心：底部“原始明细”改为“中文诊断明细”。
+  - 自选池：维护表改为中文列编辑，保存前再映射回原 `custom_stock_pool.csv` 字段。
+  - 持仓中心：状态说明、手动只观察快捷切换、底部维护说明去掉英文状态码。
+  - 明日计划预览：只在展示时清洗 `dashboard / build / market_daily` 等技术词，不写回 MD 文件。
+- `research/dashboard_ui_audit.py` 已同步检查中文“逐条件诊断”。
+- 验证：
+  - `python -m py_compile dashboard_app.py research/dashboard_ui_audit.py services/t_trace_service.py services/provider_health_service.py services/task_status_service.py` ✅
+  - `python research/dashboard_ui_audit.py` 六个导航页全部 OK ✅
+  - AppTest 对目标英文技术词扫描无命中 ✅
+  - Chrome headless 可连接 8504，但截图停在 Streamlit 加载骨架；以 AppTest 渲染结果作为本次页面验证依据。
+- 安全边界：未运行 `python run.py`，未修改正式交易链路，未修改 `output/trade_review.csv` / `launchd` / `config/version_flags.yaml`。
+
 ## 最新 10 个 Commit
 
 ```text

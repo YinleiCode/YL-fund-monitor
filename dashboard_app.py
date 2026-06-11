@@ -571,6 +571,232 @@ def _eh(v, default: str = "") -> str:
     return html.escape(str(v), quote=True)
 
 
+DISPLAY_COL_CN = {
+    "date": "日期",
+    "time": "时间",
+    "task": "任务",
+    "status": "状态",
+    "source": "数据来源",
+    "official": "正式模块",
+    "experimental": "实验模块",
+    "updated_at": "更新时间",
+    "detail": "说明",
+    "provider": "数据源",
+    "records": "记录数",
+    "success": "成功数",
+    "avg_latency_ms": "平均耗时ms",
+    "failures": "失败数",
+    "success_rate": "成功率%",
+    "data_type": "数据类型",
+    "symbol": "标的",
+    "latency_ms": "耗时ms",
+    "error_message": "失败原因",
+    "used_for_official": "正式使用",
+    "report_date": "日期",
+    "mode": "模式",
+    "rank": "排名",
+    "stock_code": "股票代码",
+    "stock_name": "股票名称",
+    "total_score": "总分",
+    "buy_signal_0935": "9:36买入",
+    "buy_price": "买入价",
+    "adjusted_buy_price": "滑点后买入价",
+    "stop_price": "止损价",
+    "open_change_pct": "开盘涨跌",
+    "notes": "原因备注",
+    "unable_to_buy_reason": "无法买入原因",
+    "t1_open": "T+1开盘",
+    "t1_close": "T+1收盘",
+    "t1_max_return": "T+1最高收益",
+    "stop_loss_triggered": "是否止损",
+    "simulated_trade_return": "模拟收益",
+    "is_active_success": "主动成功",
+    "is_strong_surge": "强势大涨",
+    "mf_data_source": "资金数据源",
+    "mf_source_level": "资金源级别",
+    "mf_is_healthy": "资金数据健康",
+    "v15_decision": "资金层判断",
+    "mf_reason_cn": "资金原因",
+    "mf_inflow_days": "流入天数",
+    "mf_inflow_total": "累计流入",
+    "mf_inflow_ratio_avg": "平均流入占比",
+    "mf_ths_net_total": "同花顺净额",
+    "mf_latest_date": "资金最新日期",
+    "scan_time": "扫描时间",
+    "bar_timestamp": "K线时间",
+    "bar_delay_seconds": "K线延迟秒",
+    "is_green_k": "是否绿K",
+    "drop_pct_1m": "1分钟跌幅",
+    "drop_pct_2m": "2分钟跌幅",
+    "drop_pct_3m": "3分钟跌幅",
+    "drop_pct_max": "最大急跌",
+    "below_vwap_pct": "低于VWAP",
+    "green_vol_multiple": "绿K放量倍数",
+    "shrink_ratio": "缩量比例",
+    "rule_time_window_pass": "时间窗口通过",
+    "rule_drop_pass": "急跌通过",
+    "rule_vwap_pass": "VWAP通过",
+    "rule_green_vol_pass": "倍量绿通过",
+    "rule_shrink_pass": "缩量通过",
+    "rule_resonance_pass": "共振通过",
+    "final_pass": "最终触发",
+    "fail_reasons": "失败原因码",
+    "signal_side": "信号方向",
+    "trace_rows": "诊断行数",
+    "delayed": "延迟行数",
+    "priority": "优先级",
+    "theme": "调研主题",
+    "reason": "研究理由",
+    "research_date": "研究日期",
+    "max_position_pct": "最大仓位%",
+    "note": "备注",
+}
+
+RULE_CN = {
+    "time_window_start": "时间窗口开始",
+    "time_window_end": "时间窗口结束",
+    "drop_pct_min": "急跌阈值",
+    "below_vwap_pct": "低于VWAP阈值",
+    "vol_multiple_min": "绿K放量倍数",
+    "shrink_ratio_max": "缩量确认比例",
+    "resonance_sector_drop_max": "板块跌幅上限",
+    "resonance_emotion_drop_max": "情绪跌幅上限",
+    "market_score_min": "市场情绪最低分",
+    "open_change_low": "开盘跌幅下限",
+    "open_change_high": "开盘涨幅上限",
+    "price_must_above_open": "必须站上开盘价",
+    "price_must_above_ma5": "必须站上5日线",
+    "not_one_word_limit_up": "排除一字涨停",
+    "mode": "运行方式",
+    "affect_check_buy": "影响9:36买入",
+    "write_audit_fields": "写观察字段",
+}
+
+MODULE_STATUS_CN = {
+    "official": "正式模块",
+    "experimental": "实验模块",
+    "observational": "观察模块",
+    "system": "系统工具",
+}
+
+TASK_CN = {
+    "08:50 pick": "08:50 盘前选股",
+    "08:55 theme_auto": "08:55 主题自动选股",
+    "09:36 check_buy": "09:36 买入确认",
+    "10:01 second_check": "10:01 二次观察",
+    "19:00 update_review": "19:00 T+1复盘",
+    "T signal": "做T信号",
+    "T trace": "做T逐条件诊断",
+    "Provider health": "数据源健康诊断",
+}
+
+DATA_TYPE_CN = {
+    "realtime": "实时行情",
+    "minute": "分钟K",
+    "daily": "日K",
+}
+
+STATUS_VALUE_CN = {
+    "ok": "成功",
+    "error": "失败",
+    "empty": "空数据",
+    "missing": "缺失/未完成",
+    "done": "完成",
+    "active": "活跃",
+    "inactive": "停用",
+    "true": "是",
+    "false": "否",
+    "1": "是",
+    "0": "否",
+    "low_absorb": "低吸T",
+    "high_throw": "高抛T",
+}
+
+
+def _bool_cn(v) -> str:
+    s = str(v).strip().lower()
+    if s in ("true", "1", "yes"):
+        return "是"
+    if s in ("false", "0", "no"):
+        return "否"
+    return str(v) if str(v).strip() else "—"
+
+
+def _value_cn(v) -> str:
+    s = str(v).strip()
+    return STATUS_VALUE_CN.get(s.lower(), s or "—")
+
+
+def _source_cn(v) -> str:
+    s = str(v or "").strip()
+    if not s:
+        return "—"
+    replacements = {
+        "trade_review.csv": "交易复盘表",
+        "provider_health": "数据源健康诊断",
+        "task_status": "任务状态快照",
+        "default_fallback": "代码默认兜底",
+        "output/diagnostics": "诊断输出",
+        "output/t_signal": "做T信号输出",
+    }
+    for raw, cn in replacements.items():
+        if raw in s:
+            return cn
+    if "/" in s:
+        return Path(s).name
+    return s
+
+
+def _format_rule_value(key: str, value) -> str:
+    if isinstance(value, bool):
+        return "是" if value else "否"
+    if key.endswith("_pct") or "drop" in key or "ratio" in key:
+        f = _gf(value)
+        if f is not None and abs(f) < 1:
+            return f"{f * 100:.2f}%"
+    if str(value) == "observe_only":
+        return "只观察"
+    return str(value)
+
+
+def _rules_cn(rules: dict) -> str:
+    if not isinstance(rules, dict) or not rules:
+        return "—"
+    return "；".join(
+        f"{RULE_CN.get(str(k), str(k))}：{_format_rule_value(str(k), v)}"
+        for k, v in rules.items()
+    )
+
+
+def _display_df(df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
+    """Convert internal diagnostic fields to Chinese display columns only."""
+    if df is None or df.empty:
+        return pd.DataFrame()
+    out = df.copy()
+    if cols is not None:
+        out = out[[c for c in cols if c in out.columns]]
+    for col in out.columns:
+        if col in {"official", "experimental", "used_for_official"} or col.startswith("is_") or col.endswith("_pass"):
+            out[col] = out[col].map(_bool_cn)
+        elif col == "task":
+            out[col] = out[col].map(lambda v: TASK_CN.get(str(v), str(v)))
+        elif col in {"status", "data_mode", "signal_side"}:
+            out[col] = out[col].map(_value_cn)
+        elif col == "data_type":
+            out[col] = out[col].map(lambda v: DATA_TYPE_CN.get(str(v), str(v) or "—"))
+        elif col == "source":
+            out[col] = out[col].map(_source_cn)
+        elif col == "provider":
+            out[col] = out[col].map(lambda v: str(v).upper() if str(v).strip() else "—")
+        elif col == "fail_reasons":
+            out[col] = out[col].map(explain_fail_reasons)
+        elif col == "mode":
+            out[col] = out[col].map(_mode_cn)
+        elif col == "notes":
+            out[col] = out[col].map(lambda v: "；".join(_reason_zh(p.strip()) for p in str(v).split(";") if p.strip()))
+    return out.rename(columns={c: DISPLAY_COL_CN.get(c, c) for c in out.columns})
+
+
 def _h(s: str) -> str:
     """V2 HTML dedent helper：彻底消除每行行首空白，避免 Markdown 代码块识别。
 
@@ -635,14 +861,14 @@ def _render_t_trace_panel() -> None:
     df = _read_latest_diag("t_signal_trace")
     if df.empty:
         status_banner(
-            "暂无 T 信号逐条件 trace。下一次运行 `scripts/build_t_signal_observer.py` 后会生成 `output/diagnostics/t_signal_trace_YYYYMMDD.csv`。",
+            "暂无做 T 逐条件诊断。下一次运行做 T 观察脚本后，会在诊断目录生成逐条件结果。",
             "info",
         )
         return
-    st.markdown("### 逐条件 Trace")
+    st.markdown("### 逐条件诊断")
     summary = summarize_t_trace(df)
     c1, c2, c3, c4 = st.columns(4)
-    c1.markdown(kpi_card("Trace 行数", summary.total, COLOR_TEXT), unsafe_allow_html=True)
+    c1.markdown(kpi_card("诊断行数", summary.total, COLOR_TEXT), unsafe_allow_html=True)
     c2.markdown(kpi_card("最终触发", summary.final_pass, COLOR_SECOND), unsafe_allow_html=True)
     c3.markdown(kpi_card("延迟K线", summary.delayed, COLOR_WARN_YELLOW if summary.delayed else COLOR_BOUGHT, ">180秒"), unsafe_allow_html=True)
     c4.markdown(kpi_card("首要失败", explain_fail_reasons(summary.top_fail_reason) if summary.top_fail_reason else "—", COLOR_DROP if summary.top_fail_reason else COLOR_BOUGHT), unsafe_allow_html=True)
@@ -655,7 +881,7 @@ def _render_t_trace_panel() -> None:
             status_banner("暂无规则矩阵数据。", "info")
     with tab_stock:
         if summary.by_stock is not None and not summary.by_stock.empty:
-            st.dataframe(summary.by_stock, width="stretch", hide_index=True)
+            st.dataframe(_display_df(summary.by_stock), width="stretch", hide_index=True)
         else:
             status_banner("暂无按股票汇总数据。", "info")
 
@@ -693,12 +919,9 @@ def _render_t_trace_panel() -> None:
         "final_pass", "fail_reasons", "signal_side",
     ]
     df = df.copy()
-    if "fail_reasons" in df.columns:
-        df["失败原因中文"] = df["fail_reasons"].map(explain_fail_reasons)
-        show_cols.append("失败原因中文")
     show_cols = [c for c in show_cols if c in df.columns]
     with tab_detail:
-        st.dataframe(df[show_cols].tail(120), width="stretch", hide_index=True)
+        st.dataframe(_display_df(df.tail(120), show_cols), width="stretch", hide_index=True)
 
 
 def enrich_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -5448,44 +5671,45 @@ def _render_task_status_panel() -> None:
     if "status" in df.columns:
         df["状态"] = df["status"].map(lambda v: "完成" if str(v) == "done" else "缺失/未完成")
     cols = [c for c in ["date", "task", "状态", "source", "official", "experimental", "updated_at", "detail"] if c in df.columns]
-    st.dataframe(df[cols], width="stretch", hide_index=True)
+    st.dataframe(_display_df(df, cols), width="stretch", hide_index=True)
 
 
 def _render_provider_health_panel() -> None:
     st.markdown("### 数据源健康")
-    with st.expander("运行旁路 provider probe", expanded=False):
+    with st.expander("运行旁路数据源探测", expanded=False):
         symbols = st.text_input("探测股票代码", value="601689,688160", key="provider_probe_symbols")
         data_types = st.multiselect(
             "数据类型",
-            options=["realtime", "minute", "daily"],
-            default=["realtime"],
+            options=["实时行情", "分钟K", "日K"],
+            default=["实时行情"],
             key="provider_probe_data_types",
         )
         confirm = st.checkbox(
-            "我确认只运行旁路 provider_probe，不写 trade_review.csv，不影响正式策略",
+            "我确认只运行旁路数据源探测，不写交易复盘表，不影响正式策略",
             key="provider_probe_confirm",
         )
-        if st.button("运行 provider_probe", disabled=not confirm, key="btn_provider_probe"):
+        if st.button("运行数据源探测", disabled=not confirm, key="btn_provider_probe"):
+            data_type_map = {"实时行情": "realtime", "分钟K": "minute", "日K": "daily"}
             cmd = [
                 str(PYTHON_BIN if PYTHON_BIN.exists() else sys.executable),
                 str(BASE_DIR / "research" / "provider_probe.py"),
                 "--symbols", symbols,
-                "--data-types", ",".join(data_types or ["realtime"]),
+                "--data-types", ",".join(data_type_map.get(x, x) for x in (data_types or ["实时行情"])),
             ]
-            with st.spinner("正在运行 provider_probe..."):
+            with st.spinner("正在运行数据源探测..."):
                 result = subprocess.run(cmd, cwd=str(BASE_DIR), capture_output=True, text=True, timeout=90)
             if result.returncode == 0:
-                status_banner("provider_probe 已完成，刷新后可查看最新诊断。", "success")
+                status_banner("数据源探测已完成，刷新后可查看最新诊断。", "success")
                 if result.stdout:
                     st.code(result.stdout[-4000:], language="text")
             else:
-                status_banner(f"provider_probe 失败：exit={result.returncode}", "error")
+                status_banner(f"数据源探测失败：退出码 {result.returncode}", "error")
                 st.code((result.stderr or result.stdout)[-4000:], language="text")
 
     df = _read_latest_diag("provider_health")
     if df.empty:
         status_banner(
-            "暂无 provider health 诊断。可手动运行 `python research/provider_probe.py --symbols 601689,688160`，该脚本只写 diagnostics，不写 trade_review.csv。",
+            "暂无数据源健康诊断。可在上方手动运行旁路数据源探测；该脚本只写诊断文件，不写交易复盘表。",
             "info",
         )
         return
@@ -5494,20 +5718,20 @@ def _render_provider_health_panel() -> None:
     c1.markdown(kpi_card("诊断记录", summary.total, COLOR_TEXT), unsafe_allow_html=True)
     c2.markdown(kpi_card("成功率", f"{summary.ok_count / summary.total * 100:.1f}%" if summary.total else "0%", COLOR_BOUGHT if summary.ok_count else COLOR_DROP), unsafe_allow_html=True)
     c3.markdown(kpi_card("平均延迟", f"{summary.avg_latency_ms:.0f} ms" if summary.avg_latency_ms is not None else "—", COLOR_SECOND), unsafe_allow_html=True)
-    c4.markdown(kpi_card("正式使用", summary.official_count, COLOR_WARN_YELLOW if summary.official_count else COLOR_BOUGHT, "应为 0；probe 旁路"), unsafe_allow_html=True)
+    c4.markdown(kpi_card("正式使用", summary.official_count, COLOR_WARN_YELLOW if summary.official_count else COLOR_BOUGHT, "应为 0；旁路观察"), unsafe_allow_html=True)
 
-    st.dataframe(summary.by_provider, width="stretch", hide_index=True)
+    st.dataframe(_display_df(summary.by_provider), width="stretch", hide_index=True)
 
     history = load_provider_health_history(DIAGNOSTICS_DIR, limit_files=14)
     trend = summarize_provider_health_trend(history)
     if not trend.empty:
         st.markdown("### 近14个诊断文件趋势")
-        st.dataframe(trend.tail(80), width="stretch", hide_index=True)
+        st.dataframe(_display_df(trend.tail(80)), width="stretch", hide_index=True)
 
     if not summary.failed.empty:
         st.markdown("### 最近失败原因")
         cols = [c for c in ["time", "provider", "data_type", "symbol", "status", "latency_ms", "error_message", "used_for_official"] if c in summary.failed.columns]
-        st.dataframe(summary.failed[cols].tail(30), width="stretch", hide_index=True)
+        st.dataframe(_display_df(summary.failed.tail(30), cols), width="stretch", hide_index=True)
 
 
 def _render_strategy_rules_panel() -> None:
@@ -5518,11 +5742,11 @@ def _render_strategy_rules_panel() -> None:
         rules = cfg.get("rules", {}) if isinstance(cfg.get("rules", {}), dict) else {}
         rows.append({
             "策略": cfg.get("display_name", cfg.get("name")),
-            "状态": cfg.get("module_status", ""),
-            "正式使用": cfg.get("used_for_official", False),
-            "来源": cfg.get("_source", ""),
-            "读取异常": cfg.get("_load_error", ""),
-            "规则": json.dumps(rules, ensure_ascii=False),
+            "模块身份": MODULE_STATUS_CN.get(str(cfg.get("module_status", "")), str(cfg.get("module_status", "")) or "—"),
+            "正式使用": _bool_cn(cfg.get("used_for_official", False)),
+            "配置来源": _source_cn(cfg.get("_source", "")),
+            "读取异常": cfg.get("_load_error", "") or "—",
+            "当前生效规则": _rules_cn(rules),
         })
     st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
     st.caption("第一版 YAML 只用于规则展示和实验模块读取；正式 9:36 买入、-3% 止损、收益统计仍沿用原代码口径。")
@@ -6722,11 +6946,13 @@ def page_candidate_lifecycle() -> None:
 
     st.divider()
 
-    with st.expander("📑 原始明细（开发者视图 · 默认折叠）", expanded=False):
-        st.caption("以下为 trade_review.csv + money_flow_simulation 的原始字段视图，"
-                   "保留英文字段名以便开发者排查。普通用户无需关注。")
+    with st.expander("📑 中文诊断明细（默认折叠）", expanded=False):
+        st.caption(
+            "这里把底层复盘、资金观察和市场环境文件统一翻译成中文列名，"
+            "方便排查当天每只票的来龙去脉；只读展示，不改任何历史记录。"
+        )
 
-        st.markdown("**当日 trade_review 原始行（按 mode + rank）**")
+        st.markdown("**当日交易复盘明细（按模式 + 排名）**")
         show_cols = [c for c in [
             "report_date","mode","rank","stock_code","stock_name",
             "total_score","buy_signal_0935","buy_price","adjusted_buy_price",
@@ -6734,35 +6960,35 @@ def page_candidate_lifecycle() -> None:
             "t1_open","t1_close","t1_max_return","stop_loss_triggered",
             "simulated_trade_return","is_active_success","is_strong_surge",
         ] if c in day_df.columns]
-        st.dataframe(day_df[show_cols], width="stretch", hide_index=True)
+        st.dataframe(_display_df(day_df, show_cols), width="stretch", hide_index=True)
 
         if mf_loaded:
-            st.markdown("**当日 资金条件层 资金模拟原始字段**")
+            st.markdown("**当日资金条件层观察明细**")
             mf_show_cols = [c for c in [
                 "stock_code","stock_name","mode","mf_data_source","mf_source_level",
                 "mf_is_healthy","v15_decision","mf_reason_cn",
                 "mf_inflow_days","mf_inflow_total","mf_inflow_ratio_avg",
                 "mf_ths_net_total","mf_latest_date",
             ] if c in mf_df.columns]
-            st.dataframe(mf_df[mf_show_cols], width="stretch", hide_index=True)
+            st.dataframe(_display_df(mf_df, mf_show_cols), width="stretch", hide_index=True)
         else:
             st.caption("（当日资金预筛未运行，无明细）")
 
         # —— market_daily 原始字段 ——
         if market_daily is not None:
-            st.markdown("**当日 market_daily 派生原始字段**")
-            st.dataframe(pd.DataFrame([market_daily]), width="stretch", hide_index=True)
+            st.markdown("**当日市场环境派生字段**")
+            st.dataframe(_display_df(pd.DataFrame([market_daily])), width="stretch", hide_index=True)
         else:
-            st.caption(f"（当日 market_daily_{selected_date}.csv 未生成）")
+            st.caption(f"（当日市场环境文件未生成：{selected_date}）")
 
         # —— candidate_lifecycle 止损跟踪原始字段 ——
         if track_df is not None and not track_df.empty:
-            st.markdown("**当日 candidate_lifecycle 止损跟踪原始字段**")
-            st.dataframe(track_df, width="stretch", hide_index=True)
+            st.markdown("**当日止损后跟踪明细**")
+            st.dataframe(_display_df(track_df), width="stretch", hide_index=True)
         elif track_df is not None and track_df.empty:
-            st.caption("（当日 candidate_lifecycle 文件存在但无止损票，仅表头）")
+            st.caption("（当日止损后跟踪文件存在，但没有止损票，仅表头）")
         else:
-            st.caption(f"（当日 candidate_lifecycle_{selected_date}.csv 未生成）")
+            st.caption(f"（当日止损后跟踪文件未生成：{selected_date}）")
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -6840,6 +7066,28 @@ def _tp_load_plan_md() -> str:
         return fp.read_text(encoding="utf-8")
     except Exception:
         return ""
+
+
+def _tp_display_md_text(md_text: str) -> str:
+    """Only clean visible preview wording; do not mutate the generated MD file."""
+    if not md_text:
+        return ""
+    replacements = {
+        "本 MD 由 dashboard 人工编辑后保存。原始 build 版本可通过重跑 `scripts/build_tomorrow_plan.py` 覆盖。":
+            "本文由看板人工编辑后保存。如需覆盖已确认版本，请使用上方的高风险重建按钮。",
+        "dashboard 人工编辑": "看板人工编辑",
+        "原始 build 版本": "原始生成版本",
+        "`scripts/build_tomorrow_plan.py`": "明日计划生成脚本",
+        "market_daily": "市场环境数据",
+        "trade_review": "交易复盘表",
+        "tomorrow_plan_latest.md": "明日计划预览文件",
+        "tomorrow_plan": "明日计划",
+        "build": "生成",
+    }
+    out = md_text
+    for raw, cn in replacements.items():
+        out = out.replace(raw, cn)
+    return out
 
 
 def _tp_status_card(title: str, value: str, desc: str, level: str = "info") -> str:
@@ -7704,13 +7952,13 @@ def page_tomorrow_plan() -> None:
     st.divider()
 
     # ── 5. MD 预览 ──
-    st.markdown("### 📄 当前 tomorrow_plan_latest.md 预览")
+    st.markdown("### 📄 当前明日计划预览")
     md_text = _tp_load_plan_md()
     if md_text:
-        with st.expander("展开 MD 全文", expanded=False):
-            st.markdown(md_text)
+        with st.expander("展开计划全文", expanded=False):
+            st.markdown(_tp_display_md_text(md_text))
     else:
-        st.caption("（MD 文件未生成，请先点击「生成/刷新明日计划」）")
+        st.caption("（明日计划文件未生成，请先点击「生成/刷新明日计划」）")
 
     # ── 6. 计划/V16 配置只读展示 ──
     st.divider()
@@ -8487,18 +8735,18 @@ def page_holding_track(df_all: pd.DataFrame) -> None:
 
     render_page_header(
         "持仓追踪",
-        "HOLDING TRACK",
+        "持仓中心",
         "买入后到卖出的完整记录。包含每只票从买入起的最高价、最低价、最大收益、"
         "最大回撤、当前状态；止损卖出后继续追踪 30 个交易日，判断是否卖飞。",
         badges=["朱哥 06-02 拍板", "持仓不限天数", "止损后追 30 天"],
         aside_title="数据口径",
         aside_body=(
-            "<code>holding_status</code> 分 5 类：<br>"
-            "• <b>holding</b>：持仓中（未触发止损）<br>"
-            "• <b>stopped</b>：已止损 + 30 天追踪中<br>"
-            "• <b>post_stop_done</b>：30 天追踪完成<br>"
-            "• <b>manual_sell</b>：手动卖出<br>"
-            "• <b>legacy_t1_sell</b>：老逻辑 T+1 必卖（≤ 06-02 买入）"
+            "持仓状态分 5 类：<br>"
+            "• <b>持仓中</b>：未触发止损<br>"
+            "• <b>已止损</b>：继续追踪 30 天<br>"
+            "• <b>追踪完成</b>：30 天追踪完成<br>"
+            "• <b>手动卖出</b>：人工记录退出<br>"
+            "• <b>历史T+1卖出</b>：旧规则记录"
         ),
     )
 
@@ -8618,7 +8866,7 @@ def page_holding_track(df_all: pd.DataFrame) -> None:
             flew = "🚀 卖飞了" if (post_max_ret is not None and post_max_ret >= 0.03) else ""
             post_stop_html = (
                 f'<div style="margin-top:12px;padding-top:12px;border-top:1px dashed {COLOR_GLASS_EDGE};font-family:{FONT_MONO};font-size:12px;">'
-                f'<div style="color:{COLOR_MUTED};margin-bottom:6px;letter-spacing:0.1em;text-transform:uppercase;">POST-STOP TRACK</div>'
+                f'<div style="color:{COLOR_MUTED};margin-bottom:6px;letter-spacing:0.1em;">止损后跟踪</div>'
                 f'<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px 24px;">'
                 f'<div><span style="color:{COLOR_MUTED};">止损日 </span><span style="color:{COLOR_TEXT};">{_h(exit_date)}</span></div>'
                 f'<div><span style="color:{COLOR_MUTED};">追踪天数 </span><span style="color:{COLOR_TEXT};">{_h(post_days)}/30</span></div>'
@@ -8651,10 +8899,10 @@ def page_holding_track(df_all: pd.DataFrame) -> None:
             _h(f"""
             <div class="t1-section-head" style="margin-top:24px;">
               <div>
-                <div class="t1-section-kicker">PENDING UPDATE_REVIEW</div>
-                <div class="t1-section-title">已买入待补全（{n_new} 只 · 等 19:00 update_review 填字段）</div>
+                <div class="t1-section-kicker">等待晚间复盘</div>
+                <div class="t1-section-title">已买入待补全（{n_new} 只 · 等 19:00 晚间复盘补全）</div>
               </div>
-              {chip_html("等 19:00 update_review", color=COLOR_WAIT_T1)}
+              {chip_html("等 19:00 复盘", color=COLOR_WAIT_T1)}
             </div>
             """),
             unsafe_allow_html=True,
@@ -8696,7 +8944,7 @@ def page_holding_track(df_all: pd.DataFrame) -> None:
                 f'<div><span style="color:{COLOR_MUTED};">主题 </span><span style="color:{COLOR_TEXT};">{_h(theme) or "—"}</span></div>'
                 f'</div>'
                 f'<div style="margin-top:10px;padding:8px 12px;background:rgba(0,218,243,0.06);border-left:2px solid {COLOR_WAIT_T1};border-radius:4px;font-size:11px;color:{COLOR_MUTED};font-family:{FONT_MONO};">'
-                f'今晚 19:00 update_review 跑完后, 这里会显示: 最新收盘 / 当前收益 / 期间最高/最低 / 最大收益/回撤 / 持仓天数 等滚动字段.'
+                f'今晚 19:00 晚间复盘跑完后，这里会显示：最新收盘、当前收益、期间最高/最低、最大收益/回撤、持仓天数等滚动字段。'
                 f'</div>'
             )
             st.markdown(glass_card_html(inner, padding="16px 18px", accent=COLOR_BOUGHT, extra_style="margin-bottom:12px;"), unsafe_allow_html=True)
@@ -8759,7 +9007,7 @@ def page_holding_track(df_all: pd.DataFrame) -> None:
             _h(f"""
             <div class="t1-section-head" style="margin-top:24px;">
               <div>
-                <div class="t1-section-kicker">POST-STOP TRACK</div>
+                <div class="t1-section-kicker">止损后跟踪</div>
                 <div class="t1-section-title">已止损 · 30 天追踪中（{n_stopped} 只）</div>
               </div>
               {chip_html(f"卖飞 {flew_away_count} 只", color=COLOR_MAGENTA_NEON if flew_away_count else COLOR_MUTED)}
@@ -8816,7 +9064,7 @@ def page_holding_track(df_all: pd.DataFrame) -> None:
             _h(f"""
             <div class="t1-section-head" style="margin-top:24px;">
               <div>
-                <div class="t1-section-kicker">COMPLETED</div>
+                <div class="t1-section-kicker">已归档</div>
                 <div class="t1-section-title">30 天追踪完成（{n_post} 只）</div>
               </div>
               {chip_html("归档", color=COLOR_MUTED)}
@@ -8834,7 +9082,7 @@ def page_holding_track(df_all: pd.DataFrame) -> None:
             _h(f"""
             <div class="t1-section-head" style="margin-top:24px;">
               <div>
-                <div class="t1-section-kicker">MANUAL EXIT</div>
+                <div class="t1-section-kicker">人工退出</div>
                 <div class="t1-section-title">手动卖出（{n_manual} 只）</div>
               </div>
               {chip_html("人工", color=COLOR_WAIT_T1)}
@@ -8856,9 +9104,9 @@ def page_holding_track(df_all: pd.DataFrame) -> None:
     st.markdown(
         _h(f"""
         <div style="margin-top:24px;padding:14px;font-size:12px;color:{COLOR_MUTED};font-family:{FONT_MONO};border-top:1px solid {COLOR_GLASS_EDGE};">
-          数据来源: trade_review.csv 滚动字段 (commit bddfcfd 引入).<br>
-          每天 19:00 update_review 自动滚动一次, 不可在此页编辑.<br>
-          如需手动卖出, 编辑 trade_review.csv 改 exit_reason=manual_sell + holding_status=manual_sell.
+          数据来源：交易复盘表的持仓追踪字段。<br>
+          每天 19:00 晚间复盘自动滚动一次，不可在此页编辑。<br>
+          如需手动卖出，请在底层复盘表中把退出原因和持仓状态改为“手动卖出”。
         </div>
         """),
         unsafe_allow_html=True,
@@ -9145,7 +9393,7 @@ def _render_manual_observe_panel(watchlist_rows: list[dict]) -> None:
                 and str(r.get("stock_code", "") or "").strip()
             ]
             if active_rows:
-                st.markdown(f"**从自选池快捷切换（共 {len(active_rows)} 只 active）**")
+                st.markdown(f"**从自选池快捷切换（共 {len(active_rows)} 只观察中）**")
                 st.caption("勾选的股票会立即写入只观察名单，取消勾选则移除。")
                 # 按 4 列排
                 n_cols = 4
@@ -9932,8 +10180,9 @@ def page_watchlist() -> None:
             show_df["stock_code"].astype(str).str.lower().str.contains(kw, na=False)
             | show_df["stock_name"].astype(str).str.lower().str.contains(kw, na=False)
         ]
-    if status_filter != "全部":
-        show_df = show_df[show_df["status"] == status_filter]
+    status_filter_raw = {"全部": "全部", "活跃": "active", "停用": "inactive"}.get(status_filter, status_filter)
+    if status_filter_raw != "全部":
+        show_df = show_df[show_df["status"] == status_filter_raw]
     if priority_filter != "全部":
         show_df = show_df[show_df["priority"] == priority_filter]
     if only_theme:
@@ -10081,8 +10330,8 @@ def page_watchlist() -> None:
                         btn_disabled = True
                         action_mode = "noop"
                     else:
-                        st.warning(f"识别成功：{code} {name} · 当前状态：{existing_status or '空'}，可重新激活")
-                        btn_label = "更新为 active"
+                        st.warning(f"识别成功：{code} {name} · 当前状态：{_value_cn(existing_status) or '空'}，可重新激活")
+                        btn_label = "更新为活跃"
                         btn_disabled = False
                         action_mode = "activate"
 
@@ -10108,7 +10357,7 @@ def page_watchlist() -> None:
                                     row["stock_name"] = name or row.get("stock_name", "")
                                     row["status"] = "active"
                                     break
-                            success_msg = f"已激活：{code} {name}（状态更新为 active）"
+                            success_msg = f"已激活：{code} {name}（状态更新为活跃）"
                         if _wl_save(_wl_clean_rows(table)):
                             status_banner(success_msg, "success")
                             time.sleep(0.4)
@@ -10127,19 +10376,21 @@ def page_watchlist() -> None:
             )
             fc1, fc2 = st.columns(2, gap="small")
             with fc1:
+                status_options = ["全部", "活跃", "停用"]
                 st.selectbox(
-                    "status 筛选",
-                    ["全部", "active", "inactive"],
-                    index=["全部", "active", "inactive"].index(status_filter)
-                    if status_filter in ["全部", "active", "inactive"] else 0,
+                    "状态筛选",
+                    status_options,
+                    index=status_options.index(status_filter)
+                    if status_filter in status_options else 0,
                     key="wl_status_filter",
                 )
             with fc2:
+                priority_options = ["全部", "1", "2", "3"]
                 st.selectbox(
-                    "priority 筛选",
-                    ["全部", "1", "2", "3"],
-                    index=["全部", "1", "2", "3"].index(priority_filter)
-                    if priority_filter in ["全部", "1", "2", "3"] else 0,
+                    "优先级筛选",
+                    priority_options,
+                    index=priority_options.index(priority_filter)
+                    if priority_filter in priority_options else 0,
                     key="wl_priority_filter",
                 )
             st.checkbox("只看已填写主题", value=only_theme, key="wl_only_theme")
@@ -10147,24 +10398,29 @@ def page_watchlist() -> None:
 
         st.divider()
         edit_df = df[WL_COLUMNS].copy() if not df.empty else pd.DataFrame(columns=WL_COLUMNS)
+        edit_view = _display_df(edit_df)
+        reverse_cols = {DISPLAY_COL_CN.get(c, c): c for c in edit_df.columns}
         edited = st.data_editor(
-            edit_df,
+            edit_view,
             num_rows="dynamic",
             hide_index=True,
             width="stretch",
             column_config={
-                "stock_code": st.column_config.TextColumn("股票代码", width=90, required=True),
-                "stock_name": st.column_config.TextColumn("股票名称", width=120),
-                "priority": st.column_config.SelectboxColumn("优先级", options=["1", "2", "3"], width=70),
-                "theme": st.column_config.TextColumn("调研主题", width=120),
-                "reason": st.column_config.TextColumn("研究理由", width=180),
-                "research_date": st.column_config.TextColumn("研究日期", width=100),
-                "status": st.column_config.SelectboxColumn("状态", options=["active", "inactive"], width=90),
-                "max_position_pct": st.column_config.TextColumn("最大仓位%", width=90),
-                "note": st.column_config.TextColumn("备注", width=150),
+                "股票代码": st.column_config.TextColumn("股票代码", width=90, required=True),
+                "股票名称": st.column_config.TextColumn("股票名称", width=120),
+                "优先级": st.column_config.SelectboxColumn("优先级", options=["1", "2", "3"], width=70),
+                "调研主题": st.column_config.TextColumn("调研主题", width=120),
+                "研究理由": st.column_config.TextColumn("研究理由", width=180),
+                "研究日期": st.column_config.TextColumn("研究日期", width=100),
+                "状态": st.column_config.SelectboxColumn("状态", options=["活跃", "停用"], width=90),
+                "最大仓位%": st.column_config.TextColumn("最大仓位%", width=90),
+                "备注": st.column_config.TextColumn("备注", width=150),
             },
         )
-        cleaned = _wl_clean_rows(edited.fillna("").to_dict("records"))
+        edited_raw = edited.rename(columns=reverse_cols).copy()
+        if "status" in edited_raw.columns:
+            edited_raw["status"] = edited_raw["status"].map(lambda v: {"活跃": "active", "停用": "inactive"}.get(str(v), str(v)))
+        cleaned = _wl_clean_rows(edited_raw.fillna("").to_dict("records"))
         st.caption(f"维护区当前将保存 {len(cleaned)} 只股票。文件位置：`{WATCHLIST_PATH}`")
         if st.button("保存自选池", type="primary", width="stretch"):
             if _wl_save(cleaned):
@@ -10196,19 +10452,26 @@ def _render_data_freshness(df_all: pd.DataFrame) -> None:
         experimental = bool(meta.get("is_experimental"))
         official = bool(meta.get("used_for_official"))
         border = COLOR_DROP if missing else (COLOR_WARN_YELLOW if experimental else COLOR_BOUGHT)
-        status = "MISSING" if missing else str(meta.get("freshness", "unknown")).upper()
+        freshness_raw = str(meta.get("freshness", "unknown")).strip().lower()
+        freshness_cn = {
+            "fresh": "新鲜",
+            "stale": "可能延迟",
+            "missing": "缺失",
+            "unknown": "未知",
+        }.get(freshness_raw, freshness_raw or "未知")
+        status = "缺失" if missing else freshness_cn
         role = "正式" if official else ("实验" if experimental else "观察")
         col.markdown(
             f"""<div style="padding:10px 12px;border-left:3px solid {border};
             background:rgba(10,22,40,.78);border-radius:8px;font-size:12px;line-height:1.7;margin-bottom:8px">
             <div style="display:flex;justify-content:space-between;gap:8px;">
-              <span style="color:#8899aa;font-size:10px;text-transform:uppercase;letter-spacing:.5px">{_eh(label)}</span>
+              <span style="color:#8899aa;font-size:10px;letter-spacing:.5px">{_eh(label)}</span>
               <span style="color:{border};font-family:{FONT_MONO};font-size:10px">{role}</span>
             </div>
             <div style="color:#e2e8f0;font-weight:700">{status}</div>
-            <div style="color:{COLOR_MUTED};font-size:11px">source: {_eh(str(meta.get("source", "")))}</div>
-            <div style="color:{COLOR_MUTED};font-size:11px">timestamp: {_eh(str(meta.get("timestamp", "") or "—"))}</div>
-            <div style="color:{COLOR_FAINT};font-size:10px">realtime={meta.get("is_realtime")} delayed={meta.get("is_delayed")} fallback={meta.get("is_fallback")}</div>
+            <div style="color:{COLOR_MUTED};font-size:11px">来源：{_eh(_source_cn(meta.get("source", "")))}</div>
+            <div style="color:{COLOR_MUTED};font-size:11px">时间：{_eh(str(meta.get("timestamp", "") or "—"))}</div>
+            <div style="color:{COLOR_FAINT};font-size:10px">实时：{_bool_cn(meta.get("is_realtime"))} ｜ 延迟：{_bool_cn(meta.get("is_delayed"))} ｜ 兜底：{_bool_cn(meta.get("is_fallback"))}</div>
             </div>""",
             unsafe_allow_html=True,
         )

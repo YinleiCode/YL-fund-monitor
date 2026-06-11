@@ -4,6 +4,52 @@
 
 ---
 
+## 2026-06-11 Codex（Dashboard 全导航中文化与 UI 可读性收尾）
+
+### 操作模型
+
+Codex
+
+### 本次任务
+
+按朱哥要求逐个检查 6 个导航页，把前台看不懂的英文/技术字段改成中文，并修正诊断表、策略表、自选维护表等展示格式。
+
+### 做了什么
+
+- `dashboard_app.py`
+  - 新增统一展示层中文映射 `_display_df()`，只影响看板显示，不改底层 CSV / YAML 字段。
+  - 今日驾驶舱数据新鲜度卡改为中文：来源、时间、实时、延迟、兜底。
+  - 做T“逐条件 Trace”改为“逐条件诊断”，按股票汇总和逐K明细全部中文列名，失败原因展示中文。
+  - 系统工具页任务状态、数据源健康、最近失败原因、策略规则表全部中文化。
+  - 策略 YAML 不再显示原始 JSON key，改成中文规则句子。
+  - 复盘中心底部“原始明细”改为“中文诊断明细”，交易复盘/资金观察/市场环境/止损跟踪表都用中文列名。
+  - 自选池维护表改为中文列编辑；保存前再映射回原始字段，保证 `custom_stock_pool.csv` 结构不变。
+  - 持仓中心去掉 `holding_status / exit_reason / active` 等前台技术词，改为中文状态说明。
+  - 明日计划预览只在展示时清洗 `dashboard / build / market_daily` 等技术词，不写回 MD 文件。
+- `research/dashboard_ui_audit.py`
+  - 检查项同步为中文“逐条件诊断”。
+
+### 验收与结果
+
+- `python -m py_compile dashboard_app.py research/dashboard_ui_audit.py services/t_trace_service.py services/provider_health_service.py services/task_status_service.py` 通过。
+- `python research/dashboard_ui_audit.py` 通过，6 个导航页全部 OK。
+- 使用 Streamlit AppTest 抽取 6 个导航页表格列，核心表格已中文化：
+  - 自选池维护表：股票代码、股票名称、优先级、调研主题、研究理由、研究日期、状态、最大仓位%、备注。
+  - 做T诊断：扫描时间、股票代码、K线时间、急跌/VWAP/倍量/缩量/共振通过、最终触发、失败原因。
+  - 系统工具：日期、任务、状态、数据来源、正式模块、实验模块、数据源、成功率、失败原因。
+- 对前台 markdown 做英文技术词扫描，`active/inactive/provider/Trace/source:/timestamp:/stock_code/holding_status/exit_reason` 等目标词无命中。
+- 启动测试服务 `http://127.0.0.1:8504`；Chrome headless 截图停在 Streamlit 加载骨架，最终以 AppTest 渲染和审计结果为准。
+
+### 安全边界
+
+- 未运行 `python run.py`。
+- 未修改 `run.py`、`trade_review.py`、`config/version_flags.yaml`、`launchd/*.plist`。
+- 未修改 `output/trade_review.csv`。
+- 未接券商、未自动下单。
+- 未改变正式 9:36 买入规则、-3% 止损规则、正式模拟收益口径。
+
+---
+
 ## 2026-06-11 Codex（V1.6-clean 第一阶段大重构）
 
 ### 操作模型
