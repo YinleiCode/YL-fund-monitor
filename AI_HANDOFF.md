@@ -70,6 +70,21 @@
   - Chrome headless 可连接 8504，但截图停在 Streamlit 加载骨架；以 AppTest 渲染结果作为本次页面验证依据。
 - 安全边界：未运行 `python run.py`，未修改正式交易链路，未修改 `output/trade_review.csv` / `launchd` / `config/version_flags.yaml`。
 
+### 2026-06-11 Codex 补充：中文化漏项收尾
+
+- 继续清理 6 个导航页可见英文/技术词：
+  - 数据源健康表：`eastmoney_direct / efinance_probe / pytdx_probe` 展示为“东方财富直连 / eFinance旁路 / 通达信旁路”。
+  - 策略配置来源：`v16_buy_confirm.yaml / t_positive.yaml / funds_alpha.yaml` 展示为中文配置名。
+  - 做T诊断：`VWAP` 展示为“分时均价线”，失败原因同步改中文。
+  - 表格布尔值：`true / false` 展示为“是 / 否”。
+  - 明日计划预览：`full模式 / theme_auto模式` 展示为“全A模式 / 主题龙头模式”，只改显示，不写回 MD。
+  - 资金源健康卡片：`active_source / system_status / checked_at / push2his / ths_simple` 等改为中文标签和中文值。
+- 验证：
+  - `python -m py_compile dashboard_app.py services/dashboard_status.py services/task_status_service.py services/t_trace_service.py research/dashboard_ui_audit.py` ✅
+  - `python research/dashboard_ui_audit.py` 六个导航页全部 OK ✅
+  - Streamlit AppTest 扫描 6 页可见组件和表格，目标英文技术词已清理；剩余命中主要为注释、常量、执行命令和原始日志字段。
+- 安全边界：未运行 `python run.py`，未修改正式买入、止损、收益口径，未修改 `output/trade_review.csv`。
+
 ## 最新 10 个 Commit
 
 ```text

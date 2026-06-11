@@ -84,17 +84,17 @@ def build_today_status_items(
 
     return [
         StatusItem("今天是否交易日", "是" if is_trading_day else "否", calendar_source, is_trading_day),
-        StatusItem("08:50 pick", "完成" if full_done else "未完成", "full 模式记录", full_done),
-        StatusItem("08:55 theme_auto", "完成" if theme_done else "未完成", "主题龙头模式记录", theme_done),
-        StatusItem("09:36 check_buy", "完成" if check_done else "未完成", "正式模拟买入开关", check_done),
-        StatusItem("10:01 second_check", "完成" if second_done else "未完成", "观察模块", second_done),
-        StatusItem("19:00 update_review", "完成" if review_done else "未完成", "正式复盘口径", review_done),
+        StatusItem("08:50 盘前选股", "完成" if full_done else "未完成", "全市场模式记录", full_done),
+        StatusItem("08:55 主题选股", "完成" if theme_done else "未完成", "主题龙头模式记录", theme_done),
+        StatusItem("09:36 买入确认", "完成" if check_done else "未完成", "正式模拟买入开关", check_done),
+        StatusItem("10:01 二次观察", "完成" if second_done else "未完成", "观察模块", second_done),
+        StatusItem("19:00 晚间复盘", "完成" if review_done else "未完成", "正式复盘口径", review_done),
         StatusItem("当前持仓", str(current_holding), "模拟持仓/跟踪", True),
         StatusItem("今日模拟买入", str(bought_today), "正式模拟收益口径", True),
         StatusItem("今日止损", str(stop_loss_today), "-3% 主链路口径", stop_loss_today == 0),
         StatusItem("数据异常", str(data_anomaly_count), "缺失/延迟/失败标记", data_anomaly_count == 0),
         StatusItem("正式模块", "今日/持仓/自选/复盘", "影响或展示正式模拟收益", True),
-        StatusItem("实验模块", "做T/资金/Provider Probe", "不参与正式收益", None),
+        StatusItem("实验模块", "做T/资金/数据源探测", "不参与正式收益", None),
     ]
 
 

@@ -4,6 +4,48 @@
 
 ---
 
+## 2026-06-11 Codex（Dashboard 中文化漏项收尾）
+
+### 操作模型
+
+Codex
+
+### 本次任务
+
+继续按朱哥要求处理“缺失的、没有显示的、有英文的都翻译成中文”，只改前台展示层，不改正式交易逻辑。
+
+### 做了什么
+
+- `dashboard_app.py`
+  - 顶部系统标识、明日计划、本地任务控制、系统工具、资金源健康、自选池、复盘中心等可见文案继续中文化。
+  - 数据源健康表中 `eastmoney_direct / efinance_probe / pytdx_probe` 改为“东方财富直连 / eFinance旁路 / 通达信旁路”。
+  - 策略配置来源不再显示 `v16_buy_confirm.yaml / t_positive.yaml / funds_alpha.yaml`，改为中文配置名。
+  - 表格里的 `true / false` 统一展示为“是 / 否”。
+  - 明日计划预览里的 `full模式 / theme_auto模式` 展示为“全A模式 / 主题龙头模式”，只改显示，不写回计划文件。
+  - 资金源卡片里的 `active_source / system_status / checked_at / push2his / ths_simple` 等显示改为中文说明。
+  - `VWAP` 前台显示统一改为“分时均价线”。
+- `services/dashboard_status.py`
+  - 今日驾驶舱任务名称继续统一为中文。
+- `services/task_status_service.py`
+  - 新生成的任务状态快照使用中文任务名。
+- `services/t_trace_service.py`
+  - 做T逐条件诊断失败原因中 `VWAP` 改为“分时均价线”。
+
+### 验收与结果
+
+- `python -m py_compile dashboard_app.py services/dashboard_status.py services/task_status_service.py services/t_trace_service.py research/dashboard_ui_audit.py` 通过。
+- `python research/dashboard_ui_audit.py` 通过，6 个导航页全部 OK。
+- 使用 Streamlit AppTest 扫描 6 个导航页可见组件和表格，核心英文技术词已清理；剩余命中主要是代码注释、常量、实际命令、原始日志字段，不属于常规页面展示。
+
+### 安全边界
+
+- 未运行 `python run.py`。
+- 未修改正式买入、止损、收益口径。
+- 未修改 `output/trade_review.csv`。
+- 未接券商、未自动下单。
+
+---
+
 ## 2026-06-11 Codex（Dashboard 全导航中文化与 UI 可读性收尾）
 
 ### 操作模型

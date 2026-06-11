@@ -630,12 +630,12 @@ DISPLAY_COL_CN = {
     "drop_pct_2m": "2分钟跌幅",
     "drop_pct_3m": "3分钟跌幅",
     "drop_pct_max": "最大急跌",
-    "below_vwap_pct": "低于VWAP",
+    "below_vwap_pct": "低于分时均价线",
     "green_vol_multiple": "绿K放量倍数",
     "shrink_ratio": "缩量比例",
     "rule_time_window_pass": "时间窗口通过",
     "rule_drop_pass": "急跌通过",
-    "rule_vwap_pass": "VWAP通过",
+    "rule_vwap_pass": "分时均价线通过",
     "rule_green_vol_pass": "倍量绿通过",
     "rule_shrink_pass": "缩量通过",
     "rule_resonance_pass": "共振通过",
@@ -656,7 +656,7 @@ RULE_CN = {
     "time_window_start": "时间窗口开始",
     "time_window_end": "时间窗口结束",
     "drop_pct_min": "急跌阈值",
-    "below_vwap_pct": "低于VWAP阈值",
+    "below_vwap_pct": "低于分时均价线阈值",
     "vol_multiple_min": "绿K放量倍数",
     "shrink_ratio_max": "缩量确认比例",
     "resonance_sector_drop_max": "板块跌幅上限",
@@ -681,10 +681,15 @@ MODULE_STATUS_CN = {
 
 TASK_CN = {
     "08:50 pick": "08:50 盘前选股",
+    "08:50 盘前选股": "08:50 盘前选股",
     "08:55 theme_auto": "08:55 主题自动选股",
+    "08:55 主题选股": "08:55 主题自动选股",
     "09:36 check_buy": "09:36 买入确认",
+    "09:36 买入确认": "09:36 买入确认",
     "10:01 second_check": "10:01 二次观察",
+    "10:01 二次观察": "10:01 二次观察",
     "19:00 update_review": "19:00 T+1复盘",
+    "19:00 晚间复盘": "19:00 T+1复盘",
     "T signal": "做T信号",
     "T trace": "做T逐条件诊断",
     "Provider health": "数据源健康诊断",
@@ -698,6 +703,11 @@ DATA_TYPE_CN = {
 
 STATUS_VALUE_CN = {
     "ok": "成功",
+    "degraded": "降级",
+    "unavailable": "不可用",
+    "not_checked": "未检测",
+    "skipped": "已跳过",
+    "fetch_failed": "拉取失败",
     "error": "失败",
     "empty": "空数据",
     "missing": "缺失/未完成",
@@ -710,6 +720,9 @@ STATUS_VALUE_CN = {
     "0": "否",
     "low_absorb": "低吸T",
     "high_throw": "高抛T",
+    "push2his": "东方财富主源",
+    "ths_simple": "同花顺备源",
+    "unknown": "未知",
 }
 
 
@@ -727,6 +740,22 @@ def _value_cn(v) -> str:
     return STATUS_VALUE_CN.get(s.lower(), s or "—")
 
 
+def _money_source_cn(v) -> str:
+    s = str(v or "").strip()
+    if not s or s == "—":
+        return "—"
+    mapping = {
+        "push2his": "东方财富主源",
+        "push2his.eastmoney": "东方财富资金接口",
+        "ths_simple": "同花顺备源（简化口径）",
+        "eastmoney": "东方财富",
+        "unavailable": "无可用数据源",
+        "unknown": "未知来源",
+    }
+    low = s.lower()
+    return mapping.get(low, s)
+
+
 def _source_cn(v) -> str:
     s = str(v or "").strip()
     if not s:
@@ -742,8 +771,65 @@ def _source_cn(v) -> str:
     for raw, cn in replacements.items():
         if raw in s:
             return cn
+    name = Path(s).name if "/" in s else s
+    if name.startswith("provider_health_"):
+        return "数据源健康诊断"
+    if name.startswith("t_signal_trace_"):
+        return "做T逐条件诊断"
+    if name.startswith("task_status_"):
+        return "任务状态快照"
+    if name.startswith("money_flow_"):
+        return "资金数据文件"
+    if name == "v16_buy_confirm.yaml":
+        return "9:36买入确认配置"
+    if name == "t_positive.yaml":
+        return "正T实验配置"
+    if name == "funds_alpha.yaml":
+        return "资金条件层观察配置"
+    if name.endswith(".csv"):
+        return name.replace(".csv", "表格")
+    if name.endswith(".json"):
+        return name.replace(".json", "诊断快照")
+    if name.endswith(".md"):
+        return name.replace(".md", "文本")
     if "/" in s:
-        return Path(s).name
+        return name
+    return s
+
+
+def _script_cn(v: str) -> str:
+    s = str(v or "")
+    replacements = {
+        "run.py": "正式任务入口",
+        "scripts/build_tomorrow_plan.py --merge-keep-manual": "明日计划生成脚本（保留人工修改）",
+        "scripts/build_tomorrow_plan.py": "明日计划生成脚本",
+        "scripts/build_market_daily.py": "市场环境生成脚本",
+        "scripts/build_board_eod_cache.py": "盘后板块快照脚本",
+        "scripts/build_post_stop_tracking.py": "止损后跟踪脚本",
+        "build_board_eod_cache": "盘后板块快照",
+        "build_market_daily": "市场环境生成",
+        "build_post_stop_tracking": "止损后跟踪",
+        "build_tomorrow_plan": "明日计划生成",
+        "market_daily": "市场环境数据",
+        "trade_review": "交易复盘表",
+        "tomorrow_plan": "明日计划",
+        "manual_reviewed_at": "人工确认时间",
+        "YAML": "策略配置",
+        "yaml": "策略配置",
+        "JSON": "结构化诊断",
+        "json": "结构化诊断",
+        "CSV": "表格文件",
+        "csv": "表格文件",
+        "MD": "计划文本",
+        "md": "计划文本",
+        "fallback": "兜底",
+        "output/diagnostics/task_status_YYYYMMDD.json": "诊断目录中的任务状态快照",
+        "config/version_flags.yaml": "版本开关配置",
+        "data/manual_observe.json": "只观察名单文件",
+        "data/watchlist/custom_stock_pool.csv": "自选池文件",
+    }
+    for raw, cn in replacements.items():
+        s = s.replace(raw, cn)
     return s
 
 
@@ -787,13 +873,26 @@ def _display_df(df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame
         elif col == "source":
             out[col] = out[col].map(_source_cn)
         elif col == "provider":
-            out[col] = out[col].map(lambda v: str(v).upper() if str(v).strip() else "—")
+            provider_cn = {
+                "akshare": "AKShare",
+                "eastmoney": "东方财富",
+                "eastmoney_direct": "东方财富直连",
+                "sina": "新浪",
+                "efinance": "eFinance旁路",
+                "efinance_probe": "eFinance旁路",
+                "pytdx": "通达信旁路",
+                "pytdx_probe": "通达信旁路",
+                "unknown": "未知",
+            }
+            out[col] = out[col].map(lambda v: provider_cn.get(str(v).strip().lower(), str(v).strip() or "—"))
         elif col == "fail_reasons":
             out[col] = out[col].map(explain_fail_reasons)
         elif col == "mode":
             out[col] = out[col].map(_mode_cn)
         elif col == "notes":
             out[col] = out[col].map(lambda v: "；".join(_reason_zh(p.strip()) for p in str(v).split(";") if p.strip()))
+        else:
+            out[col] = out[col].map(lambda v: _bool_cn(v) if str(v).strip().lower() in {"true", "false"} else v)
     return out.rename(columns={c: DISPLAY_COL_CN.get(c, c) for c in out.columns})
 
 
@@ -893,7 +992,7 @@ def _render_t_trace_panel() -> None:
                 f"<div style='padding:10px 12px;border:1px solid {COLOR_BORDER_SOFT};border-left:3px solid {COLOR_BOUGHT};border-radius:8px;background:rgba(0,228,121,.05);'>"
                 f"<b>{_eh(str(row.get('stock_code','')))} {_eh(str(row.get('stock_name','')))}</b><br>"
                 f"<span style='color:{COLOR_MUTED};font-size:12px;'>"
-                f"{_eh(str(row.get('bar_timestamp','')))} ｜ 急跌 {_eh(str(row.get('drop_pct_max','')))}% ｜ VWAP偏离 {_eh(str(row.get('below_vwap_pct','')))}% ｜ 倍量 {_eh(str(row.get('green_vol_multiple','')))} ｜ 缩量 {_eh(str(row.get('shrink_ratio','')))}"
+                f"{_eh(str(row.get('bar_timestamp','')))} ｜ 急跌 {_eh(str(row.get('drop_pct_max','')))}% ｜ 分时均价线偏离 {_eh(str(row.get('below_vwap_pct','')))}% ｜ 倍量 {_eh(str(row.get('green_vol_multiple','')))} ｜ 缩量 {_eh(str(row.get('shrink_ratio','')))}"
                 f"</span></div>"
             )
         st.markdown("<div style='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;'>" + "".join(pass_cards) + "</div>", unsafe_allow_html=True)
@@ -1238,13 +1337,13 @@ def render_shell_topbar() -> None:
         <div class="radar-topbar-mount">
           <div class="radar-topbar">
             <div class="radar-topbar__left">
-              <div class="radar-topbar__brand">RADAR_TERMINAL</div>
+              <div class="radar-topbar__brand">朱哥短线雷达</div>
               <div class="radar-topbar__signal"></div>
             </div>
             <div class="radar-topbar__right">
               <span class="radar-topbar__clock" id="live-clock">--:--:--</span>
               <span class="radar-topbar__status-dot"></span>
-              <span class="radar-topbar__status-text">SYS_ONLINE</span>
+              <span class="radar-topbar__status-text">系统在线</span>
             </div>
           </div>
         </div>
@@ -1324,9 +1423,14 @@ def _money_source_cn(source: str) -> str:
     s = _display_value(source, "")
     mapping = {
         "push2his": "东方财富主源",
+        "push2his.eastmoney": "东方财富资金接口",
         "eastmoney": "东方财富主源",
+        "eastmoney_direct": "东方财富直连",
         "ths_simple": "同花顺备源（简化口径）",
+        "efinance_probe": "eFinance旁路",
+        "pytdx_probe": "通达信旁路",
         "unavailable": "数据源不可用",
+        "unknown": "未知来源",
     }
     return mapping.get(s, s or "暂无")
 
@@ -4325,7 +4429,7 @@ def page_period_review(df_all: pd.DataFrame) -> None:
     st.markdown(f"### 📊 本{period_cn}不买原因 TOP（基于推导主因）")
     st.caption(
         f"按展示层统一短标签聚合，例如 `承接不足` / `短线走弱` / `低开观察`，"
-        f"便于快速看清本{period_cn}最常见的拦阻原因。完全只读，不写 CSV、不改策略。"
+        f"便于快速看清本{period_cn}最常见的拦阻原因。完全只读，不写表格文件、不改策略。"
     )
     top_reasons = _count_main_reasons(df)
     if top_reasons:
@@ -4435,22 +4539,22 @@ ALLOWED_COMMANDS = {
         "icon":   "🔄",
         "flag":   "--update-review",
         "desc":   "补全已模拟买入票的 T+1 收益/最大回撤/止损判定。",
-        "when":   "建议在交易日收盘后或晚上执行。如果当日 19:00 launchd 没跑（电脑关机/睡眠），手动补一次即可。",
+        "when":   "建议在交易日收盘后或晚上执行。如果当日 19:00 自动任务没跑（电脑关机/睡眠），手动补一次即可。",
         "danger": "low",   # 低风险：纯补全行为
     },
     "weekly_review": {
         "label":  "生成本周复盘",
         "icon":   "📅",
         "flag":   "--weekly-review",
-        "desc":   "扫描本周（周一-周日）的全部推荐，生成 output/周复盘报告_YYYY-WW.md 并推送微信。",
-        "when":   "建议在 T+1 复盘补全之后执行。如果周五 19:20 launchd 没跑，可下次开机后先点「补跑 T+1 复盘」，再点本按钮。",
+        "desc":   "扫描本周（周一-周日）的全部推荐，生成本周复盘报告并推送微信。",
+        "when":   "建议在 T+1 复盘补全之后执行。如果周五 19:20 自动任务没跑，可下次开机后先点「补跑 T+1 复盘」，再点本按钮。",
         "danger": "low",
     },
     "monthly_review": {
         "label":  "生成本月复盘",
         "icon":   "📆",
         "flag":   "--monthly-review",
-        "desc":   "扫描本月推荐，生成 output/月复盘报告_YYYY-MM.md 并推送微信。",
+        "desc":   "扫描本月推荐，生成本月复盘报告并推送微信。",
         "when":   "建议在月末最后一个交易日的 T+1 数据补全之后执行，或下月初手动跑。",
         "danger": "low",
     },
@@ -4598,8 +4702,8 @@ def _render_rerun_button(key: str, spec: dict) -> None:
         f"</div>",
         unsafe_allow_html=True,
     )
-    with st.expander("开发者排查：实际白名单命令", expanded=False):
-        st.code(f"{PYTHON_BIN.name} run.py {spec['flag']}", language="bash")
+    with st.expander("技术排查：本按钮实际执行的安全白名单任务", expanded=False):
+        st.code(f"正式任务入口 {spec['flag']}", language="text")
 
     # —— 锁状态提示 ——
     if locked:
@@ -4633,7 +4737,7 @@ def _render_rerun_button(key: str, spec: dict) -> None:
             status_banner("⚠️ 拿锁失败（可能刚有人点了），请稍后重试。", "warning")
         else:
             try:
-                with st.spinner(f"正在执行 {spec['flag']}... (最长 180 秒)"):
+                with st.spinner(f"正在执行「{spec['label']}」... (最长 180 秒)"):
                     result = _run_rerun_command(key, spec["flag"], timeout=180)
                 st.session_state[last_result_key] = result
             finally:
@@ -4665,16 +4769,16 @@ def _render_rerun_button(key: str, spec: dict) -> None:
                 "error",
             )
 
-        # stdout / stderr 折叠展示
+        # 命令输出折叠展示
         out_tail = "\n".join(result["stdout"].splitlines()[-100:])
         err_tail = "\n".join(result["stderr"].splitlines()[-100:])
 
-        with st.expander("📤 stdout（最后 100 行）", expanded=False):
+        with st.expander("📤 正常输出（最后 100 行）", expanded=False):
             if out_tail.strip():
                 st.code(out_tail, language="text")
             else:
                 st.caption("（空）")
-        with st.expander("📥 stderr（最后 100 行）", expanded=bool(err_tail.strip())):
+        with st.expander("📥 错误输出（最后 100 行）", expanded=bool(err_tail.strip())):
             if err_tail.strip():
                 st.code(err_tail, language="text")
             else:
@@ -4941,13 +5045,13 @@ def _render_money_flow_availability_card(stats: dict) -> str:
         ("📊 探测次数",            f"<b>{total}</b>"),
         ("🛰 主源 OK",            f"{p_ok} / {total if total else 0}　·　<b>{_fmt_rate(p_rate)}</b>"),
         ("🛟 备源 OK",            f"{f_ok} / {total if total else 0}　·　{_fmt_rate(f_rate)}"),
-        ("🎯 active=push2his",    f"{dist.get('push2his', 0)}"),
-        ("🎯 active=ths_simple",  f"{dist.get('ths_simple', 0)}"),
-        ("🎯 active=unavailable", f"{dist.get('unavailable', 0)}"),
+        ("🎯 当前使用主源",        f"{dist.get('push2his', 0)}"),
+        ("🎯 当前使用备源",        f"{dist.get('ths_simple', 0)}"),
+        ("🎯 无可用源",            f"{dist.get('unavailable', 0)}"),
         ("🕒 时间范围",            f"{_fmt_dt(first_dt)} ～ {_fmt_dt(last_dt)}"),
     ]
     if dist.get("unknown", 0):
-        rows.insert(6, ("🎯 active=unknown", f"{dist['unknown']}"))
+        rows.insert(6, ("🎯 当前来源未知", f"{dist['unknown']}"))
 
     rows_html = ""
     for label, value in rows:
@@ -4981,17 +5085,16 @@ def _render_money_flow_availability_section() -> None:
     只读统计 logs/money_flow_health.log，绝不参与买入决策。
     7d / 14d 两张卡片 + 结论 banner + ths_simple 弱可用提示。
     """
-    st.markdown("**📈 资金源可用率统计**（基于 `logs/money_flow_health.log` · 只读）")
+    st.markdown("**📈 资金源可用率统计**（基于资金源自检日志 · 只读）")
     st.caption(
-        "本统计仅用于评估 EM 主源在 7/14 天窗口里的可用率，**不影响今日推荐**、"
-        "**不影响 9:36 买入**、**不写 trade_review.csv**。"
+        "本统计仅用于评估东方财富主源在 7/14 天窗口里的可用率，**不影响今日推荐**、"
+        "**不影响 9:36 买入**、**不写交易复盘表**。"
     )
 
     entries = _read_full_health_log()
     if not entries:
         st.caption(
-            f"（暂无任何日志样本。先在上方点几次「立即探测」，或等 launchd 自动产生 "
-            f"`{MONEY_FLOW_HEALTH_LOG.relative_to(BASE_DIR)}` 后再回来看。）"
+            "（暂无任何日志样本。先在上方运行几次资金源探测，或等自动任务产生记录后再回来看。）"
         )
         return
 
@@ -5043,7 +5146,7 @@ def _render_money_flow_availability_section() -> None:
             f"<div style='background:{COLOR_BANNER_INFO};border-left:4px solid {COLOR_SECOND};"
             f"border-radius:6px;padding:10px 14px;margin-top:6px;margin-bottom:10px;"
             f"font-size:12.5px;color:{COLOR_TEXT};line-height:1.7;'>"
-            f"💡 <b>备源观察：</b>最近 7 天 <code>ths_simple</code> 可用 "
+            f"💡 <b>备源观察：</b>最近 7 天同花顺备源可用 "
             f"<b>{f7_ok}/{total7}</b> 次（{f7_rate*100:.1f}%），"
             f"<b>可作为降级观察来源</b>，但<b>口径简化</b>（仅净额、无大单分级），"
             f"<b>不建议单独作为 资金条件层硬条件（暂不启用）</b>。"
@@ -5176,11 +5279,11 @@ def _render_money_flow_system_cards(struct: dict, reason: str) -> None:
     # —— system_status 顶部 banner（统一大写展示）——
     sys_level_map = {
         "ok":          ("success", "✅ 系统状态：正常 — 主源正常运行"),
-        "degraded":    ("warning", "⚠️ 系统状态：降级 — 主源异常，已降级到备源 ths_simple（仅观察）"),
+        "degraded":    ("warning", "⚠️ 系统状态：降级 — 主源异常，已降级到同花顺备源（仅观察）"),
         "unavailable": ("error",   "❌ 系统状态：不可用 — 主源与备源都不可用"),
     }
     banner_level, banner_text = sys_level_map.get(
-        system_status, ("info", f"💡 系统状态：{system_status_display}")
+        system_status, ("info", f"💡 系统状态：{_value_cn(system_status_display)}")
     )
     if reason and reason != "—":
         banner_text = f"{banner_text}　·　理由：{reason}"
@@ -5206,18 +5309,18 @@ def _render_money_flow_system_cards(struct: dict, reason: str) -> None:
         if fallback_status == "unavailable":
             return (COLOR_ERROR,  "不可用",COLOR_ERROR,   COLOR_BANNER_ERROR)
         if fallback_status in ("not_checked", "skipped"):
-            return (COLOR_MUTED,  fallback_status.upper(), COLOR_MUTED, COLOR_BANNER_INFO)
-        return (COLOR_MUTED, fallback_status or "—", COLOR_MUTED, COLOR_BANNER_INFO)
+            return (COLOR_MUTED,  _value_cn(fallback_status), COLOR_MUTED, COLOR_BANNER_INFO)
+        return (COLOR_MUTED, _value_cn(fallback_status) if fallback_status else "—", COLOR_MUTED, COLOR_BANNER_INFO)
 
     def _active_style():
         # active_source = "push2his" → 绿；"ths_simple" → 黄（降级）；"unavailable" → 红
         if active_source == "push2his":
-            return (COLOR_BOUGHT,  "PRIMARY",        COLOR_BOUGHT,  COLOR_BANNER_SUCCESS)
+            return (COLOR_BOUGHT,  "主源",        COLOR_BOUGHT,  COLOR_BANNER_SUCCESS)
         if active_source == "ths_simple":
-            return (COLOR_WAIT_T1, "FALLBACK（降级）",COLOR_WAIT_T1, COLOR_BANNER_WARN)
+            return (COLOR_WAIT_T1, "备源（降级）",COLOR_WAIT_T1, COLOR_BANNER_WARN)
         if active_source == "unavailable":
-            return (COLOR_ERROR,   "NONE",           COLOR_ERROR,   COLOR_BANNER_ERROR)
-        return (COLOR_MUTED, active_source or "—",   COLOR_MUTED,   COLOR_BANNER_INFO)
+            return (COLOR_ERROR,   "无可用源",           COLOR_ERROR,   COLOR_BANNER_ERROR)
+        return (COLOR_MUTED, _money_source_cn(active_source),   COLOR_MUTED,   COLOR_BANNER_INFO)
 
     p_accent, p_badge, p_fg, p_bg = _primary_style()
     f_accent, f_badge, f_fg, f_bg = _fallback_style()
@@ -5232,8 +5335,8 @@ def _render_money_flow_system_cards(struct: dict, reason: str) -> None:
                 badge_text=p_badge, badge_fg=p_fg, badge_bg=p_bg,
                 accent=p_accent,
                 fields=[
-                    ("数据源",   f"<code>{primary_source}</code>"),
-                    ("状态",     primary_status),
+                    ("数据源",   _money_source_cn(primary_source)),
+                    ("状态",     _value_cn(primary_status)),
                     ("失败率",   _fmt_rate(primary_rate)),
                 ],
             ),
@@ -5246,8 +5349,8 @@ def _render_money_flow_system_cards(struct: dict, reason: str) -> None:
                 badge_text=f_badge, badge_fg=f_fg, badge_bg=f_bg,
                 accent=f_accent,
                 fields=[
-                    ("数据源",   f"<code>{fallback_source}</code>"),
-                    ("状态",     fallback_status),
+                    ("数据源",   _money_source_cn(fallback_source)),
+                    ("状态",     _value_cn(fallback_status)),
                     ("是否可用", _fmt_bool(fallback_avail)),
                 ],
             ),
@@ -5260,8 +5363,8 @@ def _render_money_flow_system_cards(struct: dict, reason: str) -> None:
                 badge_text=a_badge, badge_fg=a_fg, badge_bg=a_bg,
                 accent=a_accent,
                 fields=[
-                    ("active_source",  f"<code>{active_source}</code>"),
-                    ("system_status",  system_status_display),
+                    ("当前数据源",  _money_source_cn(active_source)),
+                    ("系统状态",  _value_cn(system_status)),
                     ("资金条件生效",   _fmt_bool(apply_gate)),
                 ],
             ),
@@ -5269,7 +5372,7 @@ def _render_money_flow_system_cards(struct: dict, reason: str) -> None:
         )
 
     # —— 检测时间 ——
-    st.caption(f"⏱ checked_at：{checked_at}")
+    st.caption(f"⏱ 检测时间：{checked_at}")
 
     # —— 强提示：不影响交易 ——
     st.markdown(
@@ -5277,8 +5380,8 @@ def _render_money_flow_system_cards(struct: dict, reason: str) -> None:
         f"border-radius:6px;padding:10px 14px;margin-top:8px;margin-bottom:10px;"
         f"font-size:12.5px;color:{COLOR_TEXT};line-height:1.7;'>"
         f"💡 <b>提示：</b>资金源状态<b>不影响今日推荐</b>、<b>不影响 9:36 买入</b>、"
-        f"<b>不写 trade_review.csv</b>。本面板为 V1.6 · 资金条件层 <b>观察模式</b>，"
-        f"即使备源工作中（active_source=ths_simple），买入仍按 9:36 技术确认层（逻辑+资金+买点+风险）执行，"
+        f"<b>不写交易复盘表</b>。本面板为 V1.6 · 资金条件层 <b>观察模式</b>，"
+        f"即使备源工作中，买入仍按 9:36 技术确认层（逻辑+资金+买点+风险）执行，"
         f"V1.6 · 资金条件层（观察模式）仅记录观察，不参与买入硬拦截。"
         f"</div>",
         unsafe_allow_html=True,
@@ -5292,8 +5395,8 @@ def _render_money_flow_health_section() -> None:
     """
     st.markdown("### 📡 资金源健康自检（V1.6 · 资金条件层（观察模式）观察工具）")
     st.caption(
-        "这是 V1.6 · 资金条件层（观察模式）观察工具，只检测 Eastmoney 资金流数据源是否可用。"
-        "**不会参与今日推荐，不会影响 9:36 买入确认，不会写 trade_review.csv。**"
+        "这是 V1.6 · 资金条件层（观察模式）观察工具，只检测东方财富资金流数据源是否可用。"
+        "**不会参与今日推荐，不会影响 9:36 买入确认，不会写交易复盘表。**"
     )
 
     locked, lock_ts = _is_locked(MONEY_FLOW_PROBE_KEY)
@@ -5316,10 +5419,10 @@ def _render_money_flow_health_section() -> None:
         f"<div style='font-size:15px;font-weight:600;color:{COLOR_TEXT};'>"
         f"🔄 探测资金源状态</div>"
         f"<div style='font-size:12px;color:{COLOR_MUTED};margin-top:4px;'>"
-        f"<b>作用：</b>用 5 只蓝筹探针（PROBE_SET）判定 push2his.eastmoney 资金流端点是否可用。"
-        f"结果追加到 <code>logs/money_flow_health.log</code>，<b>仅供观察</b>。</div>"
+        f"<b>作用：</b>用 5 只蓝筹探针判定东方财富资金流接口是否可用。"
+        f"结果追加到资金源自检日志，<b>仅供观察</b>。</div>"
         f"<div style='font-size:12px;color:{COLOR_MUTED};margin-top:4px;'>"
-        f"<b>判定：</b>失败率 ≤20% = ok（绿）｜ 20%~50% = degraded（黄）｜ &gt;50% = unavailable（橙红）</div>"
+        f"<b>判定：</b>失败率 ≤20% = 正常（绿）｜ 20%~50% = 降级（黄）｜ &gt;50% = 不可用（橙红）</div>"
         f"<div style='font-size:12px;color:{COLOR_WAIT_T1};margin-top:4px;'>"
         f"只读探测，不写推荐、不触发买入确认。</div>"
         f"</div>",
@@ -5386,7 +5489,7 @@ def _render_money_flow_health_section() -> None:
                 rows = []
                 for code, st_str in primary_detail.items():
                     st_emoji = {"ok": "✓", "fetch_failed": "✗", "missing": "·"}.get(st_str, "?")
-                    rows.append({"探针代码": code, "状态": f"{st_emoji} {st_str}"})
+                    rows.append({"探针代码": code, "状态": f"{st_emoji} {_value_cn(st_str)}"})
                 st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
             # —— 备源 ths_simple 详情 ——
@@ -5399,7 +5502,7 @@ def _render_money_flow_health_section() -> None:
                     rows_txt.append(f"period={fb_detail['period']}")
                 if "note" in fb_detail:
                     rows_txt.append(fb_detail["note"])
-                st.caption(f"📊 备源 ths_simple 详情：{' ｜ '.join(rows_txt)}")
+                st.caption(f"📊 同花顺备源详情：{' ｜ '.join(rows_txt)}")
 
         elif result["timed_out"]:
             status_banner(
@@ -5413,15 +5516,15 @@ def _render_money_flow_health_section() -> None:
                 "error",
             )
 
-        # stdout / stderr 折叠（容错保留）
+        # 命令输出折叠（容错保留）
         out_tail = "\n".join((result.get("stdout") or "").splitlines()[-100:])
         err_tail = "\n".join((result.get("stderr") or "").splitlines()[-100:])
-        with st.expander("📤 stdout（最后 100 行）", expanded=False):
+        with st.expander("📤 正常输出（最后 100 行）", expanded=False):
             if out_tail.strip():
                 st.code(out_tail, language="text")
             else:
                 st.caption("（空）")
-        with st.expander("📥 stderr（最后 100 行）", expanded=bool(err_tail.strip())):
+        with st.expander("📥 错误输出（最后 100 行）", expanded=bool(err_tail.strip())):
             if err_tail.strip():
                 st.code(err_tail, language="text")
             else:
@@ -5436,12 +5539,11 @@ def _render_money_flow_health_section() -> None:
     _render_money_flow_availability_section()
 
     # —— 历史日志（最后 20 条 JSONL）——
-    st.markdown("**📜 最近资金源自检日志**（`logs/money_flow_health.log` 最后 20 条 · 只读）")
+    st.markdown("**📜 最近资金源自检日志**（最后 20 条 · 只读）")
     entries = _read_health_log_tail(20)
     if not entries:
         st.caption(
-            f"（暂无日志。首次跑 `python -m money_flow health` 后会自动生成 "
-            f"`{MONEY_FLOW_HEALTH_LOG.relative_to(BASE_DIR)}`）"
+            "（暂无日志。首次运行资金源自检后会自动生成。）"
         )
     else:
         def _dash(v, fmt=None):
@@ -5474,15 +5576,14 @@ def _render_money_flow_health_section() -> None:
                 p_rate = e.get("failure_rate")
             # —— system_status：日志同样兼容老格式 + 组合推导 ——
             sys_derived = _derive_system_status(e)
-            sys_display = sys_derived.upper() if sys_derived and sys_derived != "—" else "—"
             rows.append({
                 "时间":           _dash(e.get("ts")),
-                "checked_at":     _dash(e.get("checked_at")),
-                "active_source":  _dash(e.get("active_source")),
-                "system_status":  sys_display,
-                "主源状态":       _dash(e.get("primary_status") or e.get("status")),
+                "检测时间":       _dash(e.get("checked_at")),
+                "当前数据源":     _money_source_cn(_dash(e.get("active_source"))),
+                "系统状态":       _value_cn(sys_derived),
+                "主源状态":       _value_cn(_dash(e.get("primary_status") or e.get("status"))),
                 "主源失败率":     _dash(p_rate, _fmt_rate_pct),
-                "备源状态":       _dash(e.get("fallback_status")),
+                "备源状态":       _value_cn(_dash(e.get("fallback_status"))),
                 "备源可用":       _fmt_avail(e.get("fallback_available")),
                 "资金条件":       "✅" if e.get("should_apply_money_flow_gate") else "❌",
                 "触发":           _dash(e.get("trigger")),
@@ -5491,16 +5592,16 @@ def _render_money_flow_health_section() -> None:
 
 
 def _render_v17_rerun_button() -> None:
-    """V1.7 LLM 情绪分析师补跑按钮 (朱哥 2026-06-06 加).
+    """V1.7 新闻情绪分析师补跑按钮 (朱哥 2026-06-06 加).
 
     跟现有 ALLOWED_COMMANDS 的 3 个按钮长得一样, 但调的脚本不同
     (scripts/build_news_sentiment.py 而非 run.py).
     """
     key       = "v17_news_sentiment"
-    label     = "重跑 V1.7 LLM 情绪分析"
+    label     = "重跑新闻情绪分析"
     icon      = "✨"
-    desc      = "对自选池 + 当日推荐池全部调一次 Claude/DeepSeek, 生成 v17_* 审计字段."
-    when      = "建议晚上手动跑;每天 18:30 launchd 自动跑一次, 如果电脑当时关机可补."
+    desc      = "对自选池 + 当日推荐池重新生成新闻情绪分、风险提示和主题摘要。"
+    when      = "建议晚上手动跑；每天 18:30 自动任务会跑一次，如果电脑当时关机可补。"
     script    = BASE_DIR / "scripts" / "build_news_sentiment.py"
 
     locked, lock_ts = _is_locked(key)
@@ -5520,7 +5621,7 @@ def _render_v17_rerun_button() -> None:
         f"<div style='font-size:12px;color:{COLOR_MUTED};margin-top:4px;'><b>作用:</b> {desc}</div>"
         f"<div style='font-size:12px;color:{COLOR_MUTED};margin-top:4px;'><b>建议:</b> {when}</div>"
         f"<div style='font-size:12px;color:{COLOR_WAIT_T1};margin-top:4px;'>"
-        f"mark_only · 永不影响 9:36 买入决策, 只写 v17_* 字段.</div>"
+        f"仅做标记观察，永不影响 9:36 买入决策。</div>"
         f"</div>",
         unsafe_allow_html=True,
     )
@@ -5534,7 +5635,7 @@ def _render_v17_rerun_button() -> None:
     col_chk, col_btn = st.columns([3, 1])
     with col_chk:
         confirmed = st.checkbox(
-            f"我确认现在要手动重跑「{label}」 (预计 2-3 分钟, 消耗约 \\$0.4 Claude 配额)",
+            f"我确认现在要手动重跑「{label}」（预计 2-3 分钟，会消耗少量模型额度）",
             key=confirm_key, value=False, disabled=locked,
         )
     with col_btn:
@@ -5548,7 +5649,7 @@ def _render_v17_rerun_button() -> None:
             status_banner("⚠️ 拿锁失败 (可能刚有人点了), 稍后重试.", "warning")
         else:
             try:
-                with st.spinner("正在跑 build_news_sentiment.py... (最长 300 秒)"):
+                with st.spinner("正在跑情绪分析... (最长 300 秒)"):
                     t0 = time.time()
                     proc = subprocess.run(
                         [str(PYTHON_BIN), str(script)],
@@ -5579,15 +5680,15 @@ def _render_v17_rerun_button() -> None:
         rc = result["returncode"]
         dur = result.get("duration_s", 0)
         if rc == 0:
-            status_banner(f"✅ V1.7 情绪分析完成 (耗时 {dur:.0f} 秒). 看自选池/持仓页的情绪雷达卡.", "success")
+            status_banner(f"✅ 新闻情绪分析完成（耗时 {dur:.0f} 秒）。看自选池/持仓页的情绪雷达卡。", "success")
         else:
-            status_banner(f"❌ V1.7 失败 returncode={rc} (耗时 {dur:.0f} 秒). 看下面 stderr.", "error")
+            status_banner(f"❌ V1.7 失败，返回码 {rc}（耗时 {dur:.0f} 秒）。请看下方错误输出。", "error")
         with st.expander("查看本次输出", expanded=False):
             if result.get("stdout"):
-                st.markdown("**stdout (尾 80 行):**")
+                st.markdown("**正常输出（最后 80 行）：**")
                 st.code("\n".join(result["stdout"].splitlines()[-80:]) or "(空)", language="text")
             if result.get("stderr"):
-                st.markdown("**stderr:**")
+                st.markdown("**错误输出：**")
                 st.code(result["stderr"][:4000] or "(空)", language="text")
 
 
@@ -5600,12 +5701,12 @@ def page_manual_rerun() -> None:
     render_page_header(
         "补跑控制台",
         "补跑",
-        "电脑关机/睡眠错过 launchd 时手动补一下。永远不自动交易。",
+        "电脑关机/睡眠错过自动任务时手动补一下。永远不自动交易。",
         badges=["只补跑", "不下单", "需要确认"],
         aside_title="边界",
         aside_body=(
             "本页不提供盘前选股 / 9:36 买入确认 / 10:00 二次观察 — "
-            "这些会改写当日数据，必须由 launchd 在正确时点跑。"
+            "这些会改写当日数据，必须由自动任务在正确时点跑。"
         ),
     )
 
@@ -5617,7 +5718,7 @@ def page_manual_rerun() -> None:
         st.markdown("")
         _render_rerun_button(key, spec)
 
-    # 2026-06-06 新增: V1.7 LLM 情绪分析补跑
+    # 2026-06-06 新增: V1.7 新闻情绪分析补跑
     st.markdown("")
     _render_v17_rerun_button()
 
@@ -5634,7 +5735,7 @@ def page_manual_rerun() -> None:
             rel = AUTO_LOG.relative_to(BASE_DIR.resolve())
         except (ValueError, AttributeError):
             rel = AUTO_LOG
-        st.caption(f"`{rel}` · 修改时间 {last_modified(AUTO_LOG)}")
+        st.caption(f"日志文件：{_eh(str(rel))} · 修改时间 {last_modified(AUTO_LOG)}")
 
     log_tail = _read_log_tail(AUTO_LOG, lines=100)
     st.code(log_tail, language="text", line_numbers=False)
@@ -5659,7 +5760,7 @@ def _render_task_status_panel() -> None:
             path = write_task_status_snapshot(statuses, output_dir=OUTPUT_DIR)
             status_banner(f"已生成任务状态快照：{path.name}", "success")
     with col_b:
-        st.caption("该快照只读取本地文件状态，写入 output/diagnostics/task_status_YYYYMMDD.json，不触发 run.py。")
+        st.caption("该快照只读取本地文件状态，写入诊断目录，不触发正式交易入口。")
 
     statuses = load_latest_task_status(OUTPUT_DIR)
     if not statuses:
@@ -5749,7 +5850,7 @@ def _render_strategy_rules_panel() -> None:
             "当前生效规则": _rules_cn(rules),
         })
     st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
-    st.caption("第一版 YAML 只用于规则展示和实验模块读取；正式 9:36 买入、-3% 止损、收益统计仍沿用原代码口径。")
+    st.caption("第一版策略配置只用于规则展示和实验模块读取；正式 9:36 买入、-3% 止损、收益统计仍沿用原代码口径。")
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -7083,6 +7184,17 @@ def _tp_display_md_text(md_text: str) -> str:
         "tomorrow_plan_latest.md": "明日计划预览文件",
         "tomorrow_plan": "明日计划",
         "build": "生成",
+        "focus_stocks": "核心观察股",
+        "manual_reviewed_at": "人工确认时间",
+        "full模式": "全A模式",
+        "theme_auto模式": "主题龙头模式",
+        "full 模式": "全A模式",
+        "theme_auto 模式": "主题龙头模式",
+        "medium": "中等",
+        "high": "高",
+        "low": "低",
+        "auto": "自动生成",
+        "v1": "第一版",
     }
     out = md_text
     for raw, cn in replacements.items():
@@ -7126,7 +7238,7 @@ def _tp_focus_cards_html(focus: list[str], focus_reason: list[str]) -> str:
             </div>
             <div style="margin-top:8px;font-size:15px;font-weight:700;color:{COLOR_TEXT};">暂无核心观察股</div>
             <div style="margin-top:6px;font-size:12px;color:{COLOR_MUTED};line-height:1.65;">
-              当前计划没有写入 focus_stocks。这里不会自动补票，也不会生成买入指令。
+              当前计划没有写入核心观察股。这里不会自动补票，也不会生成买入指令。
             </div>
             """,
             accent=COLOR_MUTED,
@@ -7192,10 +7304,10 @@ def _tp_config_cards_html(v16: dict) -> str:
         return _h(glass_card_html(
             f"""
             <div style="font-family:{FONT_MONO};font-size:10px;letter-spacing:0.16em;color:{COLOR_MUTED};">
-              CONFIG SNAPSHOT
+              配置快照
             </div>
             <div style="margin-top:8px;color:{COLOR_TEXT};font-weight:700;">未读取到 V1.6 配置</div>
-            <div style="margin-top:6px;color:{COLOR_MUTED};font-size:12px;">dashboard 不会在此修改配置。</div>
+            <div style="margin-top:6px;color:{COLOR_MUTED};font-size:12px;">看板不会在此修改配置。</div>
             """,
             accent=COLOR_MUTED,
         ))
@@ -7238,15 +7350,15 @@ def _tp_config_cards_html(v16: dict) -> str:
         <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
           <div>
             <div style="font-family:{FONT_MONO};font-size:10px;letter-spacing:0.16em;color:{COLOR_SECOND};">
-              CONFIG SNAPSHOT
+              配置快照
             </div>
             <div style="margin-top:7px;font-size:18px;font-weight:800;color:{COLOR_TEXT};">V1.6 配置只读快照</div>
           </div>
-          {chip_html("只读 / 不写 YAML", color=COLOR_SECOND)}
+          {chip_html("只读 / 不改配置", color=COLOR_SECOND)}
         </div>
         <div style="margin-top:8px;">{''.join(rows)}</div>
         <div style="margin-top:10px;color:{COLOR_MUTED};font-size:12px;line-height:1.65;">
-          如需修改总开关或 9:36 接入方式，必须人工编辑 config/version_flags.yaml；本页面不会直接改配置。
+          如需修改总开关或 9:36 接入方式，必须人工编辑版本开关配置；本页面不会直接改配置。
         </div>
         """,
         accent=COLOR_SECOND,
@@ -7665,11 +7777,11 @@ def page_tomorrow_plan() -> None:
             <div style="display:flex;justify-content:space-between;gap:14px;align-items:center;flex-wrap:wrap;">
               <div>
                 <div style="font-family:{FONT_MONO};font-size:10px;letter-spacing:0.16em;color:{COLOR_WAIT_T1};">
-                  LOCAL SCRIPT CONTROL
+                  本地任务控制
                 </div>
                 <div style="margin-top:6px;font-size:16px;font-weight:800;color:{COLOR_TEXT};">本页按钮只生成本地复盘/计划文件</div>
                 <div style="margin-top:5px;font-size:12.5px;color:{COLOR_MUTED};line-height:1.7;">
-                  不会运行 run.py，不会自动下单，不会连接券商；点击前请确认当前时间和数据状态。
+                  不会运行正式交易入口，不会自动下单，不会连接券商；点击前请确认当前时间和数据状态。
                 </div>
               </div>
               {chip_html("只读复盘辅助", color=COLOR_WAIT_T1)}
@@ -7685,7 +7797,7 @@ def page_tomorrow_plan() -> None:
     with col_a:
         st.markdown("**生成/刷新明日计划**")
         st.caption(
-            "执行 `scripts/build_tomorrow_plan.py --merge-keep-manual`，读取 market_daily / trade_review 等数据生成计划，"
+            "执行明日计划生成脚本，读取市场环境数据 / 交易复盘表等数据生成计划，"
             "并保留已人工确认文案。"
         )
         plan_locked, plan_lock_ts = _is_locked(TOMORROW_PLAN_BUILD_KEY)
@@ -7713,10 +7825,10 @@ def page_tomorrow_plan() -> None:
             r = st.session_state["tp_last_build_result"]
             level = "success" if r["returncode"] == 0 else "error"
             status_banner(
-                f"build_tomorrow_plan 退出码 {r['returncode']}（{r['duration_s']}s）",
+                f"明日计划生成退出码 {r['returncode']}（{r['duration_s']}s）",
                 level,
             )
-            with st.expander("📤 build_tomorrow_plan 日志", expanded=False):
+            with st.expander("📤 明日计划生成日志", expanded=False):
                 if r.get("stdout"): st.code(r["stdout"], language="text")
                 if r.get("stderr"): st.code(r["stderr"], language="text")
 
@@ -7748,8 +7860,8 @@ def page_tomorrow_plan() -> None:
     with col_b:
         st.markdown("**生成 V1.6 复盘四件套**")
         st.caption(
-            "依次执行：build_board_eod_cache → build_market_daily → "
-            "build_post_stop_tracking → build_tomorrow_plan --merge-keep-manual。"
+            "依次执行：盘后板块快照 → 市场环境生成 → "
+            "止损后跟踪 → 明日计划生成。"
         )
         pipe_locked, pipe_lock_ts = _is_locked(REVIEW_PIPELINE_KEY)
         if pipe_locked:
@@ -7811,8 +7923,8 @@ def page_tomorrow_plan() -> None:
             if board_failed:
                 status_banner(
                     "❌ 盘后板块快照失败，主线板块不可用，明日计划应保持只观察。"
-                    "<br>后续 market_daily / tomorrow_plan 已继续执行，但主线板块数据状态大概率为「未拿到」；"
-                    "本流程不会使用旧缓存，也不会 fallback。",
+                    "<br>后续市场环境数据 / 明日计划已继续执行，但主线板块数据状态大概率为「未拿到」；"
+                    "本流程不会使用旧缓存，也不会兜底。",
                     "error",
                 )
             status_banner(
@@ -7821,7 +7933,7 @@ def page_tomorrow_plan() -> None:
             )
             for r in results:
                 emoji = "✅" if r["returncode"] == 0 else "❌"
-                with st.expander(f"{emoji} {r['label']}（{r['duration_s']}s, exit={r['returncode']}）",
+                with st.expander(f"{emoji} {_script_cn(r['label'])}（{r['duration_s']}s，退出码 {r['returncode']}）",
                                  expanded=False):
                     if r.get("stdout"): st.code(r["stdout"], language="text")
                     if r.get("stderr"): st.code(r["stderr"], language="text")
@@ -7835,8 +7947,7 @@ def page_tomorrow_plan() -> None:
 
     st.markdown("### ✏️ 人工确认编辑区")
     st.caption(
-        "下方字段可人工编辑。**保存后**会写回 `tomorrow_plan_{report_date}.csv` + "
-        "`tomorrow_plan_latest.csv`，并重渲染 MD；同时 manual_reviewed_at 标为当前时间。"
+        "下方字段可人工编辑。保存后会写回日期版计划和最新版计划，并重渲染计划文本；同时记录人工确认时间。"
     )
 
     with st.form("tp_edit_form"):
@@ -7913,7 +8024,7 @@ def page_tomorrow_plan() -> None:
         else:
             st.caption("（无）")
 
-        st.markdown("**⭐ 核心观察股（focus_stocks，只读）**")
+        st.markdown("**⭐ 核心观察股（只读）**")
         focus = [t.strip() for t in str(plan.get("focus_stocks", "")).split("|") if t.strip()]
         focus_reason = [t.strip() for t in str(plan.get("focus_stocks_reason", "")).split("|")]
         st.markdown(_tp_focus_cards_html(focus, focus_reason), unsafe_allow_html=True)
@@ -7951,7 +8062,7 @@ def page_tomorrow_plan() -> None:
 
     st.divider()
 
-    # ── 5. MD 预览 ──
+    # ── 5. 计划预览 ──
     st.markdown("### 📄 当前明日计划预览")
     md_text = _tp_load_plan_md()
     if md_text:
@@ -7962,7 +8073,7 @@ def page_tomorrow_plan() -> None:
 
     # ── 6. 计划/V16 配置只读展示 ──
     st.divider()
-    st.markdown("### ⚙️ V1.6 配置状态（config/version_flags.yaml · 只读）")
+    st.markdown("### ⚙️ V1.6 配置状态（版本开关配置 · 只读）")
     st.markdown(_tp_config_cards_html(v16), unsafe_allow_html=True)
 
 
@@ -9098,7 +9209,7 @@ def page_holding_track(df_all: pd.DataFrame) -> None:
     _render_manual_observe_panel(_wl_load())
 
     # ── ✨ V1.7 LLM 情绪雷达 (朱哥 2026-06-05 立项) ──
-    _render_v17_sentiment_panel(_wl_load(), title="✨ 持仓 + 自选 LLM 情绪雷达")
+    _render_v17_sentiment_panel(_wl_load(), title="✨ 持仓 + 自选新闻情绪雷达")
 
     # 底部说明
     st.markdown(
@@ -9154,7 +9265,7 @@ def _v17_score_label(score) -> str:
 
 def _render_v17_sentiment_panel(
     watchlist_rows: Optional[list[dict]] = None,
-    title: str = "✨ LLM 情绪 + 新闻分析师",
+    title: str = "✨ 新闻情绪分析",
     show_top_n: int = 0,
 ) -> None:
     """V1.7 LLM 情绪面板. 在自选池页 / 持仓追踪页都能用.
@@ -9166,9 +9277,8 @@ def _render_v17_sentiment_panel(
         st.markdown(
             f"<div style='margin:12px 0;padding:10px 14px;border-left:3px solid {COLOR_WARN_YELLOW};"
             f"background:rgba(255,182,39,0.08);border-radius:6px;color:{COLOR_TEXT};'>"
-            f"V1.7 情绪分析尚无数据. 请运行 "
-            f"<code>python scripts/build_news_sentiment.py</code> 生成 "
-            f"(或等每天 18:30 自动跑)."
+            f"新闻情绪分析尚无数据。请在系统工具里手动运行「重跑新闻情绪分析」，"
+            f"或等每天 18:30 自动任务生成。"
             f"</div>",
             unsafe_allow_html=True,
         )
@@ -9195,7 +9305,7 @@ def _render_v17_sentiment_panel(
 
     st.markdown(
         f"<div style='margin-top:14px;'>"
-        f"<div style='font-size:11px;letter-spacing:0.18em;color:{COLOR_MAGENTA_NEON};font-weight:700;'>V17_SENTIMENT_RADAR</div>"
+        f"<div style='font-size:11px;letter-spacing:0.18em;color:{COLOR_MAGENTA_NEON};font-weight:700;'>新闻情绪雷达</div>"
         f"<div style='font-size:18px;color:{COLOR_TEXT};font-weight:700;margin-top:4px;'>{title}</div>"
         f"<div style='font-size:11px;color:{COLOR_MUTED};margin-top:4px;'>"
         f"共 {n_total} 只  ·  强利好 {n_strong_bull}  ·  利空 {n_strong_bear}  ·  有风险提示 {n_risk}"
@@ -9204,7 +9314,7 @@ def _render_v17_sentiment_panel(
         unsafe_allow_html=True,
     )
 
-    with st.expander(f"展开 V1.7/V1.8 情绪雷达 ({n_total} 只)", expanded=False):
+    with st.expander(f"展开新闻情绪雷达（{n_total} 只）", expanded=False):
         # 卡片网格 (3 列) — V1.8 增强: 4 sub-agent 迷你条
         cards = []
         for _, r in df.iterrows():
@@ -9419,7 +9529,7 @@ def _render_manual_observe_panel(watchlist_rows: list[dict]) -> None:
             _mo_rel = MANUAL_OBSERVE_PATH.relative_to(BASE_DIR.resolve())
         except ValueError:
             _mo_rel = MANUAL_OBSERVE_PATH
-        st.caption(f"持久化文件：`{_mo_rel}`")
+        st.caption("只观察名单已保存到本地，不会参与自动下单。")
 
 
 def page_watchlist() -> None:
@@ -10098,13 +10208,13 @@ def page_watchlist() -> None:
               <div class="watchlist-hero__badges">
                 <span>总数 {total_count}</span>
                 <span>活跃 {active_count}</span>
-                <span>P1 {p1_count}</span>
+                <span>高优先级 {p1_count}</span>
               </div>
             </div>
             <div class="watchlist-hero__source">
               <div>观察池来源</div>
               <b>本地研究源</b>
-              <code>data/watchlist/custom_stock_pool.csv</code>
+              <span>自选池文件</span>
               <span>当前已读取：<b>{total_count}</b> 只股票</span>
             </div>
           </div>
@@ -10118,7 +10228,7 @@ def page_watchlist() -> None:
 
     if not exists:
         status_banner("尚未创建自选观察池", "info")
-        st.caption("路径：`data/watchlist/custom_stock_pool.csv`")
+        st.caption("自选池文件尚未创建，保存后会自动生成本地文件。")
 
     st.markdown(
         f"""
@@ -10158,7 +10268,7 @@ def page_watchlist() -> None:
               <div class="watchlist-tools__sub">观察池优先进入候选评估，实际买入仍以安全过滤、V1.6 计划层和 9:36 技术确认为准。</div>
             </div>
             <div class="watchlist-feed-head__meta">
-              <span class="watchlist-filter-chip">活跃 {active_count} / 高优先 {p1_count}</span>
+              <span class="watchlist-filter-chip">活跃 {active_count} / 高优先级 {p1_count}</span>
               <span class="watchlist-safe-chip">观察池 ≠ 买入指令</span>
             </div>
           </div>
@@ -10220,7 +10330,7 @@ def page_watchlist() -> None:
                           <div class="watchlist-feed-card__name">{_eh(name_text)}</div>
                           <div class="watchlist-feed-card__code">{_eh(code_text)}</div>
                           <div class="watchlist-feed-card__badges">
-                            <span class="watchlist-badge-soft">P{_eh(row.get('priority', '3'))}</span>
+                            <span class="watchlist-badge-soft">优先级 {_eh(row.get('priority', '3'))}</span>
                             <span class="watchlist-badge-soft" style="color:{status_color};">{_eh(status_text)}</span>
                             <span class="{theme_class}">{_eh(theme)}</span>
                           </div>
@@ -10281,11 +10391,11 @@ def page_watchlist() -> None:
     _render_manual_observe_panel(rows)
 
     # ── ✨ V1.7 LLM 情绪雷达 (朱哥 2026-06-05 立项) ──
-    _render_v17_sentiment_panel(rows, title="✨ 自选池 LLM 情绪雷达")
+    _render_v17_sentiment_panel(rows, title="✨ 自选池新闻情绪雷达")
 
     st.markdown("<div class='watchlist-maintenance'><div class='watchlist-maintenance__kicker'>池子维护</div><div class='watchlist-maintenance__title'>维护自选池</div></div>", unsafe_allow_html=True)
     with st.expander("展开维护自选池", expanded=False):
-        st.caption("这里仅维护观察池内容，保存后会写回 `data/watchlist/custom_stock_pool.csv`，不会触发任何买入、下单或交易行为。")
+        st.caption("这里仅维护观察池内容，保存后会写回自选池文件，不会触发任何买入、下单或交易行为。")
 
         add_col, filter_col = st.columns([1, 1.4], gap="large")
         with add_col:
@@ -10421,7 +10531,7 @@ def page_watchlist() -> None:
         if "status" in edited_raw.columns:
             edited_raw["status"] = edited_raw["status"].map(lambda v: {"活跃": "active", "停用": "inactive"}.get(str(v), str(v)))
         cleaned = _wl_clean_rows(edited_raw.fillna("").to_dict("records"))
-        st.caption(f"维护区当前将保存 {len(cleaned)} 只股票。文件位置：`{WATCHLIST_PATH}`")
+        st.caption(f"维护区当前将保存 {len(cleaned)} 只股票。保存后写回本地自选池文件。")
         if st.button("保存自选池", type="primary", width="stretch"):
             if _wl_save(cleaned):
                 status_banner("自选池已保存。", "success")

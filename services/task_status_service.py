@@ -39,14 +39,14 @@ def build_task_status_snapshot(df_all: pd.DataFrame, *, output_dir: Path, today_
         "second_check_time" in rows.columns and rows["second_check_time"].astype(str).str.strip().ne("").any()
     ) if not rows.empty else False
     return [
-        TaskStatus(today_str, "08:50 pick", "done" if "full" in mode_values else "missing", "trade_review.csv", now, official=True),
-        TaskStatus(today_str, "08:55 theme_auto", "done" if "theme_auto" in mode_values else "missing", "trade_review.csv", now, official=True),
-        TaskStatus(today_str, "09:36 check_buy", "done" if check_buy_done(rows) else "missing", "trade_review.csv", now, official=True),
-        TaskStatus(today_str, "10:01 second_check", "done" if second_done else "missing", "trade_review.csv", now),
-        TaskStatus(today_str, "19:00 update_review", "done" if review_done else "missing", "trade_review.csv", now, official=True),
-        TaskStatus(today_str, "T signal", "done" if t_signal.exists() else "missing", str(t_signal), now, experimental=True),
-        TaskStatus(today_str, "T trace", "done" if t_trace.exists() else "missing", str(t_trace), now, experimental=True),
-        TaskStatus(today_str, "Provider health", "done" if provider_health.exists() else "missing", str(provider_health), now, experimental=True),
+        TaskStatus(today_str, "08:50 盘前选股", "done" if "full" in mode_values else "missing", "trade_review.csv", now, official=True),
+        TaskStatus(today_str, "08:55 主题自动选股", "done" if "theme_auto" in mode_values else "missing", "trade_review.csv", now, official=True),
+        TaskStatus(today_str, "09:36 买入确认", "done" if check_buy_done(rows) else "missing", "trade_review.csv", now, official=True),
+        TaskStatus(today_str, "10:01 二次观察", "done" if second_done else "missing", "trade_review.csv", now),
+        TaskStatus(today_str, "19:00 晚间复盘", "done" if review_done else "missing", "trade_review.csv", now, official=True),
+        TaskStatus(today_str, "做T信号", "done" if t_signal.exists() else "missing", str(t_signal), now, experimental=True),
+        TaskStatus(today_str, "做T逐条件诊断", "done" if t_trace.exists() else "missing", str(t_trace), now, experimental=True),
+        TaskStatus(today_str, "数据源健康诊断", "done" if provider_health.exists() else "missing", str(provider_health), now, experimental=True),
     ]
 
 

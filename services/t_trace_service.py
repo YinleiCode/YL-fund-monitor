@@ -9,7 +9,7 @@ FAIL_REASON_CN = {
     "ma5_slope_down": "MA5 斜率不符合",
     "not_green_k": "不是绿K",
     "drop_not_enough": "急跌幅度不足",
-    "vwap_deviation_not_enough": "低于 VWAP 幅度不足",
+    "vwap_deviation_not_enough": "低于分时均价线幅度不足",
     "green_volume_not_enough": "倍量绿不足",
     "shrink_not_confirmed": "缩量确认不足",
     "resonance_not_met": "共振过滤不通过",
@@ -60,7 +60,7 @@ def summarize_t_trace(df: pd.DataFrame) -> TTraceSummary:
     latest_fail = work[work.get("final_pass", pd.Series(dtype=bool)) == False].tail(80) if "final_pass" in work.columns else work.tail(80)
     rule_cols = [
         ("rule_drop_pass", "急跌"),
-        ("rule_vwap_pass", "VWAP偏离"),
+        ("rule_vwap_pass", "分时均价线偏离"),
         ("rule_green_vol_pass", "倍量绿"),
         ("rule_shrink_pass", "缩量确认"),
         ("rule_resonance_pass", "共振"),
