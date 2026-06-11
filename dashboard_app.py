@@ -2354,6 +2354,26 @@ def _v2_mock_sparkline_from_pct(pct: Optional[float]) -> list[float]:
     return base
 
 
+def _minute_close_for_report_date(report_date: str, stock_code: str) -> tuple[Optional[float], str]:
+    """Return local 15:00 close from cached minute bars for the card's report date."""
+    d = str(report_date or "").strip().replace("-", "")
+    code = "".join(ch for ch in str(stock_code or "") if ch.isdigit()).zfill(6)
+    if not d or not code:
+        return None, ""
+    path = BASE_DIR / "data" / "minute_today" / f"{d}_{code}.csv"
+    if not path.exists():
+        return None, ""
+    try:
+        df = pd.read_csv(path, dtype=str, keep_default_na=False)
+    except Exception:
+        return None, ""
+    if df.empty or "close" not in df.columns:
+        return None, ""
+    close = _gf(df.iloc[-1].get("close"))
+    ts = str(df.iloc[-1].get("datetime", "") or "")
+    return close, ts
+
+
 def _v2_stock_card(r) -> str:
     """V2.2 Stitch 同款股票卡片（全中文 + 真实字段 + V1.6 三层 chip）。
 
@@ -2361,22 +2381,32 @@ def _v2_stock_card(r) -> str:
     """
     name = _eh(r.get("stock_name", "—"))
     code = _eh(r.get("stock_code", "—"))
-    price = _gf(r.get("price_0935") or r.get("buy_price") or r.get("open_price"))
+    bought = is_bought(r)
+    price = _gf(r.get("buy_price") if bought else None)
+    if price is None:
+        price = _gf(r.get("price_0935") or r.get("open_price"))
     price_str = f"{price:.2f}" if price else "—"
-    pct = _gf(r.get("open_change_pct"))
-    if pct is None:
-        pct_str, pct_color, trend_arrow = "—", COLOR_MUTED, ""
-    elif pct >= 0:
-        pct_str = f"+{pct:.2f}%"
-        pct_color = COLOR_BOUGHT
-        trend_arrow = "▲"
+
+    close_price, close_ts = _minute_close_for_report_date(str(r.get("report_date", "")), str(r.get("stock_code", "")))
+    pnl_pct = ((close_price / price - 1) * 100) if bought and price and close_price else None
+    if bought and pnl_pct is not None:
+        pct_str = f"买入→收盘 {pnl_pct:+.2f}%"
+        pct_color = COLOR_BOUGHT if pnl_pct >= 0 else COLOR_MAGENTA_NEON
+        trend_arrow = "▲" if pnl_pct >= 0 else "▼"
+        side_note = f"收盘价 {close_price:.2f}"
+    elif bought:
+        pct_str = "买入→收盘 待收盘"
+        pct_color = COLOR_WARN_YELLOW
+        trend_arrow = ""
+        side_note = "缺少收盘价"
     else:
-        pct_str = f"{pct:.2f}%"
-        pct_color = COLOR_MAGENTA_NEON
-        trend_arrow = "▼"
+        pct_str = "未买入"
+        pct_color = COLOR_MUTED
+        trend_arrow = ""
+        side_note = "9:36观察价"
 
     # 状态分类（中文）
-    if is_bought(r):
+    if bought:
         status_label, accent = "9:36 已确认", COLOR_BOUGHT
     elif is_manual_observe_row(r):
         status_label, accent = "✋ 手动只观察", COLOR_WARN_YELLOW
@@ -2414,9 +2444,9 @@ def _v2_stock_card(r) -> str:
     except Exception:
         pass
 
-    # 涨幅条（线性进度，按 |pct| 比例填充，最多 10% 满）
-    pct_abs = abs(pct or 0) * 100
-    bar_pct = min(100, pct_abs * 10)  # 10% 涨幅 = 满条
+    # 收益条：只对已买入票展示买入到当日收盘的实际盈亏幅度。
+    pct_abs = abs(pnl_pct or 0)
+    bar_pct = min(100, pct_abs * 10)  # 10% 盈亏 = 满条
     bar_html = (
         f'<div style="margin-top:8px;height:3px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;">'
         f'<div style="height:100%;width:{bar_pct:.0f}%;background:{pct_color};'
@@ -2502,7 +2532,7 @@ def _v2_stock_card(r) -> str:
         </div>
         <div style="margin-bottom:2px;text-align:right;">
           <div style="font-family:{FONT_BODY};font-size:11px;color:{COLOR_FAINT};
-                      line-height:1.35;">本卡只显示<br>本地记录字段</div>
+                      line-height:1.35;">{_eh(side_note)}</div>
         </div>
       </div>
       {bar_html}
